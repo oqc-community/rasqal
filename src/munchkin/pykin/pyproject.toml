@@ -1,0 +1,30 @@
+[project]
+name = "pykin"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "pytest",
+    "qiskit==0.45.*",
+    "qiskit-optimization==0.4.*",
+    "qiskit-ignis==0.7.*",
+    "qiskit-aer==0.13.*",
+]
+
+#classifiers = [
+#    "License :: OSI Approved :: MIT License",
+#    "Development Status :: 3 - Alpha",
+#    "Intended Audience :: Developers",
+#    "Programming Language :: Python :: 3.7",
+#    "Programming Language :: Python :: 3.8",
+#    "Programming Language :: Python :: 3.9",
+#    "Programming Language :: Python :: 3.10",
+#    "Programming Language :: Python",
+#    "Programming Language :: Rust",
+#    "Operating System :: MacOS",
+#    "Operating System :: Microsoft :: Windows",
+#    "Operating System :: POSIX :: Linux",
+#]
+
+[build-system]
+requires = ["maturin ~= 0.13.7"]
+build-backend = "maturin"

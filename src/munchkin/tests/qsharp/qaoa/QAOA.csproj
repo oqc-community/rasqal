@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.Quantum.Sdk/0.28.263081">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+	<QirGeneration>true</QirGeneration>
+    <QscVerbosity>Detailed</QscVerbosity>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <None Include="libLLVM.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
