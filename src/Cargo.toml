@@ -1,0 +1,3 @@
+[workspace]
+members = ["rasqal", "build-llvm"]
+resolver = "2"

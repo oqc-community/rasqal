@@ -1,0 +1,36 @@
+name: Build
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+
+run-name: Build from ${{ github.ref }}
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: [ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+
+      - name: Build
+        run: |
+          sudo apt update 
+          sudo apt install -y build-essential libffi-dev xz-utils powershell curl wget gnupg apt-transport-https
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          export PATH="/root/.cargo/bin:${PATH}"
+          export PATH="/root/.local/bin:$PATH"
+          cd src/rasqal
+          pwsh ./build.ps1
