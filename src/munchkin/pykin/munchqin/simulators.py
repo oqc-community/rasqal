@@ -3,13 +3,13 @@
 
 from typing import Dict
 
-from pykin import BuilderAdaptor, RuntimeAdaptor
 from qiskit.providers.models import QasmBackendConfiguration
 
 from qiskit import QiskitError, QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 
-from pykin.runtime import MunchkinRuntime
+from .runtime import MunchkinRuntime
+from .adaptors import BuilderAdaptor, RuntimeAdaptor
 
 
 def fetch_qasm_runtime(qubit_count=30):

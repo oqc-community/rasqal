@@ -1,8 +1,8 @@
 from os.path import abspath, dirname, join
 
 from .file_utils import get_qir_path
-from pykin.simulators import fetch_qasm_runtime
-from pykin.runtime import (
+from munchqin.simulators import fetch_qasm_runtime
+from munchqin.runtime import (
     BuilderAdaptor,
     RuntimeAdaptor, MunchkinRuntime,
 )

@@ -32,4 +32,4 @@ bitflags = "2.4.0"
 crate-type = ["cdylib"]
 
 [package.metadata.maturin]
-name = "pykin._native"
+name = "munchqin._native"
