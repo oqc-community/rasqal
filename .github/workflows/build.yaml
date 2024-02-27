@@ -24,3 +24,13 @@ jobs:
         uses: actions/setup-python@v3
         with:
           python-version: "3.9"
+
+      - name: Build
+        run: |
+          sudo apt update 
+          sudo apt install -y build-essential libffi-dev xz-utils powershell curl wget gnupg apt-transport-https
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          export PATH="/root/.cargo/bin:${PATH}"
+          export PATH="/root/.local/bin:$PATH"
+          cd src/munchkin
+          MK_DOWNLOAD_LLVM=true pwsh ./build.ps1

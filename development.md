@@ -1,4 +1,4 @@
-### Rust++
+### R++
 
 Our Rust code is actually more like C++ due to some fun pointer manipulation we do and heavily interlinked data structures.
 
@@ -15,6 +15,6 @@ Except if you steal a reference, then it's on you to make sure the memory is not
 Otherwise you can just write Rust as normal, and anything not within a smart-pointer still has the usual rules.  
 
 Note: If you are concerned about this or are surprised it works at all - raw pointers have special designation, specially those in `UnsafeCell`'s.
-We are leaning upon some pretty niche documented constraints to keep within the bounds of Rusts expectations, if barely, but they are all official.
+We are leaning upon some pretty niche documented constraints to keep within the bounds of Rusts expectations, if barely.
 
-The language _almost_ works for what we need, so we bend it to meet that.
+We'll be keeping to this model until some of Rusts systems improve enough that we don't need oto.
