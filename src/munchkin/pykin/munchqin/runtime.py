@@ -6,7 +6,9 @@ from os.path import dirname, exists, join
 from tempfile import NamedTemporaryFile
 from typing import Any, List
 
-from pykin import initialize_logger, BuilderAdaptor, RuntimeAdaptor, Executor, DEFAULT_LOG_FILE
+from .utils import initialize_logger
+from .adaptors import BuilderAdaptor, RuntimeAdaptor
+from ._native import DEFAULT_LOG_FILE, Executor
 
 dev_directory = join(dirname(__file__), "..", "..", "..", "munchkin")
 

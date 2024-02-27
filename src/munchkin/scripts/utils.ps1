@@ -277,7 +277,7 @@ function Resolve-Python() {
 function Resolve-PythonRequirements([string[]] $projects) {
     $report = pip --quiet install --dry-run --ignore-installed --report - @projects | ConvertFrom-Json
     $report.install.metadata `
-    | Where-Object { !$_.name.StartsWith("pykin") } `
+    | Where-Object { !$_.name.StartsWith("munchqin") } `
     | ForEach-Object { "$($_.name)==$($_.version)" }
 }
 

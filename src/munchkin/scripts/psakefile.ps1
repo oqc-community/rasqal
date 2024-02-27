@@ -21,7 +21,7 @@ Properties {
 }
 
 task default -depends build
-task build -depends build-llvm, pykin
+task build -depends build-llvm, munchqin
 task checks -depends cargo-fmt, cargo-clippy, black, mypy
 task manylinux -depends build-manylinux-container-image, run-manylinux-container-image
 
@@ -78,19 +78,21 @@ task build-llvm -depends init {
     Invoke-LoggedCommand -workingDirectory $BuildLlvm { cargo build --release @(Get-CargoArgs) }
 }
 
-task pykin -depends init {
+task munchqin -depends init {
     $env:MATURIN_PEP517_ARGS = (Get-CargoArgs) -Join " "
-    Get-Wheels pykin | Remove-Item -Verbose
+    Get-Wheels munchqin | Remove-Item -Verbose
     Invoke-LoggedCommand { pip --verbose wheel --no-deps --wheel-dir $Wheels $Pykin }
 
     if (Test-CommandExists auditwheel) {
-        $unauditedWheels = Get-Wheels pykin
+        $unauditedWheels = Get-Wheels munchqin
         Invoke-LoggedCommand { auditwheel repair --wheel-dir $Wheels $unauditedWheels }
         $unauditedWheels | Remove-Item
     }
 
-    $packages = Get-Wheels pykin
+    # Force reinstall the package if it exists, but not its depenencies.
+    $packages = Get-Wheels munchqin
     Invoke-LoggedCommand -workingDirectory $Root {
+        pip install $packages
         pip install --force-reinstall --no-deps $packages
     }
 
