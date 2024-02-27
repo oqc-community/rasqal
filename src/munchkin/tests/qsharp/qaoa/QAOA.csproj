@@ -5,6 +5,7 @@
 	<QirGeneration>true</QirGeneration>
     <QscVerbosity>Detailed</QscVerbosity>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+    <AssemblyName>qaoa</AssemblyName>
   </PropertyGroup>
   
   <ItemGroup>
