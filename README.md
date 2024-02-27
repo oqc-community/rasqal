@@ -1,4 +1,4 @@
-**Munchkin** is a symbolic execution quantum-classical hybrid runtime which consumes hybrid IR's such as QIR, runs 
+Munchkin is a symbolic execution quantum-classical hybrid runtime which consumes hybrid IR's such as QIR, runs 
 it while performing dynamic optimizations, then calls into a provided QPU backend to run the synthesized 
 circuits.
 
