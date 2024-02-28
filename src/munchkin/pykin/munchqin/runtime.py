@@ -4,7 +4,7 @@
 from os import remove
 from os.path import dirname, exists, join
 from tempfile import NamedTemporaryFile
-from typing import Any, List
+from typing import Any, List, Union
 
 from .utils import initialize_logger
 from .adaptors import BuilderAdaptor, RuntimeAdaptor
@@ -22,9 +22,11 @@ class MunchkinRuntime:
     Wrapper API for native functionality, purely in Python to help do mappings.
     """
 
-    def __init__(self, builder: BuilderAdaptor, runtime: RuntimeAdaptor):
-        self.builder: BuilderAdaptor = builder
-        self.runtime: RuntimeAdaptor = runtime
+    def __init__(self, runtime: Union[List[RuntimeAdaptor], RuntimeAdaptor]):
+        if not isinstance(runtime, list):
+            runtime = [runtime]
+
+        self.runtimes: List[RuntimeAdaptor] = runtime
         self.executor = Executor()
 
     def trace_graphs(self):
@@ -61,6 +63,6 @@ class MunchkinRuntime:
 
     def run(self, file_path: str, args: List[Any] = None):
         results = self.executor.run_with_args(
-            file_path, args or [], self.builder, self.runtime
+            file_path, args or [], self.runtimes
         )
         return results

@@ -4,8 +4,8 @@ use log::{Level, log, log_enabled};
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyValueError};
 use pyo3::types::{PyBool, PyFloat, PyInt, PyList, PyString};
-use crate::builders::PythonEngine;
-use crate::execution::{parse_file, run_file, run_graph};
+use crate::builders::PythonRuntime;
+use crate::execution::{parse_file, run_file, run_graph, RuntimeCollection};
 use crate::graphs::ExecutableAnalysisGraph;
 use crate::{DEFAULT_LOG_FILE, initialize_loggers};
 use crate::instructions::Value;
@@ -140,17 +140,19 @@ impl Executor {
     }
 
     fn run_graph(&self, graph: Py<Graph>, arguments: &PyAny,
-                 builder_adaptor: &PyAny, runtime_adaptor: &PyAny) -> PyResult<PyObject> {
+                 runtime_adaptor: &PyAny) -> PyResult<PyObject> {
         Python::with_gil(|py| -> Result<PyObject, PyErr> {
             // We just build a reference directly here so our smart-pointer doesn't auto-drop.
-            let py_engine = Ptr::from(
-                PythonEngine::new(builder_adaptor, runtime_adaptor));
+            let runtimes: Vec<&PyAny> = runtime_adaptor.extract().expect("Unable to transform runtimes to Rust objects.");
+            let mut collection = Ptr::from(RuntimeCollection::default());
+            for runtime in runtimes {
+                collection.add(&Ptr::from(PythonRuntime::new(runtime)))
+            }
 
             let graph: Graph = graph.extract(py).expect("Unable to extract graph.");
+            let args: Vec<Value> = arguments.extract().expect("Unable to transform arguments to Rust objects.");
 
-            let args: Vec<Value> = arguments.extract().expect("Unable to transform");
-
-            run_graph(graph.wrapped.borrow(), args.as_ref(), py_engine.borrow(), self.tracing.clone())
+            run_graph(graph.wrapped.borrow(), args.as_ref(), collection.borrow(), self.tracing.clone())
               .map_err(PyValueError::new_err)
               .map(|value| {
                 value.map_or(py.None(), |val| val.to_object(py))
@@ -162,11 +164,10 @@ impl Executor {
     fn run(
         &self,
         file: &str,
-        builder_adaptor: &PyAny,
         runtime_adaptor: &PyAny,
     ) -> PyResult<PyObject> {
         Python::with_gil(|py| -> Result<PyObject, PyErr> {
-            self.run_with_args(file, PyList::empty(py), builder_adaptor, runtime_adaptor)
+            self.run_with_args(file, PyList::empty(py), runtime_adaptor)
         })
     }
 
@@ -175,17 +176,17 @@ impl Executor {
         &self,
         file: &str,
         arguments: &PyAny,
-        builder_adaptor: &PyAny,
         runtime_adaptor: &PyAny,
     ) -> PyResult<PyObject> {
         Python::with_gil(|py| -> Result<PyObject, PyErr> {
-            // We just build a reference directly here so our smart-pointer doesn't auto-drop.
-            let py_engine = Ptr::from(
-                PythonEngine::new(builder_adaptor, runtime_adaptor));
+            let runtimes: Vec<&PyAny> = runtime_adaptor.extract()?;
+            let mut collection = Ptr::from(RuntimeCollection::default());
+            for runtime in runtimes {
+                collection.add(&Ptr::from(PythonRuntime::new(runtime)))
+            }
 
             let args: Vec<Value> = arguments.extract()?;
-
-            run_file(file, &args, py_engine.borrow(), None, self.tracing.clone())
+            run_file(file, &args, collection.borrow(), None, self.tracing.clone())
               .map_err(PyValueError::new_err)
               .map(|value| {
                 value.map_or(py.None(), |val| val.to_object(py))
@@ -222,7 +223,7 @@ mod tests {
     #[test]
     fn no_args() {
         Python::with_gil(|py| {
-            let relative_path = canonicalize("../../tests/files/qir/generator-bell.ll").unwrap();
+            let relative_path = canonicalize("../tests/files/qir/generator-bell.ll").unwrap();
             let path = relative_path.to_str().unwrap();
 
             let adaptor_file = include_str!("../../tests/rust_python_integration.py");
@@ -230,24 +231,7 @@ mod tests {
             let runtime = python_from(py, adaptor_file, "RuntimeAdaptor");
 
             let walker = Executor::new();
-            let results = walker.run(path, builder, runtime);
-            assert_default_results(py, results);
-        });
-    }
-
-    #[test]
-    fn with_args() {
-        Python::with_gil(|py| {
-            let relative_path = canonicalize("../../tests/files/qir/generator-bell.ll").unwrap();
-            let path = relative_path.to_str().unwrap();
-
-            let adaptor_file = include_str!("../../tests/rust_python_integration.py");
-            let builder = python_from(py, adaptor_file, "BuilderAdaptor");
-            let runtime = python_from(py, adaptor_file, "RuntimeAdaptor");
-            let args = python_from(py, adaptor_file, "build_args");
-
-            let walker = Executor::new();
-            let results = walker.run_with_args(path, args, builder, runtime);
+            let results = walker.run(path, runtime);
             assert_default_results(py, results);
         });
     }
@@ -255,16 +239,15 @@ mod tests {
     #[test]
     fn invalid_args() {
         Python::with_gil(|py| {
-            let relative_path = canonicalize("../../tests/files/qir/generator-bell.ll").unwrap();
+            let relative_path = canonicalize("../tests/files/qir/generator-bell.ll").unwrap();
             let path = relative_path.to_str().unwrap();
 
             let adaptor_file = include_str!("../../tests/rust_python_integration.py");
-            let builder = python_from(py, adaptor_file, "BuilderAdaptor");
             let runtime = python_from(py, adaptor_file, "RuntimeAdaptor");
             let args = python_from(py, adaptor_file, "build_invalid_args");
 
             let walker = Executor::new();
-            walker.run_with_args(path, args, builder, runtime)
+            walker.run_with_args(path, args, runtime)
               .expect_err("Invalid args passed, should error.");
         });
     }
@@ -272,7 +255,7 @@ mod tests {
     #[test]
     fn parse_graph() {
         Python::with_gil(|py| {
-            let relative_path = canonicalize("../../tests/files/qir/generator-bell.ll").unwrap();
+            let relative_path = canonicalize("../tests/files/qir/generator-bell.ll").unwrap();
             let path = relative_path.to_str().unwrap();
 
             let walker = Executor::new();
@@ -283,17 +266,16 @@ mod tests {
     #[test]
     fn parse_and_execute() {
         Python::with_gil(|py| {
-            let relative_path = canonicalize("../../tests/files/qir/generator-bell.ll").unwrap();
+            let relative_path = canonicalize("../tests/files/qir/generator-bell.ll").unwrap();
             let path = relative_path.to_str().unwrap();
 
             let adaptor_file = include_str!("../../tests/rust_python_integration.py");
-            let builder = python_from(py, adaptor_file, "BuilderAdaptor");
             let runtime = python_from(py, adaptor_file, "RuntimeAdaptor");
 
             let walker = Executor::new();
             let parsed_graph = walker.parse_file(path, None);
             let results = walker.run_graph(
-                parsed_graph.expect("Graph should be parsable"), PyList::empty(py), builder, runtime);
+                parsed_graph.expect("Graph should be parsable"), PyList::empty(py), runtime);
 
             assert_default_results(py, results);
         });
