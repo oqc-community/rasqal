@@ -40,10 +40,10 @@ class BuilderAdaptor:
     def measure(self, qubit, register):
         self.gates.append(f"measure {qubit} {register}")
 
-    def clear(self):
-        self.gates.append("clear")
-
 
 class RuntimeAdaptor:
     def execute(self, _: BuilderAdaptor) -> Dict[str, int]:
         return {"00": 250, "01": 250, "10": 250, "11": 251}
+
+    def create_builder(self):
+        return BuilderAdaptor()

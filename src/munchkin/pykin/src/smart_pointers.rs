@@ -228,7 +228,7 @@ impl<T: ?Sized> FlexiPtr<T> {
     }
 
     pub fn as_address(self_: &Self) -> usize {
-        // TODO: There's got to be a better way to get the address than... this.
+        // TODO: There's got to be a better way to get the address than this.
         self_.deref() as *const T as *mut T as *mut () as usize
     }
 

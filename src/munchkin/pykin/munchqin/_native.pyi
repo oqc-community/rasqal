@@ -32,8 +32,7 @@ class Executor:
     def run(
         self,
         file_path: str,
-        builder: BuilderAdaptor,
-        runtime: RuntimeAdaptor
+        runtimes: List[RuntimeAdaptor]
     ) -> Any:
         """ Runs this file using the automatically-detected entry-point with no arguments. """
 
@@ -41,8 +40,7 @@ class Executor:
         self,
         file_path: str,
         arguments: List[Any],
-        builder: BuilderAdaptor,
-        runtime: RuntimeAdaptor
+        runtimes: List[RuntimeAdaptor]
     ) -> Any:
         """ Runs this file using the automatically-detected entry-point. """
 
@@ -57,7 +55,6 @@ class Executor:
             self,
             graph: Graph,
             arguments: List[Any],
-            builder_adaptor: BuilderAdaptor,
             runtime_adaptor: RuntimeAdaptor
     ) -> Any:
         """ Runs a pre-built execution graph with the passed-in arguments. """

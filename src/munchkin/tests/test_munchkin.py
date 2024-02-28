@@ -63,9 +63,14 @@ class RuntimeMock(RuntimeAdaptor):
         self.executed = builder.gates
         return dict()
 
+    def create_builder(self) -> BuilderAdaptor:
+        return BuilderMock()
+
 
 def fetch_mock_runtime():
-    return MunchkinRuntime(BuilderMock(), RuntimeMock())
+    runtime = RuntimeMock()
+    return runtime, MunchkinRuntime(runtime)
+
 
 class TestMunchkin:
     def test_qaoa(self):
@@ -91,10 +96,10 @@ class TestMunchkin:
         assert results is None
 
     def test_parser_bell_psi_plus(self):
-        runtime = fetch_mock_runtime()
+        mock, runtime = fetch_mock_runtime()
         runtime.run(get_qir_path("bell_psi_plus.ll"))
 
-        assert runtime.builder.gates == [
+        assert mock.executed == [
             "z 0 3.141592653589793",
             "y 0 1.5707963267948966",
             "cx [0] 1 3.141592653589793",
@@ -103,10 +108,10 @@ class TestMunchkin:
         ]
 
     def test_parser_bell_psi_minus(self):
-        runtime = fetch_mock_runtime()
+        mock, runtime = fetch_mock_runtime()
         runtime.run(get_qir_path("bell_psi_minus.ll"))
 
-        assert runtime.builder.gates == [
+        assert mock.executed == [
             "x 0 3.141592653589793",
             "z 0 3.141592653589793",
             "y 0 1.5707963267948966",
@@ -116,10 +121,10 @@ class TestMunchkin:
         ]
 
     def test_parser_bell_theta_plus(self):
-        runtime = fetch_mock_runtime()
+        mock, runtime = fetch_mock_runtime()
         runtime.run(get_qir_path("bell_theta_plus.ll"))
 
-        assert runtime.builder.gates == [
+        assert mock.executed == [
             "x 1 3.141592653589793",
             "z 0 3.141592653589793",
             "y 0 1.5707963267948966",
@@ -129,10 +134,10 @@ class TestMunchkin:
         ]
 
     def test_parser_bell_theta_minus(self):
-        runtime = fetch_mock_runtime()
+        mock, runtime = fetch_mock_runtime()
         runtime.run(get_qir_path("bell_theta_minus.ll"))
 
-        assert runtime.builder.gates == [
+        assert mock.executed == [
             "x 1 3.141592653589793",
             "x 0 3.141592653589793",
             "z 0 3.141592653589793",

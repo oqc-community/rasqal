@@ -6,12 +6,13 @@ use std::iter::zip;
 use std::ops::{Deref};
 use log::{Level, log};
 use num::traits::FloatConst;
-use crate::builders::{Builder, InstructionBuilder};
-use crate::execution::EngineCollection;
+use crate::builders::{InstructionBuilder};
+use crate::execution::RuntimeCollection;
 use crate::hardware::Qubit;
 use crate::runtime::{ActiveTracers, TracingModule};
 use crate::smart_pointers::{Ptr};
 use crate::{with_mutable, with_mutable_self};
+use crate::blueprints::QuantumBlueprint;
 
 #[derive(Clone)]
 pub struct StateHistory {
@@ -528,7 +529,7 @@ impl QuantumStatePredictor {
 /// queried LIKE it was a result, but we haven't actually executed on the QPU yet.
 pub struct QuantumProjection {
   trace_module: Ptr<TracingModule>,
-  engines: Ptr<EngineCollection>,
+  engines: Ptr<RuntimeCollection>,
   instructions: Vec<Ptr<QuantumOperations>>,
   cached_result: Option<AnalysisResult>,
   cached_filtered: HashMap<String, AnalysisResult>,
@@ -591,7 +592,7 @@ impl Display for QuantumOperations {
 }
 
 impl QuantumProjection {
-  pub fn new(engines: &Ptr<EngineCollection>) -> QuantumProjection {
+  pub fn new(engines: &Ptr<RuntimeCollection>) -> QuantumProjection {
     QuantumProjection {
       engines: engines.clone(),
       instructions: Vec::new(),
@@ -601,7 +602,7 @@ impl QuantumProjection {
     }
   }
 
-  pub fn with_tracer(engines: &Ptr<EngineCollection>, module: &Ptr<TracingModule>) -> QuantumProjection {
+  pub fn with_tracer(engines: &Ptr<RuntimeCollection>, module: &Ptr<TracingModule>) -> QuantumProjection {
     QuantumProjection {
       engines: engines.clone(),
       instructions: Vec::new(),
@@ -741,49 +742,60 @@ impl QuantumProjection {
     let query_result = if self.can_predict() {
       self.predict()
     } else {
-      let engine = self.engines.get_available_QPU();
+      let blueprint = QuantumBlueprint::default();
+      let runtime = self.engines.get_blueprint_capable_QPU(&blueprint).expect(format!("Cannot find QPU that accepts blueprint [{}]", blueprint).as_str());
 
-      // If we're running again, clear down before execution.
-      engine.clear();
+      // TODO: Clean up early return logic.
+      if !runtime.is_usable() {
+        self.cached_result = Some(AnalysisResult::default());
+        return self.cached_result.as_ref().unwrap().borrow();
+      }
+
+      let builder = runtime.create_builder();
+      if !builder.is_usable() {
+        self.cached_result = Some(AnalysisResult::default());
+        return self.cached_result.as_ref().unwrap().borrow();
+      }
+
       for inst in self.instructions.iter() {
         match inst.deref() {
           QuantumOperations::Initialize() => {}
           QuantumOperations::Reset(qbs) => {
             for qubit in qbs {
-              engine.reset(qubit);
+              builder.reset(qubit);
             }
           }
-          QuantumOperations::I(qb) => { engine.i(qb); },
+          QuantumOperations::I(qb) => { builder.i(qb); },
           QuantumOperations::U(qb, theta, phi, lambda) => {
-            engine.u(qb, theta.clone(), phi.clone(), lambda.clone());
+            builder.u(qb, theta.clone(), phi.clone(), lambda.clone());
           }
           QuantumOperations::X(qb, radians) => {
-            engine.x(qb, radians.clone());
+            builder.x(qb, radians.clone());
           }
           QuantumOperations::Y(qb, radians) => {
-            engine.y(qb, radians.clone());
+            builder.y(qb, radians.clone());
           }
           QuantumOperations::Z(qb, radians) => {
-            engine.z(qb, radians.clone());
+            builder.z(qb, radians.clone());
           }
           QuantumOperations::CX(controls, targets, radians) => {
-            engine.cx(controls, targets, radians.clone());
+            builder.cx(controls, targets, radians.clone());
           }
           QuantumOperations::CZ(controls, targets, radians) => {
-            engine.cz(controls, targets, radians.clone());
+            builder.cz(controls, targets, radians.clone());
           }
           QuantumOperations::CY(controls, targets, radians) => {
-            engine.cy(controls, targets, radians.clone());
+            builder.cy(controls, targets, radians.clone());
           }
           QuantumOperations::Measure(qbs) => {
             for qb in qbs {
-              engine.measure(qb);
+              builder.measure(qb);
             }
           }
         }
       }
 
-      engine.execute()
+      runtime.execute(&builder)
     };
 
     self.cached_result = Some(query_result);
@@ -795,7 +807,7 @@ impl QuantumProjection {
       }
       log!(Level::Info, "Projection results:");
 
-      // Order results so you can easily compare 2 side-by-side.
+      // Order results so you can easily compare two side-by-side.
       let mut result_values = self.cached_result.as_ref().unwrap().distribution.iter().collect::<Vec<_>>();
       result_values.sort_by(|(left_key, _), (right_key, _)| left_key.cmp(right_key));
       for (key, value) in result_values.iter() {

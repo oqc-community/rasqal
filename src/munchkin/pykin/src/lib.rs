@@ -21,6 +21,7 @@ mod instructions;
 mod evaluator;
 mod graphs;
 mod analysis;
+mod blueprints;
 
 const DEFAULT_LOG_FILE: &str = "mk_logs.txt";
 

@@ -3,6 +3,7 @@ use std::f64::consts::PI;
 use std::ops::{Deref, DerefMut};
 use pyo3::{PyAny, PyResult};
 use crate::analysis::{AnalysisResult};
+use crate::blueprints::QuantumBlueprint;
 use crate::hardware::{Qubit};
 use crate::smart_pointers::{Ptr};
 
@@ -54,7 +55,6 @@ impl PyBuilderAdaptor {
     python_methods!(self.builder.cz(controls: Vec<i64>, target: i64, radian: f64));
     python_methods!(self.builder.reset(qubit: i64));
     python_methods!(self.builder.measure(qubit: i64));
-    python_methods!(self.builder.clear());
 }
 
 impl Deref for PyBuilderAdaptor {
@@ -91,6 +91,8 @@ impl PyRuntimeAdaptor {
     }
 
     python_methods!(self.runtime.execute(builder: &PyAny));
+    python_methods!(self.runtime.create_builder());
+    python_methods!(self.runtime.can_run_blueprint(blueprint: &PyAny));
 }
 
 impl Deref for PyRuntimeAdaptor {
@@ -113,93 +115,113 @@ impl Default for PyRuntimeAdaptor {
     }
 }
 
-pub struct PythonEngine {
-    builder: PyBuilderAdaptor,
-    runtime: PyRuntimeAdaptor
+pub struct PythonRuntime {
+    wrapped: PyRuntimeAdaptor
 }
 
-impl PythonEngine {
-    pub fn new(builder: &PyAny, backend: &PyAny) -> PythonEngine {
-        PythonEngine { builder: PyBuilderAdaptor::new(builder), runtime: PyRuntimeAdaptor::new(backend) }
+impl PythonRuntime {
+    pub fn new(backend: &PyAny) -> PythonRuntime {
+        PythonRuntime { wrapped: PyRuntimeAdaptor::new(backend) }
     }
 
-    pub fn execute(&self) -> AnalysisResult {
-        if self.runtime.is_adaptor_empty() || self.builder.is_adaptor_empty() {
-            return AnalysisResult::empty();
-        }
+    /// Returns whether this runtime can be actively used.
+    pub fn is_usable(&self) -> bool {
+        !self.wrapped.is_adaptor_empty()
+    }
 
-        let result = self.runtime.execute(self.builder.deref())
+    pub fn execute(&self, builder: &Ptr<PythonBuilder>) -> AnalysisResult {
+        let result = self.wrapped.execute(builder.wrapped.deref())
           .expect("Engine doesn't have an execute method.").expect("QPU didn't return a result.");
 
         AnalysisResult::new(
             result.extract().expect("Object returned from 'execute' isn't a distribution dictionary."))
     }
-}
 
-impl Default for PythonEngine {
-    fn default() -> Self {
-        PythonEngine { builder: PyBuilderAdaptor::default(), runtime: PyRuntimeAdaptor::default() }
+    pub fn create_builder(&self) -> Ptr<PythonBuilder> {
+        Ptr::from(PythonBuilder::new(self.wrapped.create_builder()
+          .expect("Runtime doesn't have a 'create_builder' method.").expect("Couldn't create a builder from runtime.")))
+    }
+
+    // TODO: Hook up to Python objects, make blueprint Python/Rust compatible.
+    pub fn can_run_blueprint(&self, blueprint: &QuantumBlueprint) -> bool {
+        true
     }
 }
 
-impl Builder for PythonEngine {
-    fn clear(&self) -> &Self {
-        self.builder.clear();
-        self
+impl Default for PythonRuntime {
+    fn default() -> Self {
+        PythonRuntime { wrapped: PyRuntimeAdaptor::default() }
+    }
+}
+
+pub(crate) struct PythonBuilder {
+    wrapped: PyBuilderAdaptor
+}
+
+impl Default for PythonBuilder {
+    fn default() -> Self {
+        PythonBuilder { wrapped: PyBuilderAdaptor::default() }
+    }
+}
+
+impl PythonBuilder {
+    pub fn new(builder: &PyAny) -> PythonBuilder {
+        PythonBuilder { wrapped: PyBuilderAdaptor::new(builder) }
+    }
+
+    /// Returns whether this builder can be actively used.
+    pub fn is_usable(&self) -> bool {
+        !self.wrapped.is_adaptor_empty()
     }
 }
 
 // TODO: Make sure we propagate Python exceptions for easy debugging.
-impl InstructionBuilder for PythonEngine {
+impl InstructionBuilder for PythonBuilder {
     fn measure(&self, qb: &Qubit) -> &Self {
-        self.builder.measure(qb.index);
+        self.wrapped.measure(qb.index);
         self
     }
 
     fn x(&self, qb: &Qubit, radians: f64) -> &Self {
-        self.builder.x(qb.index, radians);
+        self.wrapped.x(qb.index, radians);
         self
     }
 
     fn y(&self, qb: &Qubit, radians: f64) -> &Self {
-        self.builder.y(qb.index, radians);
+        self.wrapped.y(qb.index, radians);
         self
     }
 
     fn z(&self, qb: &Qubit, radians: f64) -> &Self {
-        self.builder.z(qb.index, radians);
+        self.wrapped.z(qb.index, radians);
         self
     }
 
     fn cx(&self, controls: &Vec<Qubit>, target: &Qubit, radians: f64) -> &Self {
         let controls: Vec<i64> = controls.iter().map(|val| val.index).collect::<Vec<_>>();
-        self.builder.cx(controls, target.index, radians);
+        self.wrapped.cx(controls, target.index, radians);
         self
     }
 
     fn cy(&self, controls: &Vec<Qubit>, target: &Qubit, radians: f64) -> &Self {
         let controls = controls.iter().map(|val| val.index).collect::<Vec<_>>();
-        self.builder.cy(controls, target.index, radians);
+        self.wrapped.cy(controls, target.index, radians);
         self
     }
 
     fn cz(&self, controls: &Vec<Qubit>, target: &Qubit, radians: f64) -> &Self {
         let controls: Vec<i64> = controls.iter().map(|val| val.index).collect::<Vec<_>>();
-        self.builder.cz(controls, target.index, radians);
+        self.wrapped.cz(controls, target.index, radians);
         self
     }
 
     fn reset(&self, qb: &Qubit) -> &Self {
-        self.builder.reset(qb.index);
+        self.wrapped.reset(qb.index);
         self
     }
 }
 
-pub trait Builder {
-    fn clear(&self) -> &Self { self }
-}
-
-pub trait InstructionBuilder: Builder {
+pub trait InstructionBuilder {
     fn measure(&self, qb: &Qubit) -> &Self { self }
 
     fn had(&self, qb: &Qubit) -> &Self {

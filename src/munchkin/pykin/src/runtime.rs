@@ -7,7 +7,7 @@ use log::{Level, log};
 use crate::analysis::{QuantumOperations, QuantumProjection};
 use crate::with_mutable;
 use crate::evaluator::EvaluationContext;
-use crate::execution::EngineCollection;
+use crate::execution::RuntimeCollection;
 use crate::graphs::{AnalysisGraph, walk_logical_paths, Node, ExecutableAnalysisGraph};
 use crate::hardware::Qubit;
 use crate::instructions::{Condition, Equalities, Expression, Gate, Instruction, LambdaModifier, Operator, Pauli, Value};
@@ -285,14 +285,14 @@ impl TracingModule {
 }
 
 pub struct QuantumRuntime {
-    engines: Ptr<EngineCollection>,
+    engines: Ptr<RuntimeCollection>,
     trace_module: Ptr<TracingModule>
 }
 
 /// A runtime monitors, executes and maintains a cluster of graphs against the backend instances it
 /// currently has available.
 impl QuantumRuntime {
-    pub fn new(engines: &Ptr<EngineCollection>, tracer: ActiveTracers) -> QuantumRuntime {
+    pub fn new(engines: &Ptr<RuntimeCollection>, tracer: ActiveTracers) -> QuantumRuntime {
         QuantumRuntime {
             engines: engines.clone(),
             trace_module: Ptr::from(TracingModule::with(tracer))
@@ -324,7 +324,7 @@ impl QuantumRuntime {
                 supplied_arguments = String::from("none");
             }
 
-            panic!("Root graph requires {required_arguments} to execute. Got given: {supplied_arguments}.")
+            panic!("Root graph requires {required_arguments} arguments to execute. Got given: {supplied_arguments}.")
         }
 
         let mut index = 0;

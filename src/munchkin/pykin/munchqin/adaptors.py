@@ -32,10 +32,10 @@ class BuilderAdaptor:
     def measure(self, qubit):
         ...
 
-    def clear(self):
-        ...
-
 
 class RuntimeAdaptor:
     def execute(self, builder) -> Dict[str, int]:
+        ...
+
+    def create_builder(self) -> BuilderAdaptor:
         ...

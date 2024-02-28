@@ -13,7 +13,7 @@ from .adaptors import BuilderAdaptor, RuntimeAdaptor
 
 
 def fetch_qasm_runtime(qubit_count=30):
-    return MunchkinRuntime(QASMBuilder(qubit_count), QASMRuntime())
+    return MunchkinRuntime(QASMRuntime(qubit_count))
 
 
 class QASMBuilder(BuilderAdaptor):
@@ -53,12 +53,11 @@ class QASMBuilder(BuilderAdaptor):
         self.bit_count = self.bit_count + 1
         return self
 
-    def clear(self):
-        self.circuit.clear()
-        self.bit_count = 0
-
 
 class QASMRuntime(RuntimeAdaptor):
+    def __init__(self, qubit_count=30):
+        self.qubit_count = qubit_count
+
     def execute(self, builder: QASMBuilder) -> Dict[str, int]:
         aer_config = QasmBackendConfiguration.from_dict(AerSimulator._DEFAULT_CONFIGURATION)
         aer_config.n_qubits = builder.circuit.num_qubits
@@ -78,3 +77,6 @@ class QASMRuntime(RuntimeAdaptor):
         # Because qiskit needs all values up-front we just provide a maximal classical register then strim off
         # the values we aren't going to use.
         return {key[removals:]: value for key, value in distribution.items()}
+
+    def create_builder(self) -> BuilderAdaptor:
+        return QASMBuilder(self.qubit_count)

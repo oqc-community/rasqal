@@ -12,16 +12,17 @@ use std::{ffi::OsStr, path::Path};
 use std::borrow::{Borrow};
 use inkwell::values::FunctionValue;
 use inkwell::attributes::AttributeLoc;
-use crate::builders::PythonEngine;
+use crate::blueprints::QuantumBlueprint;
+use crate::builders::PythonRuntime;
 use crate::evaluator::QIREvaluator;
 use crate::graphs::ExecutableAnalysisGraph;
 use crate::instructions::Value;
 use crate::runtime::{ActiveTracers, QuantumRuntime, TracingModule};
 use crate::smart_pointers::Ptr;
 
-pub fn run_file(path: impl AsRef<Path>, args: &Vec<Value>, engine: &Ptr<PythonEngine>,
+pub fn run_file(path: impl AsRef<Path>, args: &Vec<Value>, runtimes: &Ptr<RuntimeCollection>,
                 entry_point: Option<&str>, tracer: ActiveTracers) -> Result<Option<Ptr<Value>>, String> {
-    run_graph(&parse_file(path, entry_point)?, args, engine, tracer)
+    run_graph(&parse_file(path, entry_point)?, args, runtimes, tracer)
 }
 
 pub fn parse_file(path: impl AsRef<Path>, entry_point: Option<&str>) -> Result<Ptr<ExecutableAnalysisGraph>, String> {
@@ -65,32 +66,44 @@ pub fn build_graph_from_module(module: &Module, entry_point: Option<&str>) -> Re
         &Ptr::from(module))
 }
 
-pub fn run_graph(graph: &Ptr<ExecutableAnalysisGraph>, arguments: &Vec<Value>, engine: &Ptr<PythonEngine>, tracer: ActiveTracers) -> Result<Option<Ptr<Value>>, String> {
-    let engines = Ptr::from(EngineCollection::from(engine));
-    let mut runtime = QuantumRuntime::new(engines.borrow(), tracer);
+pub fn run_graph(graph: &Ptr<ExecutableAnalysisGraph>, arguments: &Vec<Value>, runtimes: &Ptr<RuntimeCollection>, tracer: ActiveTracers) -> Result<Option<Ptr<Value>>, String> {
+    let mut runtime = QuantumRuntime::new(runtimes, tracer);
     runtime.execute(graph.borrow(), arguments)
 }
 
 /// Top-level collection item that holds information about target runtimes and engines for graphs.
-pub struct EngineCollection {
-    python_engine: Ptr<PythonEngine>
+pub struct RuntimeCollection {
+    QPU_runtimes: Vec<Ptr<PythonRuntime>>
 }
 
-/// We don't have a 'new' because later on this will be a proper collection, but will have a
-/// helper for creating from a single engine instance.
-impl EngineCollection {
-    pub fn from(python_engine: &Ptr<PythonEngine>) -> EngineCollection {
-        EngineCollection {python_engine: python_engine.clone()}
+impl RuntimeCollection {
+    pub fn new(engines: Vec<Ptr<PythonRuntime>>) -> RuntimeCollection {
+        RuntimeCollection { QPU_runtimes: engines }
     }
 
-    pub fn get_available_QPU(&self) -> Ptr<PythonEngine> {
-        self.python_engine.clone()
+    pub fn add(&mut self, python_engine: &Ptr<PythonRuntime>) {
+        self.QPU_runtimes.push(python_engine.clone());
+    }
+
+    pub fn from(python_engine: &Ptr<PythonRuntime>) -> RuntimeCollection {
+        RuntimeCollection::new(vec![python_engine.clone()])
+    }
+
+    /// Fetches the first available QPU which can run this blueprint.
+    pub fn get_blueprint_capable_QPU(&self, blueprint: &QuantumBlueprint) -> Option<Ptr<PythonRuntime>> {
+        for engine in self.QPU_runtimes.iter() {
+            if engine.can_run_blueprint(blueprint) {
+                return Some(engine.clone())
+            }
+        }
+
+        None
     }
 }
 
-impl Default for EngineCollection {
+impl Default for RuntimeCollection {
     fn default() -> Self {
-        EngineCollection { python_engine: Ptr::default() }
+        RuntimeCollection { QPU_runtimes: Vec::default() }
     }
 }
 
@@ -147,8 +160,8 @@ mod tests {
     use std::borrow::Borrow;
     use std::fs::canonicalize;
     use bitflags::Flags;
-    use crate::builders::{PythonEngine};
-    use crate::execution::run_file;
+    use crate::builders::{PythonRuntime};
+    use crate::execution::{run_file, RuntimeCollection};
     use crate::instructions::Value;
     use crate::runtime::ActiveTracers;
     use crate::smart_pointers::Ptr;
@@ -158,8 +171,10 @@ mod tests {
         let relative_path = canonicalize("../tests/qsharp/qaoa/qir/qaoa.ll").unwrap();
         let path = relative_path.to_str().unwrap();
 
-        let py_builder = Ptr::from(PythonEngine::default());
-        run_file(path, &Vec::new(), py_builder.borrow(), None, ActiveTracers::empty());
+        let runtimes = Ptr::from(RuntimeCollection::from(
+            &Ptr::from(PythonRuntime::default())));
+
+        run_file(path, &Vec::new(), runtimes.borrow(), None, ActiveTracers::empty());
     }
 
     #[test]
@@ -167,8 +182,10 @@ mod tests {
         let relative_path = canonicalize("../tests/qsharp/simplified-oracle-generator/qir/simplified-oracle-generator.ll").unwrap();
         let path = relative_path.to_str().unwrap();
 
-        let py_builder = Ptr::from(PythonEngine::default());
-        run_file(path, &Vec::new(), py_builder.borrow(), None, ActiveTracers::empty());
+
+        let runtimes = Ptr::from(RuntimeCollection::from(
+            &Ptr::from(PythonRuntime::default())));
+        run_file(path, &Vec::new(), runtimes.borrow(), None, ActiveTracers::empty());
     }
 
     #[test]
@@ -176,8 +193,10 @@ mod tests {
         let relative_path = canonicalize("../tests/qsharp/oracle-generator/qir/oracle-generator.ll").unwrap();
         let path = relative_path.to_str().unwrap();
 
-        let py_builder = Ptr::from(PythonEngine::default());
-        run_file(path, &Vec::new(), py_builder.borrow(), None, ActiveTracers::empty());
+
+        let runtimes = Ptr::from(RuntimeCollection::from(
+            &Ptr::from(PythonRuntime::default())));
+        run_file(path, &Vec::new(), runtimes.borrow(), None, ActiveTracers::empty());
     }
 
     #[test]
@@ -185,7 +204,9 @@ mod tests {
         let relative_path = canonicalize("../tests/qsharp/minified-oracle-generator/qir/minified-oracle-generator.ll").unwrap();
         let path = relative_path.to_str().unwrap();
 
-        let py_builder = Ptr::from(PythonEngine::default());
-        run_file(path, &vec![Value::Bool(true)], py_builder.borrow(), None, ActiveTracers::Graphs);
+
+        let runtimes = Ptr::from(RuntimeCollection::from(
+            &Ptr::from(PythonRuntime::default())));
+        run_file(path, &vec![Value::Bool(true)], runtimes.borrow(), None, ActiveTracers::Graphs);
     }
 }
