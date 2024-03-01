@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2024 Oxford Quantum Circuits Ltd
+
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(non_upper_case_globals, non_snake_case, unused_macros, dead_code, unused_variables, unused_must_use)]
 #![allow(clippy::needless_pass_by_value)]

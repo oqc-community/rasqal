@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2024 Oxford Quantum Circuits Ltd
+
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 use std::borrow::{Borrow};

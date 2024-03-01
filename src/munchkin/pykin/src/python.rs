@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2024 Oxford Quantum Circuits Ltd
+
 use std::borrow::Borrow;
 use bitflags::Flags;
 use log::{Level, log, log_enabled};

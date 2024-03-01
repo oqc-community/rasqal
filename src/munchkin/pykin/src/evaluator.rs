@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2024 Oxford Quantum Circuits Ltd
+
 use inkwell::module::Module;
 use std::collections::{HashMap};
 use inkwell::values::{AggregateValue, AnyValue, AnyValueEnum, AsValueRef, BasicValue, FunctionValue, InstructionOpcode, InstructionValue};
