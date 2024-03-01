@@ -37,6 +37,7 @@ macro_rules! python_methods {
     }
 }
 
+/// Rust wrapper for our Python builders.
 struct PyBuilderAdaptor {
     builder: Ptr<PyAny>
 }
@@ -62,7 +63,6 @@ impl PyBuilderAdaptor {
 
 impl Deref for PyBuilderAdaptor {
     type Target = PyAny;
-
     fn deref(&self) -> &Self::Target {
         self.builder.deref()
     }
@@ -80,6 +80,7 @@ impl Default for PyBuilderAdaptor {
     }
 }
 
+/// Rust wrapper for our Python runtime.
 struct PyRuntimeAdaptor {
     runtime: Ptr<PyAny>
 }

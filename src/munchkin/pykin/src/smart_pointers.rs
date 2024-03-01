@@ -31,6 +31,8 @@ macro_rules! with_mutable_self {
     };
 }
 
+/// Inner container of a FlexiPtr that holds the actual value pointer as well as a counter of
+/// current live references.
 pub struct FlexiRef<T: ?Sized> {
     counter: *mut Cell<usize>,
     value: *mut Cell<T>,
@@ -55,6 +57,7 @@ impl<T> FlexiRef<T> {
 }
 
 impl<T: ?Sized> FlexiRef<T> {
+    /// Increases ref-count by 1.
     pub fn inc(&self) {
         unsafe {
             let counter = self.counter.as_ref().unwrap();
@@ -62,6 +65,7 @@ impl<T: ?Sized> FlexiRef<T> {
         }
     }
 
+    /// Increases ref-count by argument.
     pub fn inc_by(&self, val: usize) {
         unsafe {
             let counter = self.counter.as_ref().unwrap();
@@ -69,6 +73,7 @@ impl<T: ?Sized> FlexiRef<T> {
         }
     }
 
+    /// Decreases ref-count by 1.
     pub fn dec(&mut self) {
        unsafe {
             let counter = self.counter.as_ref().unwrap();
@@ -76,6 +81,7 @@ impl<T: ?Sized> FlexiRef<T> {
         }
     }
 
+    /// Decreases ref-count by argument.
     pub fn dec_by(&mut self, val: usize) {
         unsafe {
             let counter = self.counter.as_ref().unwrap();
@@ -83,10 +89,12 @@ impl<T: ?Sized> FlexiRef<T> {
         }
     }
 
+    /// Returns the count of currently active references this object has.
     pub fn ref_count(&self) -> usize {
         unsafe { (*self.counter).get().clone() }
     }
 
+    /// Fetch the inner pointer as a reference.
     pub fn value(&self) -> &mut T {
         unsafe {
             (*self.value).get_mut()
@@ -163,13 +171,11 @@ impl<T: ?Sized + Display> Display for FlexiPtr<T> {
 }
 
 impl<T> FlexiPtr<T> {
-    /// Effectively extends the passed-in flexi pointer into this object,
-    /// dropping its existing value and ref count.
+    /// Replaces the inner pointer with the passed-in one.
     ///
-    /// In-place equivalent to:
-    /// ```
-    /// *self.flexi_pointer = *flexi_ref;
-    /// ```
+    /// This has a cascading effect so that if there are 5 smart-pointers all pointing at a
+    /// single object, and you replace that inner object, all those 5 pointers will then now point to
+    /// the *new* object.
     pub fn expand_into(&self, val: &FlexiPtr<T>) {
         match self {
             FlexiPtr::RefCounted(ref_) => {
@@ -230,6 +236,7 @@ impl<T: ?Sized> FlexiPtr<T> {
         !FlexiPtr::is_null(self_)
     }
 
+    /// Returns the address of the inner object.
     pub fn as_address(self_: &Self) -> usize {
         // TODO: There's got to be a better way to get the address than this.
         self_.deref() as *const T as *mut T as *mut () as usize
@@ -350,6 +357,7 @@ impl<T: Hash> Hash for FlexiPtr<T> {
 }
 
 impl<T: ?Sized> Clone for FlexiPtr<T> {
+    /// Clones the outer object, leaving the inner object pointing at the same thing.
     fn clone(&self) -> Self {
         match self.borrow() {
             FlexiPtr::RefCounted(val) => {

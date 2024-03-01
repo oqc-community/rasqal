@@ -22,15 +22,15 @@ pub fn walk_logical_paths(graph: &Ptr<AnalysisGraph>) -> LogicalPathwayIterator 
     LogicalPathwayIterator::new(graph)
 }
 
+/// Walks the graph top-down taking all branches as it goes. Not a flat walk, as it flip=flops
+/// between branches it means any pathways that are heavily weighted on one side will be completed
+/// later, sometimes exceptionally so.
 pub struct LogicalPathwayIterator {
     graph: Ptr<AnalysisGraph>,
     guard: HashSet<usize>,
     next_node: VecDeque<Ptr<Node>>
 }
 
-/// Walks the graph top-down taking all branches as it goes. Not a flat walk, as it flip=flops
-/// between branches it means any pathways that are heavily weighted on one side will be completed
-/// later, sometimes exceptionally so.
 impl LogicalPathwayIterator {
     fn new(graph: &Ptr<AnalysisGraph>) -> LogicalPathwayIterator {
         let mut vec = VecDeque::new();
@@ -112,6 +112,7 @@ impl Iterator for LogicalPathwayIterator {
     }
 }
 
+/// Edges of a graph.
 pub struct Edges {
     pub incoming: Vec<Ptr<Edge>>,
     pub outgoing: Vec<Ptr<Edge>>,
@@ -147,12 +148,16 @@ impl Display for Edges {
     }
 }
 
+/// An analysis graph, core structure to many other variations of graph.
+/// Centralizes all algorithms and node structure/constraints.
 pub struct AnalysisGraph {
     pub identity: String,
 
     nodes: Ptr<HashMap<usize, Ptr<Node>>>,
     edges: Ptr<HashMap<usize, Ptr<Edges>>>,
 
+    /// Denotes which node will be automatically attached too
+    /// if you add one without explicit edges.
     pub auto_attach_target: Ptr<Node>
 }
 
@@ -213,6 +218,7 @@ impl AnalysisGraph {
         new_node
     }
 
+    /// Same as [edges_of].
     pub fn edges_of_mut(&mut self, node_id: usize) -> &mut Ptr<Edges>{
         if !self.edges.contains_key(&node_id) {
             self.edges.insert(node_id, Ptr::from(Edges::new()));
@@ -221,6 +227,7 @@ impl AnalysisGraph {
         self.edges.get_mut(&node_id).unwrap()
     }
 
+    /// Returns the edges of this node.
     pub fn edges_of(&self, node_id: usize) -> &Ptr<Edges>{
         if !self.edges.contains_key(&node_id) {
             with_mutable_self!(self.edges.insert(node_id, Ptr::from(Edges::new())));
@@ -266,16 +273,21 @@ impl AnalysisGraph {
         self.auto_attach_target = node.clone()
     }
 
+    /// Returns next node you're auto-attaching too.
     pub fn next_auto_attach(&self) -> &Ptr<Node> {
         self.auto_attach_target.borrow()
     }
 
+    /// Same as [add_loose_node] but builds the node from the passed-in Instruction.
     pub fn add_loose(&mut self, inst: Instruction) -> Ptr<Node> {
         let mut val = Ptr::from(Node::new(&Ptr::from(inst)));
         self.add_loose_node(val.borrow_mut());
         val
     }
 
+    /// Adds a loose node that has no edges defined.
+    /// But if this node is coming from another graph then its edges will be persisted.
+    /// This means that you can have edges that span different graphs.
     fn add_loose_node(&mut self, node: &Ptr<Node>) {
         let instruction_address = node.id();
         if !self.nodes.contains_key(instruction_address.borrow()) {
@@ -297,17 +309,19 @@ impl AnalysisGraph {
         }
     }
 
+    /// Add this instruction to the graph from the current auto-attach target.
     pub fn add(&mut self, inst: Instruction) -> Ptr<Node> {
         let mut val = Ptr::from(Node::new(&Ptr::from(inst)));
         self.add_node_with_edge(val.borrow_mut(), true);
         val
     }
 
-    /// Simply adds the node to the graph.
+    /// Adds this node to the graph from the current auto-attach target.
     pub fn add_node(&mut self, node: &mut Ptr<Node>)  {
         self.add_node_with_edge(node, true);
     }
 
+    /// Does this graph contain tihs node.
     pub fn contains_node(&self, node: &Ptr<Node>) -> bool {
         self.nodes.contains_key(node.id().borrow())
     }
@@ -403,7 +417,8 @@ impl AnalysisGraph {
         }
     }
 
-    fn stringify(&self, f: &mut Formatter<'_>, graph_guard: &mut HashSet<usize>) -> std::fmt::Result {
+    /// Writes a human-readable representation of this graph into the formatter.
+    fn stringify(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(format!("{}:\n", self.identity.as_str()).as_str());
 
         let graph_walker = walk_logical_paths(&Ptr::from(self));
@@ -427,8 +442,7 @@ impl AnalysisGraph {
 
 impl Display for AnalysisGraph {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut guard = HashSet::new();
-        self.stringify(f, &mut guard)
+        self.stringify(f)
     }
 }
 
@@ -559,6 +573,7 @@ impl Display for ExecutableAnalysisGraph {
 }
 
 /// Wrapper for an AnalysisGraph that adds helper methods for building and manipulating the graph.
+/// Note: uses auto-deref to allow it to act as an extension.
 pub struct AnalysisGraphBuilder {
     pub graph: Ptr<AnalysisGraph>
 }
@@ -778,13 +793,15 @@ impl DerefMut for AnalysisGraphBuilder {
 }
 
 pub struct Edge {
-    /// ID of the node that's on the end of this edge.
+    /// ID of the node that's on the start/end of this edge.
     pub start: usize,
     pub end: usize,
 
     /// An edge assignment means when this edge is traveled you want to assign these values to
     /// these variables.
     pub assignments: Option<Vec<(String, Value)>>,
+
+    /// Condition that needs to be evaluated as true if this edge is to be taken.
     pub conditions: Option<Condition>
 }
 
@@ -823,10 +840,12 @@ impl Edge {
         self.conditions.as_mut().map_or(None, |val| Some(val.clone()))
     }
 
+    /// Is this a conditional edge.
     pub fn is_unconditional(&self) -> bool {
         self.conditions.is_none()
     }
 
+    /// Returns a human-readable version of the condition.
     pub(crate) fn stringify_condition(&self) -> String {
         if let Some(val) = self.conditions.as_ref() {
            format!(" if {}", val.to_string()).to_string()
@@ -835,6 +854,7 @@ impl Edge {
         }
     }
 
+    /// Returns a human-readable version of the assign.
     pub(crate) fn stringify_assigns(&self) -> String {
         if let Some(val) = self.assignments.as_ref() {
             if val.is_empty() {
@@ -866,11 +886,15 @@ impl Display for Edge {
 }
 
 pub struct Node {
+    /// Pointer to the graph it is currently a part of.
+    /// Gets updated when it moves graphs.
     linked_graph: Ptr<AnalysisGraph>,
+
+    /// Instruction this node represents.
     pub instruction: Ptr<Instruction>,
 
-    // Assigned just before execution, states precisely what position the node
-    // in the graph is in relation to its breathren
+    /// Assigned just before execution, states precisely what position the node
+    /// in the graph is in relation to its breathren
     pub order: Option<i64>
 }
 
@@ -883,6 +907,8 @@ impl Node {
         }
     }
 
+    /// Important note: this is the *pointer address* of the internal instruction.
+    /// Comparing two nodes which reference the same instruction will be evaluated as true.
     pub fn id(&self) -> usize {
         Ptr::as_address(&self.instruction)
     }
@@ -946,6 +972,7 @@ impl Node {
         self.linked_graph.edges_of(self.id()).incoming.is_empty()
     }
 
+    /// Returns a human-readable string of the node and edge cmobined.
     pub(crate) fn stringify_edge_target(&self, edge: &Edge, target_node: &Node) -> String {
         let condition = edge.stringify_condition();
         let assigns = edge.stringify_assigns();

@@ -538,6 +538,9 @@ pub struct QuantumProjection {
   cached_filtered: HashMap<String, AnalysisResult>,
 }
 
+/// A for-now list of linear gates and hardware operations that we can store and send to our
+/// Python runtimes. In time these will be removed and we'll reconstruct gates from
+/// our other analysis structures.
 pub enum QuantumOperations {
   Initialize(),
   Reset(Vec<Qubit>),
@@ -594,6 +597,11 @@ impl Display for QuantumOperations {
   }
 }
 
+/// A projection is the umbralla for each individual quantum execution. When a qubit is first
+/// activated a projection is created that will then take care of execution and analysis.
+///
+/// For a full description see the paper, but otherwise consider this a quantum analysis
+/// structure and circuit synthesizer.
 impl QuantumProjection {
   pub fn new(engines: &Ptr<RuntimeCollection>) -> QuantumProjection {
     QuantumProjection {
@@ -620,6 +628,7 @@ impl QuantumProjection {
     self.trace_module.has(ActiveTracers::Projections)
   }
 
+  /// Adds this operation to the projection.
   pub fn add(&mut self, inst: &Ptr<QuantumOperations>) {
     // Clear any pre-computed results upon a change to the state.
     if self.cached_result.is_some() {
@@ -856,6 +865,7 @@ impl PartialOrd for QuantumProjection {
 impl Eq for QuantumProjection {
 }
 
+/// Non-deferred result distribution from a QPU execution.
 pub struct AnalysisResult {
   pub distribution: HashMap<String, i64>
 }

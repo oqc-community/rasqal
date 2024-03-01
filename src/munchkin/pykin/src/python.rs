@@ -76,7 +76,7 @@ impl FromPyObject<'_> for Value {
 }
 
 /// Python wrapper around an execution graph. Currently used for simply passing things around for
-/// the API's. Later it'll expose more internal operations for the graph itself for
+/// the APIs. Later it'll expose more internal operations for the graph itself for
 /// mutations/changes from Python.
 #[pyclass]
 #[derive(Clone)]
@@ -108,10 +108,12 @@ pub(crate) struct Executor {
     tracing: ActiveTracers,
 }
 
+/// Python binding for allowing consumes to call into the Rust code.
 #[pymethods]
 impl Executor {
     #[new]
     fn new() -> Self {
+        // Activate fallback logging if we don't have any.
         activate_fallback_logger();
         Executor { tracing: ActiveTracers::empty() }
     }

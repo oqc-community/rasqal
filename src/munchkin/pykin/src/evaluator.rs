@@ -37,12 +37,13 @@ macro_rules! operand_to_bb {
 // TODO: Since Inkwell dosen't expose things properly try and use the llvm-sys objects to find the
 //  data. We want to remove all the string fetching/matching as it's inefficent.
 
-/// Fetches the &{value} from a stringified LLVM instruction to give a loose name to the values we
-/// reference.
+/// Fetches the assignment variable (&{value}) from a stringified LLVM instruction.
 pub fn get_ref_id_from_instruction(inst: &InstructionValue) -> String {
+    let inst_str = inst.to_string().trim_end_matches("\"").trim_start_matches("\"").trim().to_string();
     parse_ref_id_from_instruction(inst).expect("Can't find ref-id from instruction")
 }
 
+/// Same as [get_ref_id_from_instruction] which doesn't panic.
 pub fn parse_ref_id_from_instruction(inst: &InstructionValue) -> Option<String> {
     let inst_str = inst.to_string().trim_end_matches("\"").trim_start_matches("\"").trim().to_string();
     parse_ref_id_from_instruction_str(&inst_str)
@@ -95,18 +96,24 @@ pub fn parse_ref_id_from_value(ptr_string: String) -> Option<String> {
     })
 }
 
+/// Parsing context, molds all state required by the evalautor to run.
 pub struct EvaluationContext<'ctx> {
     pub module: Ptr<Module<'ctx>>,
     pub global_variables: Ptr<HashMap<String, Ptr<Value>>>,
 
-    // Basic-block anchor nodes, essentially start/end ones.
+    /// Basic-block anchor nodes, allows us to reference the start/end of a basic block
+    /// without it having an explicit node.
     pub anchors: HashMap<String, Ptr<Node>>,
+
+    /// The graphs currently built, or in the process of building, key'd by their name.
     pub method_graphs: Ptr<HashMap<String, Ptr<AnalysisGraph>>>,
 
     /// Hack for QIR implementations that don't implement variables at all and assume
     /// measures/returns by magic means. If not empty all returns will instead return
     /// the values in the list.
     pub is_base_profile: Ptr<bool>,
+
+    /// Incremental counter for throwaway variables.
     pub throwaway_variables: Ptr<i64>
 }
 
@@ -122,6 +129,8 @@ impl<'a> EvaluationContext<'a> {
         }
     }
 
+    /// Creates a subcontext for individual methods. All method-scoped
+    /// variables are reset while persisting global values.
     pub fn create_subcontext(parent: &Ptr<EvaluationContext<'a>>) -> EvaluationContext<'a> {
         EvaluationContext {
             module: parent.module.clone(),
@@ -143,6 +152,7 @@ impl<'a> EvaluationContext<'a> {
     }
 }
 
+/// Parser for turning QIR LLVM Modules into an [AnalysisGraph].
 pub struct QIREvaluator {}
 
 impl QIREvaluator {
@@ -249,8 +259,7 @@ impl QIREvaluator {
     }
 
     /// Hacked-together method to centralize GEP extraction. Done using llvm-sys objects because
-    /// Inkwell doesn't have any way to access operands when a GEP is an argument, and unknown
-    /// when it will.
+    /// Inkwell doesn't have any way to access operands when a GEP is an argument.
     fn extract_gep(&self, any_val: &AnyValueEnum, graph: &Ptr<AnalysisGraphBuilder>,
                    context: &Ptr<EvaluationContext>) -> Option<Value> {
         unsafe {
@@ -296,7 +305,7 @@ impl QIREvaluator {
     }
 
     /// Private recursive method for as_value, extracted out for easier access to state. You will
-    /// almost never want to use this directly. Use as_value instead.
+    /// almost never want to use this directly. Use [as_value] instead.
     fn _as_value_recursive(&self, graph: &Ptr<AnalysisGraphBuilder>, type_enum: &AnyTypeEnum,
                            val_enum: &AnyValueEnum, context: &Ptr<EvaluationContext>) -> Option<Value> {
         let ref_id = parse_ref_id_from_value(val_enum.to_string());
@@ -349,8 +358,7 @@ impl QIREvaluator {
 
                 // TODO: Doesn't _really_ deal with longs.
                 return if t == llvm_context.bool_type().borrow_mut() {
-                    // Bools come in as -1 = true, 0 = false, no clue why.
-                    // Think it's some C thing.
+                    // Bools come in as -1 = true, 0 = false.
                     Some(Value::Bool(numeric == -1))
                 } else if t == llvm_context.i8_type().borrow_mut() {
                     Some(Value::Short(numeric as i16))
@@ -478,7 +486,7 @@ impl QIREvaluator {
         self._as_value_recursive(graph, any_val.get_type().borrow(), any_val, context)
     }
 
-    /// Evaluates the instructions and adds them to the graph as we go.
+    /// Evaluates the instruction and adds it to the graph.
     fn walk_instruction(&self, inst: &Ptr<InstructionValue>,
                         graph: &Ptr<AnalysisGraphBuilder>,
                         context: &Ptr<EvaluationContext>) {
@@ -630,6 +638,10 @@ impl QIREvaluator {
         }
     }
 
+    /// Evaluates the method intrinsics (aka without any body). This covers a whole range of
+    /// things from system calls, custom compiler intrinsics to QIR intrinsics.
+    ///
+    /// We only acknowledge QIR intrinsics.
     fn eval_intrinsic(&self, name: String, inst: &Ptr<InstructionValue>, graph: &Ptr<AnalysisGraphBuilder>, context: &Ptr<EvaluationContext>) -> Option<Value> {
         let parse_as_value= |inst: &Ptr<InstructionValue>, index: u32| -> Option<Value> {
             let op = inst.get_operand(index).expect(&*format!("Operand at {} doesn't exist", 0));
