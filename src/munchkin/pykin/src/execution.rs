@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2024 Oxford Quantum Circuits Ltd
+
 #![deny(clippy::all, clippy::pedantic)]
 
 use inkwell::{
@@ -20,17 +23,20 @@ use crate::instructions::Value;
 use crate::runtime::{ActiveTracers, QuantumRuntime, TracingModule};
 use crate::smart_pointers::Ptr;
 
+/// Executes the file.
 pub fn run_file(path: impl AsRef<Path>, args: &Vec<Value>, runtimes: &Ptr<RuntimeCollection>,
                 entry_point: Option<&str>, tracer: ActiveTracers) -> Result<Option<Ptr<Value>>, String> {
     run_graph(&parse_file(path, entry_point)?, args, runtimes, tracer)
 }
 
+/// Parses the file from the entry_point and returns the built-up graph.
 pub fn parse_file(path: impl AsRef<Path>, entry_point: Option<&str>) -> Result<Ptr<ExecutableAnalysisGraph>, String> {
     let context = Context::create();
     let module = file_to_module(path, &context)?;
     build_graph_from_module(&module, entry_point)
 }
 
+/// Transforms an LLVM file into an LLVM module.
 pub fn file_to_module(path: impl AsRef<Path>, context: &Context) -> Result<Module, String> {
     let path = path.as_ref();
     let extension = path.extension().and_then(OsStr::to_str);
@@ -44,6 +50,7 @@ pub fn file_to_module(path: impl AsRef<Path>, context: &Context) -> Result<Modul
     }
 }
 
+/// Builds a graph from a QIR module.
 pub fn build_graph_from_module(module: &Module, entry_point: Option<&str>) -> Result<Ptr<ExecutableAnalysisGraph>, String> {
     module.verify()
       .map_err(|e| format!("Failed to verify module: {}", e.to_string()))?;
@@ -66,6 +73,7 @@ pub fn build_graph_from_module(module: &Module, entry_point: Option<&str>) -> Re
         &Ptr::from(module))
 }
 
+/// Executes a graph with the current runtimes and context.
 pub fn run_graph(graph: &Ptr<ExecutableAnalysisGraph>, arguments: &Vec<Value>, runtimes: &Ptr<RuntimeCollection>, tracer: ActiveTracers) -> Result<Option<Ptr<Value>>, String> {
     let mut runtime = QuantumRuntime::new(runtimes, tracer);
     runtime.execute(graph.borrow(), arguments)

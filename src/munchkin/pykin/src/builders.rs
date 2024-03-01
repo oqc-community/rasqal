@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2024 Oxford Quantum Circuits Ltd
+
 use std::borrow::Borrow;
 use std::f64::consts::PI;
 use std::ops::{Deref, DerefMut};
@@ -34,6 +37,7 @@ macro_rules! python_methods {
     }
 }
 
+/// Rust wrapper for our Python builders.
 struct PyBuilderAdaptor {
     builder: Ptr<PyAny>
 }
@@ -59,7 +63,6 @@ impl PyBuilderAdaptor {
 
 impl Deref for PyBuilderAdaptor {
     type Target = PyAny;
-
     fn deref(&self) -> &Self::Target {
         self.builder.deref()
     }
@@ -77,6 +80,7 @@ impl Default for PyBuilderAdaptor {
     }
 }
 
+/// Rust wrapper for our Python runtime.
 struct PyRuntimeAdaptor {
     runtime: Ptr<PyAny>
 }

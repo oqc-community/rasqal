@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2024 Oxford Quantum Circuits Ltd
+
 use std::fmt::{Display, Formatter};
 
 /// A blueprint holds all information about a particular execution - how many qubits it needs,

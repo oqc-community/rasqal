@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2024 Oxford Quantum Circuits Ltd
+
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{Display, Formatter};
@@ -31,6 +34,7 @@ fn scope_variables(graph: &Ptr<AnalysisGraph>, context: &Ptr<RuntimeContext>) {
     scope_variables_rec(graph, context, &mut guard);
 }
 
+/// Same as [scope_variables] just recursive.
 fn scope_variables_rec(graph: &Ptr<AnalysisGraph>, context: &Ptr<RuntimeContext>, guard: &mut HashSet<String>) {
     if guard.contains(&graph.identity) {
         return
@@ -132,6 +136,7 @@ fn get_next_node(current_node: &mut Ptr<Node>, context: &Ptr<RuntimeContext>) ->
     next_target.1.clone()
 }
 
+/// Check whether our conditional is satisified or not.
 pub fn check_condition(cond: &Condition, context: &Ptr<RuntimeContext>) -> bool {
     let left = follow_reference(&Ptr::from(cond.left.clone()), context);
     let right = follow_reference(&Ptr::from(cond.right.clone()), context);
@@ -146,7 +151,8 @@ pub fn check_condition(cond: &Condition, context: &Ptr<RuntimeContext>) -> bool 
     }
 }
 
-/// Follows a Value::Ref to the value it's actually pointing at, which includes delving into arrays.
+/// Follows a Value::Ref to the value it's actually pointing at, which includes delving into arrays
+/// and following references.
 fn follow_reference(qx: &Ptr<Value>, context: &Ptr<RuntimeContext>) -> Ptr<Value> {
     match qx.deref() {
         Value::Ref(ref_, additional) => {
@@ -187,7 +193,11 @@ fn follow_reference(qx: &Ptr<Value>, context: &Ptr<RuntimeContext>) -> Ptr<Value
 
 // TODO: Make return optional.
 
+/// Runtime implementation of Expression nodes.
 impl Expression {
+
+    /// Execute this expression using the passed-in context. Returns the result, which varies
+    /// should be inserted into the context if a variable is assigned.
     pub fn execute(&self, context: &Ptr<RuntimeContext>) -> Ptr<Value> {
         match self {
             Expression::Clone(value) => {
@@ -284,13 +294,13 @@ impl TracingModule {
     }
 }
 
+/// A runtime monitors, executes and maintains a cluster of graphs against the backend instances it
+/// currently has available.
 pub struct QuantumRuntime {
     engines: Ptr<RuntimeCollection>,
     trace_module: Ptr<TracingModule>
 }
 
-/// A runtime monitors, executes and maintains a cluster of graphs against the backend instances it
-/// currently has available.
 impl QuantumRuntime {
     pub fn new(engines: &Ptr<RuntimeCollection>, tracer: ActiveTracers) -> QuantumRuntime {
         QuantumRuntime {
@@ -299,7 +309,7 @@ impl QuantumRuntime {
         }
     }
 
-    /// Helper method since all checks are on one flag right now.
+    /// Do we currently have runtime tracing active.
     fn is_tracing(&self) -> bool {
         self.trace_module.has(ActiveTracers::Runtime)
     }
@@ -904,6 +914,7 @@ impl RuntimeContext {
         Ptr::from(new_context)
     }
 
+    /// Get the next free qubit and then activate it.
     fn get_free_qubit(&mut self) -> Ptr<Qubit> {
         // TODO: Brute-force so needs improvement but finding qubit gaps is important.
         let mut inc: i64 = 0;
@@ -916,6 +927,9 @@ impl RuntimeContext {
         new_qubit
     }
 
+    /// Releases a qubit from the context freeing it up for re-allocation.
+    /// Different from [deactivate_qubit] in that it doesn't have any interaction with
+    /// active projections.
     fn release_qubit(&mut self, qb: &Qubit) {
         if let Some(qb) = self.active_qubits.get(&qb.index) {
             let qbs = &self.active_qubits;
@@ -923,6 +937,7 @@ impl RuntimeContext {
         }
     }
 
+    /// Add a variable to the context.
     pub fn add(&mut self, var: &String, val: &Ptr<Value>) {
         if let Some(existing) = self.variables.get_mut(var) {
             existing.expand_into(val);
@@ -931,26 +946,32 @@ impl RuntimeContext {
         }
     }
 
+    /// Does this context contain this variable.
     pub fn has(&mut self, var: &String) -> bool {
         self.variables.contains_key(var)
     }
 
+    /// Remove this variable from the context.
     pub fn remove(&mut self, var: &String) {
         self.variables.remove(var);
     }
 
+    /// Get this variables value, returns Option:None if doesn't exist.
     pub fn get(&self, var: &String) -> Option<Ptr<Value>> {
         self.variables.get(var.as_str()).map_or_else(|| {
             self.globals.get(var.as_str()).map_or(None, |val| Some(val.clone_inner()))
         }, |val| Some(val.clone()))
     }
 
+    /// Activates a qubit and associates it to the current projection.
+    /// If no projection exists it creates one.
     pub fn activate_qubit(&mut self) -> Ptr<Qubit> {
         let new_qubit = self.get_free_qubit();
         self.activate_projection(&new_qubit);
         new_qubit
     }
 
+    /// Deactivates a qubit from the context and removes its projection association.
     pub fn deactivate_qubit(&mut self, qb: &Qubit) {
         self.release_qubit(qb);
         self.deactivate_projection(qb);
@@ -978,6 +999,7 @@ impl RuntimeContext {
         projection
     }
 
+    /// Removes this qubits projection association.
     pub fn deactivate_projection(&mut self, qb: &Qubit) {
         self.projections.remove(&qb.index);
     }

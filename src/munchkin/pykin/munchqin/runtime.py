@@ -19,7 +19,8 @@ if exists(dev_directory):
 
 class MunchkinRuntime:
     """
-    Wrapper API for native functionality, purely in Python to help do mappings.
+    Provides a wrapper around the Rust implementation details, allowing more natural extension
+    from Python as well as utility and supporting methods.
     """
 
     def __init__(self, runtime: Union[List[RuntimeAdaptor], RuntimeAdaptor]):
@@ -29,15 +30,27 @@ class MunchkinRuntime:
         self.runtimes: List[RuntimeAdaptor] = runtime
         self.executor = Executor()
 
-    def trace_graphs(self):
+    def trace_graphs(self) -> "MunchkinRuntime":
+        """
+        Activates graph logging.
+        Prints out the active execution graphs before running.
+        """
         self.executor.trace_graphs()
         return self
 
-    def trace_projections(self):
+    def trace_projections(self) -> "MunchkinRuntime":
+        """
+        Activates projection logging.
+        Holds information in regards to value prediction as well as what circuit is actually built.
+        """
         self.executor.trace_projections()
         return self
 
-    def trace_runtime(self):
+    def trace_runtime(self) -> "MunchkinRuntime":
+        """
+        Activates runtime logging.
+        Prints every step the symbolic executor takes.
+        """
         self.executor.trace_runtime()
         return self
 
@@ -62,6 +75,10 @@ class MunchkinRuntime:
                 remove(fp.name)
 
     def run(self, file_path: str, args: List[Any] = None):
+        """
+        Runs an .ll or .bc file with the passed-in arguments.
+        Arguments can only be Python primitives or otherwise easily transformable to Rust objects.
+        """
         results = self.executor.run_with_args(
             file_path, args or [], self.runtimes
         )

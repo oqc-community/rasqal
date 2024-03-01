@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2024 Oxford Quantum Circuits Ltd
+
 use std::borrow::Borrow;
 use std::fmt::{Display, Formatter};
 use std::{ops};
@@ -239,6 +242,10 @@ pub enum LambdaModifier {
     Adj
 }
 
+/// Loose expression nodes that don't easily fit within the graphs concepts but should still
+/// be represented.
+///
+/// In time these should be moved to their own instruction or done by composing other instructions.
 pub enum Expression {
     Clone(Value),
     Length(Value),
@@ -271,6 +278,7 @@ impl Display for Expression {
     }
 }
 
+/// Q-sharps definition of pauli, the actual numbers don't really matter.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Pauli {
     I = 0,
@@ -307,6 +315,7 @@ impl Display for Pauli {
 //  pointers, so the inner value also being a pointer increases complexity and adds potential for
 //  errors.
 
+/// A value that can flow around the graph.
 pub enum Value {
     Empty,
     Byte(i8),
@@ -361,6 +370,7 @@ impl Clone for Value {
 // TODO: May want to return references in the as_x methods.
 
 impl Value {
+    /// Attempts to coerce this value into an int. Returns None if it can't.
     pub fn try_as_int(&self) -> Option<i64> {
         match self {
             Value::Bool(b) => Some(if b.clone() == true { 1 } else { 0 }),
@@ -374,10 +384,12 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into an int. Panics if it can't.
     pub fn as_int(&self) -> i64 {
         self.try_as_int().expect(format!("Not a numeric: {}.", self.to_string()).as_str())
     }
 
+    /// Attempts to coerce this value into a byte. Returns None if it can't.
     pub fn try_as_byte(&self) -> Option<i8> {
         match self {
             Value::Bool(b) => Some(if b.clone() == true { 1 } else { 0 }),
@@ -391,10 +403,12 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into a byte. Panics if it can't.
     pub fn as_byte(&self) -> i8 {
         self.try_as_byte().expect(format!("Not a byte: {}.", self.to_string()).as_str())
     }
 
+    /// Attempts to coerce this value into a short. Returns None if it can't.
     pub fn try_as_short(&self) -> Option<i16> {
         match self {
             Value::Bool(b) => Some(if b.clone() == true { 1 } else { 0 }),
@@ -408,10 +422,12 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into a short. Panics if it can't.
     pub fn as_short(&self) -> i16 {
         self.try_as_short().expect(format!("Not a short: {}.", self.to_string()).as_str())
     }
 
+    /// Attempts to coerce this value into a long. Returns None if it can't.
     pub fn try_as_long(&self) -> Option<i128> {
         match self {
             Value::Bool(b) => Some(if b.clone() == true { 1 } else { 0 }),
@@ -425,10 +441,12 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into a long. Panics if it can't.
     pub fn as_long(&self) -> i128 {
         self.try_as_long().expect(format!("Not a long: {}.", self.to_string()).as_str())
     }
 
+    /// Attempts to coerce this value into a float. Returns None if it can't.
     pub fn try_as_float(&self) -> Option<f64> {
         match self {
             Value::Bool(b) => Some(if b.clone() == true { 1.0 } else { 0.0 }),
@@ -442,10 +460,12 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into a float. Panics if it can't.
     pub fn as_float(&self) -> f64 {
         self.try_as_float().expect(format!("Not a float: {}.", self.to_string()).as_str())
     }
 
+    /// Attempts to coerce this value into an array. Returns None if it can't.
     pub fn try_as_array(&self) -> Option<&Vec<Ptr<Value>>> {
         match self {
             Value::Array(ar) => Some(ar.as_ref()),
@@ -453,10 +473,12 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into an array. Panics if it can't.
     pub fn as_array(&self) -> &Vec<Ptr<Value>> {
         self.try_as_array().expect(format!("Not an array: {}.", self.to_string()).as_str())
     }
 
+    /// Attempts to coerce this value into a qubit. Returns None if it can't.
     pub fn try_as_qubit(&self) -> Option<&Qubit> {
         match self {
             Value::Qubit(qb) => Some(qb),
@@ -464,6 +486,7 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into a qubit. Panics if it can't.
     pub fn as_qubit(&self) -> &Qubit {
         self.try_as_qubit().expect(format!("Not a qubit: {}.", self.to_string()).as_str())
     }
@@ -484,6 +507,7 @@ impl Value {
         self.try_as_string().expect(format!("Not a string: {}.", self.to_string()).as_str())
     }
 
+    /// Attempts to coerce this value into a bool. Returns None if it can't.
     pub fn try_as_bool(&self) -> Option<bool> {
         if let Some(value) = self.try_as_byte() {
             if value != 0 && value != 1 {
@@ -499,10 +523,12 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into a bool. Panics if it can't.
     pub fn as_bool(&self) -> bool {
         self.try_as_bool().expect(format!("Not a bool: {}.", self.to_string()).as_str())
     }
 
+    /// Attempts to coerce this value into a reference. Returns None if it can't.
     pub fn try_as_reference(&self) -> Option<(String, Option<Ptr<Value>>)> {
         match self {
             Value::Ref(ref_, additional) => Some((ref_.clone(), additional.as_ref().map(|val| val.clone()))),
@@ -510,10 +536,12 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into a reference. Panics if it can't.
     pub fn as_reference(&self) -> (String, Option<Ptr<Value>>) {
         self.try_as_reference().expect(format!("Not a reference: {}.", self.to_string()).as_str())
     }
 
+    /// Attempts to coerce this value into a pauli. Returns None if it can't.
     pub fn try_as_pauli(&self) -> Option<Pauli> {
         // If we're a small int, automatically map.
         if let Some(value) = self.try_as_byte() {
@@ -526,10 +554,12 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into a pauli. Panics if it can't.
     pub fn as_pauli(&self) -> Pauli {
         self.try_as_pauli().expect(format!("Not a pauli: {}.", self.to_string()).as_str())
     }
 
+    /// Attempts to coerce this value into an analysis result. Returns None if it can't.
     pub fn try_as_analysis_result(&self) -> Option<Ptr<AnalysisResult>> {
         // TODO: Coerce more values into an analysis result if possible.
         match self {
@@ -538,10 +568,12 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into an analysis result. Panics if it can't.
     pub fn as_analysis_result(&self) -> Ptr<AnalysisResult> {
         self.try_as_analysis_result().expect(format!("Not an analysis result: {}.", self.to_string()).as_str())
     }
 
+    /// Attempts to coerce this value into a callable graph. Returns None if it can't.
     pub fn try_as_callable(&self) -> Option<Ptr<CallableAnalysisGraph>> {
         match self {
             Value::Callable(res) => Some(res.clone()),
@@ -549,6 +581,7 @@ impl Value {
         }
     }
 
+    /// Attempts to coerce this value into a callable graph. Panics if it can't.
     pub fn as_callable(&self) -> Ptr<CallableAnalysisGraph> {
         self.try_as_callable().expect(format!("Not a callable: {}.", self.to_string()).as_str())
     }

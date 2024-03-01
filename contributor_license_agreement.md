@@ -1,4 +1,3 @@
-
 ## Contributor License Agreement (CLA)
 
 We are incredibly thankful for the contributions we receive from the community. 

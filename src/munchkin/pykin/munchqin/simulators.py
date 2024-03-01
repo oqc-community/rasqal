@@ -13,10 +13,16 @@ from .adaptors import BuilderAdaptor, RuntimeAdaptor
 
 
 def fetch_qasm_runtime(qubit_count=30):
+    """
+    Returns a runtime which uses a QASM simulator as a backend.
+    """
     return MunchkinRuntime(QASMRuntime(qubit_count))
 
 
 class QASMBuilder(BuilderAdaptor):
+    """
+    Builder which builds Qiskit quantum circuits.
+    """
     def __init__(self, qubit_count: int):
         super().__init__()
         self.circuit = QuantumCircuit(qubit_count, qubit_count)
@@ -55,6 +61,10 @@ class QASMBuilder(BuilderAdaptor):
 
 
 class QASMRuntime(RuntimeAdaptor):
+    """
+    Qiskit-backed runtime.
+    Builds and runs a pure QASM simulation as a backend.
+    """
     def __init__(self, qubit_count=30):
         self.qubit_count = qubit_count
 
@@ -68,7 +78,7 @@ class QASMRuntime(RuntimeAdaptor):
         try:
             job = qasm_sim.run(transpile(circuit, qasm_sim), shots=builder.shot_count)
             results = job.result()
-            distribution = results.get_counts() # Used to pass in circuit, check.
+            distribution = results.get_counts()  # Used to pass in circuit, check.
         except QiskitError as e:
             raise ValueError(f"Error while attempting to build/run circuit: {str(e)}")
 
