@@ -15,7 +15,7 @@ use crate::hardware::Qubit;
 use crate::runtime::{ActiveTracers, TracingModule};
 use crate::smart_pointers::{Ptr};
 use crate::{with_mutable, with_mutable_self};
-use crate::blueprints::QuantumBlueprint;
+use crate::features::QuantumFeatures;
 
 #[derive(Clone)]
 pub struct StateHistory {
@@ -754,21 +754,11 @@ impl QuantumProjection {
     let query_result = if self.can_predict() {
       self.predict()
     } else {
-      let blueprint = QuantumBlueprint::default();
-      let runtime = self.engines.get_blueprint_capable_QPU(&blueprint).expect(format!("Cannot find QPU that accepts blueprint [{}]", blueprint).as_str());
-
-      // TODO: Clean up early return logic.
-      if !runtime.is_usable() {
-        self.cached_result = Some(AnalysisResult::default());
-        return self.cached_result.as_ref().unwrap().borrow();
-      }
+      let features = QuantumFeatures::default();
+      let runtime = self.engines.find_capable_QPU(&features)
+        .expect(format!("Cannot find QPU with these features available: [{}]", features).as_str());
 
       let builder = runtime.create_builder();
-      if !builder.is_usable() {
-        self.cached_result = Some(AnalysisResult::default());
-        return self.cached_result.as_ref().unwrap().borrow();
-      }
-
       for inst in self.instructions.iter() {
         match inst.deref() {
           QuantumOperations::Initialize() => {}

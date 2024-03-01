@@ -15,13 +15,14 @@ use std::{ffi::OsStr, path::Path};
 use std::borrow::{Borrow};
 use inkwell::values::FunctionValue;
 use inkwell::attributes::AttributeLoc;
-use crate::blueprints::QuantumBlueprint;
-use crate::builders::PythonRuntime;
+use crate::features::QuantumFeatures;
+use crate::builders::IntegrationRuntime;
 use crate::evaluator::QIREvaluator;
 use crate::graphs::ExecutableAnalysisGraph;
 use crate::instructions::Value;
 use crate::runtime::{ActiveTracers, QuantumRuntime, TracingModule};
 use crate::smart_pointers::Ptr;
+use crate::with_mutable;
 
 /// Executes the file.
 pub fn run_file(path: impl AsRef<Path>, args: &Vec<Value>, runtimes: &Ptr<RuntimeCollection>,
@@ -81,26 +82,26 @@ pub fn run_graph(graph: &Ptr<ExecutableAnalysisGraph>, arguments: &Vec<Value>, r
 
 /// Top-level collection item that holds information about target runtimes and engines for graphs.
 pub struct RuntimeCollection {
-    QPU_runtimes: Vec<Ptr<PythonRuntime>>
+    QPU_runtimes: Vec<Ptr<IntegrationRuntime>>
 }
 
 impl RuntimeCollection {
-    pub fn new(engines: Vec<Ptr<PythonRuntime>>) -> RuntimeCollection {
+    pub fn new(engines: Vec<Ptr<IntegrationRuntime>>) -> RuntimeCollection {
         RuntimeCollection { QPU_runtimes: engines }
     }
 
-    pub fn add(&mut self, python_engine: &Ptr<PythonRuntime>) {
+    pub fn add(&mut self, python_engine: &Ptr<IntegrationRuntime>) {
         self.QPU_runtimes.push(python_engine.clone());
     }
 
-    pub fn from(python_engine: &Ptr<PythonRuntime>) -> RuntimeCollection {
+    pub fn from(python_engine: &Ptr<IntegrationRuntime>) -> RuntimeCollection {
         RuntimeCollection::new(vec![python_engine.clone()])
     }
 
-    /// Fetches the first available QPU which can run this blueprint.
-    pub fn get_blueprint_capable_QPU(&self, blueprint: &QuantumBlueprint) -> Option<Ptr<PythonRuntime>> {
+    /// Fetches the first available QPU which has these features.
+    pub fn find_capable_QPU(&self, features: &QuantumFeatures) -> Option<Ptr<IntegrationRuntime>> {
         for engine in self.QPU_runtimes.iter() {
-            if engine.can_run_blueprint(blueprint) {
+            if with_mutable!(engine.is_valid()) && engine.has_features(features) {
                 return Some(engine.clone())
             }
         }
@@ -168,7 +169,7 @@ mod tests {
     use std::borrow::Borrow;
     use std::fs::canonicalize;
     use bitflags::Flags;
-    use crate::builders::{PythonRuntime};
+    use crate::builders::IntegrationRuntime;
     use crate::execution::{run_file, RuntimeCollection};
     use crate::instructions::Value;
     use crate::runtime::ActiveTracers;
@@ -180,7 +181,7 @@ mod tests {
         let path = relative_path.to_str().unwrap();
 
         let runtimes = Ptr::from(RuntimeCollection::from(
-            &Ptr::from(PythonRuntime::default())));
+            &Ptr::from(IntegrationRuntime::default())));
 
         run_file(path, &Vec::new(), runtimes.borrow(), None, ActiveTracers::empty());
     }
@@ -192,7 +193,7 @@ mod tests {
 
 
         let runtimes = Ptr::from(RuntimeCollection::from(
-            &Ptr::from(PythonRuntime::default())));
+            &Ptr::from(IntegrationRuntime::default())));
         run_file(path, &Vec::new(), runtimes.borrow(), None, ActiveTracers::empty());
     }
 
@@ -203,7 +204,7 @@ mod tests {
 
 
         let runtimes = Ptr::from(RuntimeCollection::from(
-            &Ptr::from(PythonRuntime::default())));
+            &Ptr::from(IntegrationRuntime::default())));
         run_file(path, &Vec::new(), runtimes.borrow(), None, ActiveTracers::empty());
     }
 
@@ -214,7 +215,7 @@ mod tests {
 
 
         let runtimes = Ptr::from(RuntimeCollection::from(
-            &Ptr::from(PythonRuntime::default())));
+            &Ptr::from(IntegrationRuntime::default())));
         run_file(path, &vec![Value::Bool(true)], runtimes.borrow(), None, ActiveTracers::Graphs);
     }
 }

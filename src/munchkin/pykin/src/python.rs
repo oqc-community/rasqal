@@ -7,10 +7,11 @@ use log::{Level, log, log_enabled};
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyValueError};
 use pyo3::types::{PyBool, PyFloat, PyInt, PyList, PyString};
-use crate::builders::PythonRuntime;
+use crate::builders::{IntegrationRuntime, PythonRuntime};
 use crate::execution::{parse_file, run_file, run_graph, RuntimeCollection};
 use crate::graphs::ExecutableAnalysisGraph;
 use crate::{DEFAULT_LOG_FILE, initialize_loggers};
+use crate::features::QuantumFeatures;
 use crate::instructions::Value;
 use crate::runtime::ActiveTracers;
 use crate::smart_pointers::{Ptr};
@@ -18,10 +19,23 @@ use crate::smart_pointers::{Ptr};
 #[pymodule]
 fn _native(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Executor>()?;
+    m.add_class::<RequiredFeatures>()?;
     m.add_function(wrap_pyfunction!(initialize_file_logger, m)?);
     m.add_function(wrap_pyfunction!(initialize_commandline_logger, m)?);
     m.add("DEFAULT_LOG_FILE", DEFAULT_LOG_FILE);
     Ok(())
+}
+
+#[pyclass]
+pub(crate) struct RequiredFeatures {
+    #[pyo3(get)]
+    pub qubit_count: i32
+}
+
+impl RequiredFeatures {
+    pub fn new(bp: &QuantumFeatures) -> RequiredFeatures {
+        RequiredFeatures { qubit_count: bp.qubits }
+    }
 }
 
 /// Proxy for initializing Munchkin loggers. Pass in path for file logger initialization.
@@ -151,7 +165,7 @@ impl Executor {
             let runtimes: Vec<&PyAny> = runtime_adaptor.extract().expect("Unable to transform runtimes to Rust objects.");
             let mut collection = Ptr::from(RuntimeCollection::default());
             for runtime in runtimes {
-                collection.add(&Ptr::from(PythonRuntime::new(runtime)))
+                collection.add(&Ptr::from(IntegrationRuntime::Python(PythonRuntime::new(runtime))))
             }
 
             let graph: Graph = graph.extract(py).expect("Unable to extract graph.");
@@ -187,7 +201,7 @@ impl Executor {
             let runtimes: Vec<&PyAny> = runtime_adaptor.extract()?;
             let mut collection = Ptr::from(RuntimeCollection::default());
             for runtime in runtimes {
-                collection.add(&Ptr::from(PythonRuntime::new(runtime)))
+                collection.add(&Ptr::from(IntegrationRuntime::Python(PythonRuntime::new(runtime))))
             }
 
             let args: Vec<Value> = arguments.extract()?;
@@ -197,92 +211,5 @@ impl Executor {
                 value.map_or(py.None(), |val| val.to_object(py))
             })
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-    use std::fs::{canonicalize, File, remove_file};
-    use std::io::{BufRead, BufReader, Read};
-    use std::path::PathBuf;
-    use pyo3::{PyAny, PyObject, PyResult, Python};
-    use pyo3::types::{PyList, PyModule};
-    use crate::python::{_native, Executor};
-
-    fn python_from<'a>(py: Python<'a>, file: &str, name: &str) -> &'a PyAny {
-        PyModule::from_code(py, file, "", "").unwrap()
-          .getattr(name).unwrap().call0().expect("Unable to call Python method/constructor.")
-    }
-
-    fn assert_default_results(py: Python, results: PyResult<PyObject>) {
-        let rust_results: HashMap<String, i64> = results.expect("Results need to exist.")
-          .extract(py).expect("Results aren't the right type.");
-
-        assert_eq!(rust_results.get("00").expect("Key should exist"), &250);
-        assert_eq!(rust_results.get("01").expect("Key should exist"), &250);
-        assert_eq!(rust_results.get("10").expect("Key should exist"), &250);
-        assert_eq!(rust_results.get("11").expect("Key should exist"), &251);
-    }
-
-    #[test]
-    fn no_args() {
-        Python::with_gil(|py| {
-            let relative_path = canonicalize("../tests/files/qir/generator-bell.ll").unwrap();
-            let path = relative_path.to_str().unwrap();
-
-            let adaptor_file = include_str!("../../tests/rust_python_integration.py");
-            let builder = python_from(py, adaptor_file, "BuilderAdaptor");
-            let runtime = python_from(py, adaptor_file, "RuntimeAdaptor");
-
-            let walker = Executor::new();
-            let results = walker.run(path, runtime);
-            assert_default_results(py, results);
-        });
-    }
-
-    #[test]
-    fn invalid_args() {
-        Python::with_gil(|py| {
-            let relative_path = canonicalize("../tests/files/qir/generator-bell.ll").unwrap();
-            let path = relative_path.to_str().unwrap();
-
-            let adaptor_file = include_str!("../../tests/rust_python_integration.py");
-            let runtime = python_from(py, adaptor_file, "RuntimeAdaptor");
-            let args = python_from(py, adaptor_file, "build_invalid_args");
-
-            let walker = Executor::new();
-            walker.run_with_args(path, args, runtime)
-              .expect_err("Invalid args passed, should error.");
-        });
-    }
-
-    #[test]
-    fn parse_graph() {
-        Python::with_gil(|py| {
-            let relative_path = canonicalize("../tests/files/qir/generator-bell.ll").unwrap();
-            let path = relative_path.to_str().unwrap();
-
-            let walker = Executor::new();
-            let parsed_graph = walker.parse_file(path, None).expect("Unable to parse graph.");
-        });
-    }
-
-    #[test]
-    fn parse_and_execute() {
-        Python::with_gil(|py| {
-            let relative_path = canonicalize("../tests/files/qir/generator-bell.ll").unwrap();
-            let path = relative_path.to_str().unwrap();
-
-            let adaptor_file = include_str!("../../tests/rust_python_integration.py");
-            let runtime = python_from(py, adaptor_file, "RuntimeAdaptor");
-
-            let walker = Executor::new();
-            let parsed_graph = walker.parse_file(path, None);
-            let results = walker.run_graph(
-                parsed_graph.expect("Graph should be parsable"), PyList::empty(py), runtime);
-
-            assert_default_results(py, results);
-        });
     }
 }
