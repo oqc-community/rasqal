@@ -65,9 +65,12 @@ class CustomBuilder(BuilderAdaptor):
     ...
 
 class CustomRuntime(RuntimeAdaptor):
+    def create_builder(self) -> BuilderAdaptor:
+        return CustomBuilder()
+    
     ...
 
-runtime = MunchkinRuntime(CustomBuilder(), CustomRuntime())
+runtime = MunchkinRuntime(CustomRuntime())
 runtime.run("path_to_qir")
 ```
 
@@ -91,7 +94,7 @@ runtime = MunchkinRuntime(...)
 runtime.trace_runtime()
 
 # Prints out all the information of a quantum projections execution and analysis.
-# (The thing which compresses and then sends the circuit to the builders)
+# (The thing which compresses and then builds the circuit and executes it via the Python objects)
 runtime.trace_projections()
 
 # Outputs the entire graph that we're going to run.

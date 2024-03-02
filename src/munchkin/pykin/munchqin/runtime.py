@@ -4,8 +4,9 @@
 from os import remove
 from os.path import dirname, exists, join
 from tempfile import NamedTemporaryFile
-from typing import Any, List, Union
+from typing import Any, List, Union, Tuple
 
+from .routing import TketRuntime
 from .utils import initialize_logger
 from .adaptors import BuilderAdaptor, RuntimeAdaptor
 from ._native import DEFAULT_LOG_FILE, Executor
@@ -29,6 +30,10 @@ class MunchkinRuntime:
 
         self.runtimes: List[RuntimeAdaptor] = runtime
         self.executor = Executor()
+
+    def apply_routing(self, couplings: List[Tuple[int, int]]):
+        """ Applies routing to all runtime adaptors currently loaded. """
+        self.runtimes = [TketRuntime(couplings, rt) for rt in self.runtimes]
 
     def trace_graphs(self) -> "MunchkinRuntime":
         """
