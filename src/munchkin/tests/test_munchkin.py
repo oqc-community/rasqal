@@ -71,6 +71,9 @@ def fetch_mock_runtime():
     runtime = RuntimeMock()
     return runtime, MunchkinRuntime(runtime)
 
+def build_architecture(num_qubits):
+    return [(i % num_qubits, (i + 1) % num_qubits) for i in range(num_qubits)]
+
 
 class TestMunchkin:
     def test_qaoa(self):
@@ -94,6 +97,19 @@ class TestMunchkin:
         results = runtime.run(qir, [True])
 
         assert results is None
+
+    def test_routed_bell_psi_plus(self):
+        mock, runtime = fetch_mock_runtime()
+        runtime.apply_routing(build_architecture(4))
+        runtime.run(get_qir_path("bell_psi_plus.ll"))
+
+        assert mock.executed == [
+            "z 3 3.141592653589793",
+            "y 3 1.5707963267948966",
+            "cx [3] 0 3.141592653589793",
+            "measure 3",
+            "measure 0",
+        ]
 
     def test_parser_bell_psi_plus(self):
         mock, runtime = fetch_mock_runtime()

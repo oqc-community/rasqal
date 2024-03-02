@@ -27,6 +27,7 @@ dependencies = [
     "qiskit-optimization==0.4.*",
     "qiskit-ignis==0.7.*",
     "qiskit-aer==0.13.*",
+    "pytket~=1.23.0"
 ]
 
 [project.urls]
