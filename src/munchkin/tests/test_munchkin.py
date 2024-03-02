@@ -66,6 +66,9 @@ class RuntimeMock(RuntimeAdaptor):
     def create_builder(self) -> BuilderAdaptor:
         return BuilderMock()
 
+    def has_features(self, required_features):
+        return True
+
 
 def fetch_mock_runtime():
     runtime = RuntimeMock()

@@ -90,3 +90,6 @@ class QASMRuntime(RuntimeAdaptor):
 
     def create_builder(self) -> BuilderAdaptor:
         return QASMBuilder(self.qubit_count)
+
+    def has_features(self, required_features):
+        return True

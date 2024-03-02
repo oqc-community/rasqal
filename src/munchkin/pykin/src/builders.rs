@@ -4,11 +4,221 @@
 use std::borrow::Borrow;
 use std::f64::consts::PI;
 use std::ops::{Deref, DerefMut};
-use pyo3::{PyAny, PyResult};
+use pyo3::{IntoPy, PyAny, PyErr, PyObject, PyResult, Python, ToPyObject};
 use crate::analysis::{AnalysisResult};
-use crate::blueprints::QuantumBlueprint;
+use crate::features::QuantumFeatures;
 use crate::hardware::{Qubit};
+use crate::python::RequiredFeatures;
 use crate::smart_pointers::{Ptr};
+
+// TODO: Use macros to reduce duplication across both integration objects.
+
+pub enum IntegrationRuntime {
+    Empty,
+    Python(PythonRuntime)
+}
+
+impl Default for IntegrationRuntime {
+    fn default() -> Self {
+        IntegrationRuntime::Empty
+    }
+}
+
+impl IntegrationRuntime {
+    pub fn is_valid(&mut self) -> bool {
+        match self {
+            IntegrationRuntime::Python(py) => py.is_valid(),
+            _ => true
+        }
+    }
+
+    pub fn execute(&self, builder: &Ptr<IntegrationBuilder>) -> AnalysisResult {
+        if let IntegrationRuntime::Python(py) = self {
+            if let IntegrationBuilder::Python(builder) = builder.deref() {
+                return py.execute(builder);
+            } else {
+                panic!("Runtime/Builder execution type mismatch.")
+            }
+        }
+
+        AnalysisResult::empty()
+    }
+
+    pub fn create_builder(&self) -> Ptr<IntegrationBuilder> {
+        match self {
+            IntegrationRuntime::Python(py) => py.create_builder(),
+            _ => Ptr::from(IntegrationBuilder::Empty)
+        }
+    }
+
+    pub fn has_features(&self, features: &QuantumFeatures) -> bool {
+        match self {
+            IntegrationRuntime::Python(py) => py.has_features(features),
+            _ => true
+        }
+    }
+}
+
+pub enum IntegrationBuilder {
+    Empty,
+    Python(PythonBuilder)
+}
+
+impl Default for IntegrationBuilder {
+    fn default() -> Self {
+        IntegrationBuilder::Empty
+    }
+}
+
+impl IntegrationBuilder {
+        /// Returns whether this runtime can be actively used.
+    pub fn is_valid(&mut self) -> bool {
+        match self {
+            IntegrationBuilder::Python(py) => py.is_valid(),
+            _ => true
+        }
+    }
+
+    pub fn measure(&self, qb: &Qubit) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.measure(qb);
+        }
+        self
+    }
+
+    pub fn had(&self, qb: &Qubit) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.had(qb);
+        }
+        self
+    }
+
+    pub fn i(&self, qb: &Qubit) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.i(qb);
+        }
+        self
+    }
+
+    pub fn x(&self, qb: &Qubit, radii: f64) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.x(qb, radii);
+        }
+        self
+    }
+
+    pub fn y(&self, qb: &Qubit, radii: f64) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.y(qb, radii);
+        }
+        self
+    }
+
+    pub fn z(&self, qb: &Qubit, radii: f64) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.z(qb, radii);
+        }
+        self
+    }
+
+    pub fn u(&self, qb: &Qubit, theta: f64, phi: f64, lambda: f64) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.u(qb, theta, phi, lambda);
+        }
+        self
+    }
+
+    pub fn swap(&self, first: &Qubit, second: &Qubit) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.swap(first, second);
+        }
+        self
+    }
+
+    pub fn sx(&self, qb: &Qubit) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.sx(qb);
+        }
+        self
+    }
+
+    pub fn sx_dgr(&self, qb: &Qubit) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.sx_dgr(qb);
+        }
+        self
+    }
+
+    pub fn s(&self, qb: &Qubit) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.s(qb);
+        }
+        self
+    }
+
+    pub fn s_dgr(&self, qb: &Qubit) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.s_dgr(qb);
+        }
+        self
+    }
+
+    pub fn t(&self, qb: &Qubit) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.t(qb);
+        }
+        self
+    }
+
+    pub fn t_dgr(&self, qb: &Qubit) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.t_dgr(qb);
+        }
+        self
+    }
+
+    pub fn cx(&self, controls: &Vec<Qubit>, target: &Qubit, radii: f64) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.cx(controls, target, radii);
+        }
+        self
+    }
+
+    pub fn cy(&self, controls: &Vec<Qubit>, target: &Qubit, radii: f64) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.cy(controls, target, radii);
+        }
+        self
+    }
+
+    pub fn cz(&self, controls: &Vec<Qubit>, target: &Qubit, radii: f64) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.cz(controls, target, radii);
+        }
+        self
+    }
+
+    pub fn cnot(&self, control: &Qubit, target: &Qubit, radii: f64) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.cnot(control, target, radii);
+        }
+        self
+    }
+
+    pub fn ccnot(&self, c1: &Qubit, c2: &Qubit, target: &Qubit, radii: f64) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.ccnot(c1, c2, target, radii);
+        }
+        self
+    }
+
+    pub fn reset(&self, qb: &Qubit) -> &Self {
+        if let IntegrationBuilder::Python(py) = self {
+            py.reset(qb);
+        }
+        self
+    }
+}
 
 macro_rules! python_methods {
     (self.$wrapped_obj:ident.$python_gate:ident()) => {
@@ -96,7 +306,7 @@ impl PyRuntimeAdaptor {
 
     python_methods!(self.runtime.execute(builder: &PyAny));
     python_methods!(self.runtime.create_builder());
-    python_methods!(self.runtime.can_run_blueprint(blueprint: &PyAny));
+    python_methods!(self.runtime.has_features(features: PyObject));
 }
 
 impl Deref for PyRuntimeAdaptor {
@@ -120,20 +330,26 @@ impl Default for PyRuntimeAdaptor {
 }
 
 pub struct PythonRuntime {
-    wrapped: PyRuntimeAdaptor
+    wrapped: PyRuntimeAdaptor,
+    is_valid: Option<bool>
 }
 
 impl PythonRuntime {
     pub fn new(backend: &PyAny) -> PythonRuntime {
-        PythonRuntime { wrapped: PyRuntimeAdaptor::new(backend) }
+        PythonRuntime { wrapped: PyRuntimeAdaptor::new(backend), is_valid: None }
     }
 
     /// Returns whether this runtime can be actively used.
-    pub fn is_usable(&self) -> bool {
-        !self.wrapped.is_adaptor_empty()
+    pub fn is_valid(&mut self) -> bool {
+        if let None = self.is_valid {
+            let mut builder = self.create_builder();
+            self.is_valid = Some(builder.is_valid() && !self.wrapped.is_adaptor_empty());
+        }
+
+        self.is_valid.unwrap()
     }
 
-    pub fn execute(&self, builder: &Ptr<PythonBuilder>) -> AnalysisResult {
+    pub fn execute(&self, builder: &PythonBuilder) -> AnalysisResult {
         let result = self.wrapped.execute(builder.wrapped.deref())
           .expect("Engine doesn't have an execute method.").expect("QPU didn't return a result.");
 
@@ -141,41 +357,53 @@ impl PythonRuntime {
             result.extract().expect("Object returned from 'execute' isn't a distribution dictionary."))
     }
 
-    pub fn create_builder(&self) -> Ptr<PythonBuilder> {
-        Ptr::from(PythonBuilder::new(self.wrapped.create_builder()
-          .expect("Runtime doesn't have a 'create_builder' method.").expect("Couldn't create a builder from runtime.")))
+    pub fn create_builder(&self) -> Ptr<IntegrationBuilder> {
+        let pybuilder = PythonBuilder::new(self.wrapped.create_builder()
+          .expect("Runtime doesn't have a 'create_builder' method.").expect("Couldn't create a builder from runtime."));
+        Ptr::from(IntegrationBuilder::Python(pybuilder))
     }
 
-    // TODO: Hook up to Python objects, make blueprint Python/Rust compatible.
-    pub fn can_run_blueprint(&self, blueprint: &QuantumBlueprint) -> bool {
-        true
+    pub fn has_features(&self, features: &QuantumFeatures) -> bool {
+        let pyfeature = Python::with_gil(|py| -> PyObject {
+            let rbp = RequiredFeatures::new(features);
+            rbp.into_py(py)
+        });
+
+        self.wrapped.has_features(pyfeature)
+          .expect("Runtime doesn't have a 'has_features' method.")
+          .map_or(false, |obj| obj.extract().expect("Unable to extract type."))
     }
 }
 
 impl Default for PythonRuntime {
     fn default() -> Self {
-        PythonRuntime { wrapped: PyRuntimeAdaptor::default() }
+        PythonRuntime { wrapped: PyRuntimeAdaptor::default(), is_valid: None }
     }
 }
 
 pub(crate) struct PythonBuilder {
-    wrapped: PyBuilderAdaptor
+    wrapped: PyBuilderAdaptor,
+    is_valid: Option<bool>
 }
 
 impl Default for PythonBuilder {
     fn default() -> Self {
-        PythonBuilder { wrapped: PyBuilderAdaptor::default() }
+        PythonBuilder { wrapped: PyBuilderAdaptor::default(), is_valid: None }
     }
 }
 
 impl PythonBuilder {
     pub fn new(builder: &PyAny) -> PythonBuilder {
-        PythonBuilder { wrapped: PyBuilderAdaptor::new(builder) }
+        PythonBuilder { wrapped: PyBuilderAdaptor::new(builder), is_valid: None }
     }
 
     /// Returns whether this builder can be actively used.
-    pub fn is_usable(&self) -> bool {
-        !self.wrapped.is_adaptor_empty()
+    pub fn is_valid(&mut self) -> bool {
+        if let None = self.is_valid {
+            self.is_valid = Some(!self.wrapped.is_adaptor_empty());
+        }
+
+        self.is_valid.unwrap()
     }
 }
 

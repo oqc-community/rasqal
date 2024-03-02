@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
+import abc
 from typing import Dict
 
 
-class BuilderAdaptor:
+class BuilderAdaptor(abc.ABC):
     """
     Python APIs which Munchkins internal features demand exist.
 
@@ -42,7 +43,7 @@ class BuilderAdaptor:
         ...
 
 
-class RuntimeAdaptor:
+class RuntimeAdaptor(abc.ABC):
     """
     Python API which Munchkin expects to be in place and holds central calls for extracting feature
     capabilities and running built-up builders.
@@ -62,4 +63,7 @@ class RuntimeAdaptor:
 
     def create_builder(self) -> BuilderAdaptor:
         """ Creates a builder to be used with this runtime. """
+        ...
+
+    def has_features(self, required_features):
         ...
