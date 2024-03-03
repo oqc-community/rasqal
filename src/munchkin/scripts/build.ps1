@@ -20,8 +20,14 @@ param(
     [Parameter(Position = 4, Mandatory = 0)]
     [System.Collections.Hashtable]$properties = @{},
     [Parameter(Position = 5, Mandatory = $false)]
-    [switch]$detailedDocs = $false
+    [switch]$detailedDocs = $false,
+    [Parameter(Position = 5, Mandatory = $false)]
+    [switch]$buildFromSource = $false
 )
+
+if ($buildFromSource -eq $false) {
+    $env:MK_DOWNLOAD_LLVM = $true
+}
 
 # PS 7.3 introduced exec alias which breaks the build.
 Remove-Item alias:exec -ErrorAction SilentlyContinue
