@@ -65,8 +65,12 @@ class RuntimeAdaptor:
         """ Creates a builder to be used with this runtime. """
         return BuilderAdaptor()
 
-    def has_features(self, required_features):
+    def has_features(self, required_features: "RequiredFeatures"):
         """
         Checks whether this QPU has the required features to execute the builder.
         """
         return True
+
+
+class RequiredFeatures:
+    qubit_count: int
