@@ -853,7 +853,7 @@ impl QuantumProjection {
   /// available QPU.
   pub fn concretize(&mut self) -> &AnalysisResult {
     if self.cached_result.is_some() {
-      return self.cached_result.as_ref().unwrap().borrow();
+      return self.cached_result.as_ref().unwrap();
     }
 
     let query_result = if self.can_predict() {
@@ -935,7 +935,7 @@ impl QuantumProjection {
       }
     }
 
-    self.cached_result.as_ref().unwrap().borrow()
+    self.cached_result.as_ref().unwrap()
   }
 }
 

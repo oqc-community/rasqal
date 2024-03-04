@@ -880,7 +880,7 @@ impl ops::Sub for Value {
 
 impl ops::Sub for &Value {
   type Output = Value;
-  fn sub(self, rhs: Self) -> Self::Output { value_subtract(self.borrow(), rhs.borrow()) }
+  fn sub(self, rhs: Self) -> Self::Output { value_subtract(self, rhs) }
 }
 
 impl ops::Sub for &mut Value {
@@ -972,7 +972,7 @@ impl ops::Add for Value {
 
 impl ops::Add for &Value {
   type Output = Value;
-  fn add(self, rhs: Self) -> Self::Output { value_add(self.borrow(), rhs.borrow()) }
+  fn add(self, rhs: Self) -> Self::Output { value_add(self, rhs) }
 }
 
 impl ops::Add for &mut Value {
@@ -1002,7 +1002,7 @@ impl ops::Div for Value {
 
 impl ops::Div for &Value {
   type Output = Value;
-  fn div(self, rhs: Self) -> Self::Output { value_divide(self.borrow(), rhs.borrow()) }
+  fn div(self, rhs: Self) -> Self::Output { value_divide(self, rhs) }
 }
 
 impl ops::Div for &mut Value {
@@ -1032,7 +1032,7 @@ impl ops::Mul for Value {
 
 impl ops::Mul for &Value {
   type Output = Value;
-  fn mul(self, rhs: Self) -> Self::Output { value_multiply(self.borrow(), rhs.borrow()) }
+  fn mul(self, rhs: Self) -> Self::Output { value_multiply(self, rhs) }
 }
 
 impl ops::Mul for &mut Value {

@@ -8,7 +8,7 @@ use crate::evaluator::QIREvaluator;
 use crate::features::QuantumFeatures;
 use crate::graphs::ExecutableAnalysisGraph;
 use crate::instructions::Value;
-use crate::runtime::{ActiveTracers, QuantumRuntime, TracingModule};
+use crate::runtime::{ActiveTracers, QuantumRuntime};
 use crate::smart_pointers::Ptr;
 use crate::with_mutable;
 use inkwell::attributes::AttributeLoc;
@@ -21,7 +21,7 @@ use inkwell::{
   targets::{InitializationConfig, Target},
   OptimizationLevel
 };
-use std::borrow::Borrow;
+
 use std::{ffi::OsStr, path::Path};
 
 /// Executes the file.
@@ -77,7 +77,7 @@ pub fn build_graph_from_module(
 
   let evaluator = QIREvaluator::new();
   evaluator.evaluate(
-    &choose_entry_point(module_functions(module.borrow()), entry_point)?,
+    &choose_entry_point(module_functions(module), entry_point)?,
     &Ptr::from(module)
   )
 }
@@ -88,7 +88,7 @@ pub fn run_graph(
   tracer: ActiveTracers
 ) -> Result<Option<Ptr<Value>>, String> {
   let mut runtime = QuantumRuntime::new(runtimes, tracer);
-  runtime.execute(graph.borrow(), arguments)
+  runtime.execute(graph, arguments)
 }
 
 /// Top-level collection item that holds information about target runtimes and engines for graphs.

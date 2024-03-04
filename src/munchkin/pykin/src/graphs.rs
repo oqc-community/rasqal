@@ -263,7 +263,7 @@ impl AnalysisGraph {
   ) -> Ptr<Node> {
     let new_node = Ptr::from(Node::new(inst));
     self.add_node_with_edge(new_node.borrow(), false);
-    self.add_edge(target.borrow(), new_node.borrow(), assignments, conditions);
+    self.add_edge(target, new_node.borrow(), assignments, conditions);
     new_node
   }
 
@@ -297,7 +297,7 @@ impl AnalysisGraph {
 
     if Ptr::is_not_null(&self.auto_attach_target) && add_attached_edge {
       let val = self.auto_attach_target.clone();
-      self.add_edge(val.borrow(), node.borrow(), None, None);
+      self.add_edge(val.borrow(), node, None, None);
     }
 
     self.auto_attach_target = node.clone();

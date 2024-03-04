@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
-use std::borrow::Borrow;
+
 use std::cell::Cell;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -174,7 +174,7 @@ impl<T> FlexiPtr<T> {
   pub fn expand_into(&self, val: &FlexiPtr<T>) {
     match self {
       FlexiPtr::RefCounted(ref_) => {
-        match val.borrow() {
+        match val {
           FlexiPtr::RefCounted(other_ref) => {
             unsafe {
               // We don't want to merge the same pointers into each other.
@@ -339,7 +339,7 @@ impl<T: Hash> Hash for FlexiPtr<T> {
 impl<T: ?Sized> Clone for FlexiPtr<T> {
   /// Clones the outer object, leaving the inner object pointing at the same thing.
   fn clone(&self) -> Self {
-    match self.borrow() {
+    match self {
       FlexiPtr::RefCounted(val) => unsafe {
         (**val).inc();
         FlexiPtr::RefCounted(val.clone())
@@ -378,7 +378,7 @@ mod tests {
   use std::assert_eq;
   use std::borrow::Borrow;
   use std::fmt::{Display, Formatter};
-  use std::ops::Add;
+  
 
   struct Recursive {
     nested_flexi: FlexiPtr<Recursive>,
@@ -423,7 +423,7 @@ mod tests {
 
   #[test]
   fn replace_test() {
-    let mut starter = FlexiPtr::from(5);
+    let starter = FlexiPtr::from(5);
     let second = starter.clone();
     let third = second.clone();
     assert_eq!(third.ref_count().expect("Exists."), 3);
@@ -439,7 +439,7 @@ mod tests {
 
   #[test]
   fn recursive_replace() {
-    let mut starter = FlexiPtr::from(Recursive {
+    let starter = FlexiPtr::from(Recursive {
       nested_flexi: Default::default(),
       value: "Dave".to_string()
     });

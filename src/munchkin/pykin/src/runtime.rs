@@ -111,7 +111,7 @@ fn get_next_node(current_node: &mut Ptr<Node>, context: &Ptr<RuntimeContext>) ->
   let mut outgoing_ifs = current_node.outgoing_conditional_nodes();
   let mut conditional_path = outgoing_ifs
     .iter_mut()
-    .filter(|val| check_condition(val.0.conditions.as_ref().unwrap().borrow(), context))
+    .filter(|val| check_condition(val.0.conditions.as_ref().unwrap(), context))
     .collect::<Vec<_>>();
   let next_target = match conditional_path.first_mut() {
     None => current_node.next_node().expect("Has to have some value."),
@@ -183,7 +183,7 @@ fn follow_reference(qx: &Ptr<Value>, context: &Ptr<RuntimeContext>) -> Ptr<Value
         .as_ref()
         .map_or(value.clone(), |indexer| match value.deref_mut() {
           Value::Array(array) => {
-            let index = follow_reference(indexer.borrow(), context).as_int() as usize;
+            let index = follow_reference(indexer, context).as_int() as usize;
             let length = array.len();
             if index > length {
               array.reserve(index - length + 1);
@@ -391,8 +391,8 @@ impl QuantumRuntime {
     // Loop through active graphs in this execution and perform pre-execution analysis.
     // TODO: Should do this outside the executor, probably.
     for subgraph in context.method_graphs.values() {
-      order_nodes(subgraph.borrow());
-      scope_variables(subgraph.borrow(), &context);
+      order_nodes(subgraph);
+      scope_variables(subgraph, &context);
     }
 
     if self.trace_module.has(ActiveTracers::Graphs) {
@@ -541,7 +541,7 @@ impl QuantumRuntime {
       let instruction = &current_node.instruction;
       match instruction.deref() {
         Instruction::Return(results) => {
-          return Ok(Some(follow_reference(results.borrow(), context)));
+          return Ok(Some(follow_reference(results, context)));
         }
         Instruction::Label(_) => {}
         Instruction::Throw(message) => {

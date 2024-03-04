@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
-use pyo3::prelude::*;
+
 use std::fmt::{Display, Formatter};
 
 /// A feature collection which a QPU needs to have in order to run a particular projection.
