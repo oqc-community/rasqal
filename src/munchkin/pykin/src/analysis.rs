@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
-use crate::builders::InstructionBuilder;
 use crate::execution::RuntimeCollection;
 use crate::features::QuantumFeatures;
 use crate::hardware::Qubit;

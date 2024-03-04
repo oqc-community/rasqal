@@ -9,7 +9,6 @@ use crate::instructions::Value;
 use crate::runtime::ActiveTracers;
 use crate::smart_pointers::Ptr;
 use crate::{initialize_loggers, DEFAULT_LOG_FILE};
-use bitflags::Flags;
 use log::{log, log_enabled, Level};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

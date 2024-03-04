@@ -359,7 +359,7 @@ impl QIREvaluator {
 
       while starting_operand < op_num {
         let next_throwaway = context.next_throwaway();
-        let op_value = unsafe { LLVMGetOperand(expr, starting_operand as c_uint) };
+        let op_value = LLVMGetOperand(expr, starting_operand as c_uint);
         let actual_index: i64 = LLVMConstIntGetSExtValue(op_value);
         graph.Assign(
           next_throwaway.clone(),

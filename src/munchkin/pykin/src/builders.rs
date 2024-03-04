@@ -396,7 +396,7 @@ impl Default for PythonRuntime {
   }
 }
 
-pub(crate) struct PythonBuilder {
+pub struct PythonBuilder {
   wrapped: PyBuilderAdaptor,
   is_valid: Option<bool>
 }
