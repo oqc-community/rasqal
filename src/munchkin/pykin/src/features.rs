@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
+
 use std::fmt::{Display, Formatter};
-use pyo3::prelude::*;
 
 /// A feature collection which a QPU needs to have in order to run a particular projection.
 pub struct QuantumFeatures {
@@ -10,15 +10,11 @@ pub struct QuantumFeatures {
 }
 
 impl QuantumFeatures {
-  pub fn new(qubits: i32) -> QuantumFeatures {
-    QuantumFeatures { qubits }
-  }
+  pub fn new(qubits: i32) -> QuantumFeatures { QuantumFeatures { qubits } }
 }
 
 impl Default for QuantumFeatures {
-  fn default() -> Self {
-    QuantumFeatures { qubits: -1 }
-  }
+  fn default() -> Self { QuantumFeatures { qubits: -1 } }
 }
 
 impl Display for QuantumFeatures {
@@ -27,5 +23,4 @@ impl Display for QuantumFeatures {
   }
 }
 
-pub struct ClassicFeatures {
-}
+pub struct ClassicFeatures {}

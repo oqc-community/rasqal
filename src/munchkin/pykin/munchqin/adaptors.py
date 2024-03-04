@@ -5,7 +5,7 @@ import abc
 from typing import Dict
 
 
-class BuilderAdaptor(abc.ABC):
+class BuilderAdaptor:
     """
     Python APIs which Munchkins internal features demand exist.
 
@@ -43,7 +43,7 @@ class BuilderAdaptor(abc.ABC):
         ...
 
 
-class RuntimeAdaptor(abc.ABC):
+class RuntimeAdaptor:
     """
     Python API which Munchkin expects to be in place and holds central calls for extracting feature
     capabilities and running built-up builders.
@@ -59,11 +59,14 @@ class RuntimeAdaptor(abc.ABC):
 
         The builder can be expected to be the same as returned from the associated `create_builder` function.
         """
-        ...
+        return dict()
 
     def create_builder(self) -> BuilderAdaptor:
         """ Creates a builder to be used with this runtime. """
-        ...
+        return BuilderAdaptor()
 
     def has_features(self, required_features):
-        ...
+        """
+        Checks whether this QPU has the required features to execute the builder.
+        """
+        return True

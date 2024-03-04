@@ -1,0 +1,9 @@
+unstable_features = true
+fn_params_layout = "Compressed"
+fn_single_line = true
+format_generated_files = false
+trailing_comma = "Never"
+tab_spaces = 2
+overflow_delimited_expr = true
+use_field_init_shorthand = true
+#reorder_impl_items = false

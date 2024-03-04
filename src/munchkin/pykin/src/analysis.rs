@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
+use crate::builders::InstructionBuilder;
+use crate::execution::RuntimeCollection;
+use crate::features::QuantumFeatures;
+use crate::hardware::Qubit;
+use crate::runtime::{ActiveTracers, TracingModule};
+use crate::smart_pointers::Ptr;
+use crate::{with_mutable, with_mutable_self};
+use log::{log, Level};
+use num::traits::FloatConst;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::iter::zip;
-use std::ops::{Deref};
-use log::{Level, log};
-use num::traits::FloatConst;
-use crate::builders::{InstructionBuilder};
-use crate::execution::RuntimeCollection;
-use crate::hardware::Qubit;
-use crate::runtime::{ActiveTracers, TracingModule};
-use crate::smart_pointers::{Ptr};
-use crate::{with_mutable, with_mutable_self};
-use crate::features::QuantumFeatures;
+use std::ops::Deref;
 
 #[derive(Clone)]
 pub struct StateHistory {
@@ -33,7 +33,9 @@ macro_rules! cluster_or_state {
         let counter = &with_mutable_self!($self.metadata.next_counter());
         let mut next_state = qstate.clone_with_counter(counter);
         next_state.$axis($arg);
-        with_mutable_self!($self.timeline.insert(counter.clone(), StateElement::Single(next_state)));
+        with_mutable_self!($self
+          .timeline
+          .insert(counter.clone(), StateElement::Single(next_state)));
       }
       StateElement::Cluster(qcluster) => {
         qcluster.$axis($arg, &$self.index);
@@ -46,7 +48,9 @@ macro_rules! cluster_or_state {
         let counter = &with_mutable_self!($self.metadata.next_counter());
         let mut next_state = qstate.clone_with_counter(counter);
         next_state.$method();
-        with_mutable_self!($self.timeline.insert(counter.clone(), StateElement::Single(next_state)));
+        with_mutable_self!($self
+          .timeline
+          .insert(counter.clone(), StateElement::Single(next_state)));
       }
       StateElement::Cluster(qcluster) => {
         qcluster.$method(&$self.index);
@@ -57,7 +61,11 @@ macro_rules! cluster_or_state {
 
 impl StateHistory {
   pub fn new(meta: &Ptr<Metadata>, index: &i64) -> StateHistory {
-    StateHistory { timeline: Ptr::from(HashMap::new()), metadata: meta.clone(), index: index.clone() }
+    StateHistory {
+      timeline: Ptr::from(HashMap::new()),
+      metadata: meta.clone(),
+      index: index.clone()
+    }
   }
 
   /// Direct manipulation to the timeline. Means all existing rotational history will be lost.
@@ -86,13 +94,22 @@ impl StateHistory {
 
     // We measure first to collapse any state then just reset our timeline to 0.
     let counter = with_mutable_self!(self.metadata.next_counter());
-    self.add(counter.clone(), StateElement::Single(SingleState::new(&counter, SpherePoint::new(), &self.index)));
+    self.add(
+      counter.clone(),
+      StateElement::Single(SingleState::new(&counter, SpherePoint::new(), &self.index))
+    );
   }
 
   fn controlled_rotation(&self, sphere: SpherePoint, conditioned_on: &Vec<i64>, result: i8) {
     let current_counter = with_mutable_self!(self.metadata.next_counter());
     let cluster = self.form_cluster(current_counter.borrow(), conditioned_on);
-    with_mutable!(cluster.entangle(ClusterRelationship::new(sphere, current_counter, self.index, conditioned_on, result)));
+    with_mutable!(cluster.entangle(ClusterRelationship::new(
+      sphere,
+      current_counter,
+      self.index,
+      conditioned_on,
+      result
+    )));
   }
 
   pub fn CX(&self, radii: i64, conditioned_on: &Vec<i64>, result: i8) {
@@ -115,19 +132,29 @@ impl StateHistory {
 
   /// Adds a cluster to this state, forming an entangled cluster.
   fn add_cluster(&self, counter: &i64, cluster: &Ptr<ClusterState>) {
-    with_mutable_self!(self.timeline.insert(counter.clone(), StateElement::Cluster(cluster.clone())));
+    with_mutable_self!(self
+      .timeline
+      .insert(counter.clone(), StateElement::Cluster(cluster.clone())));
   }
 
   /// Forms a cluster group with the states at the passed-in index.
   fn form_cluster(&self, counter: &i64, targets: &Vec<i64>) -> Ptr<ClusterState> {
     if let StateElement::Cluster(cluster) = self.state_of() {
-      if cluster.spans() == targets.iter().map(|val| val.clone()).collect::<HashSet<_>>() {
+      if cluster.spans()
+        == targets
+          .iter()
+          .map(|val| val.clone())
+          .collect::<HashSet<_>>()
+      {
         return cluster.clone();
       }
     }
 
     // If any of our targets are already clusters then we expand over those clusters as well.
-    let mut target_indexes = targets.iter().map(|val| val.clone()).collect::<HashSet<_>>();
+    let mut target_indexes = targets
+      .iter()
+      .map(|val| val.clone())
+      .collect::<HashSet<_>>();
     for target in targets {
       let state = with_mutable_self!(self.metadata.root.get_history(target));
       if let StateElement::Cluster(cluster) = state.state_of() {
@@ -179,10 +206,13 @@ pub struct SingleState {
 }
 
 impl SingleState {
-  pub fn new(counter: &i64,
-             state: SpherePoint,
-             index: &i64) -> SingleState {
-    SingleState {counter: counter.clone(), state, collapsed: false, index: index.clone()}
+  pub fn new(counter: &i64, state: SpherePoint, index: &i64) -> SingleState {
+    SingleState {
+      counter: counter.clone(),
+      state,
+      collapsed: false,
+      index: index.clone()
+    }
   }
 
   /// States are commonly cloned with a different counter to perform further rotations on.
@@ -190,22 +220,14 @@ impl SingleState {
     SingleState::new(counter, self.state.clone(), &self.index)
   }
 
-  pub fn X(&mut self, radii: i64) {
-    self.state.X(radii)
-  }
+  pub fn X(&mut self, radii: i64) { self.state.X(radii) }
 
-  pub fn Y(&mut self, radii: i64) {
-    self.state.Y(radii)
-  }
+  pub fn Y(&mut self, radii: i64) { self.state.Y(radii) }
 
-  pub fn Z(&mut self, radii: i64) {
-    self.state.Z(radii)
-  }
+  pub fn Z(&mut self, radii: i64) { self.state.Z(radii) }
 
   /// Sets that this is a measure point with no modifications.
-  pub fn measure(&mut self) {
-    self.collapsed = true;
-  }
+  pub fn measure(&mut self) { self.collapsed = true; }
 }
 
 #[derive(Clone)]
@@ -235,27 +257,26 @@ impl ClusterState {
 
     let graph = &cstate.state_graph;
     let entry = with_mutable!(graph.remove(target).unwrap());
-    with_mutable_self!(self.collapse_history.insert(self.metadata.counter.clone(), (target.clone(), entry)));
+    with_mutable_self!(self
+      .collapse_history
+      .insert(self.metadata.counter.clone(), (target.clone(), entry)));
   }
 
-  pub fn X(&self, radii: i64, index: &i64) {
-    self.clustered_state.X(radii, index);
-  }
+  pub fn X(&self, radii: i64, index: &i64) { self.clustered_state.X(radii, index); }
 
-  pub fn Y(&self, radii: i64, index: &i64) {
-    self.clustered_state.Y(radii, index);
-  }
+  pub fn Y(&self, radii: i64, index: &i64) { self.clustered_state.Y(radii, index); }
 
-  pub fn Z(&self, radii: i64, index: &i64) {
-    self.clustered_state.Z(radii, index);
-  }
+  pub fn Z(&self, radii: i64, index: &i64) { self.clustered_state.Z(radii, index); }
 
-  pub fn entangle(&mut self, rel: ClusterRelationship) {
-    self.entanglement.push(rel);
-  }
+  pub fn entangle(&mut self, rel: ClusterRelationship) { self.entanglement.push(rel); }
 
   pub fn spans(&self) -> HashSet<i64> {
-    self.clustered_state.state_graph.keys().map(|val| val.clone()).collect::<HashSet<_>>()
+    self
+      .clustered_state
+      .state_graph
+      .keys()
+      .map(|val| val.clone())
+      .collect::<HashSet<_>>()
   }
 }
 
@@ -263,12 +284,15 @@ impl ClusterState {
 #[derive(Clone)]
 pub struct SpherePoint {
   amplitude: i64,
-  phase: i64,
+  phase: i64
 }
 
 impl SpherePoint {
   pub fn new() -> SpherePoint {
-    SpherePoint { amplitude: 0, phase: 0  }
+    SpherePoint {
+      amplitude: 0,
+      phase: 0
+    }
   }
 
   pub fn with_X(radii: i64) -> SpherePoint {
@@ -289,13 +313,9 @@ impl SpherePoint {
     sp
   }
 
-  pub fn X(&mut self, radii: i64) {
-    self.amplitude = (self.amplitude + radii) % 360
-  }
+  pub fn X(&mut self, radii: i64) { self.amplitude = (self.amplitude + radii) % 360 }
 
-  pub fn Y(&mut self, radii: i64) {
-    self.phase = (self.phase + radii) % 360
-  }
+  pub fn Y(&mut self, radii: i64) { self.phase = (self.phase + radii) % 360 }
 
   // TODO: wrong, fix later.
   pub fn Z(&mut self, radii: i64) {
@@ -329,9 +349,7 @@ impl SpherePoint {
 }
 
 impl Default for SpherePoint {
-  fn default() -> Self {
-    SpherePoint::new()
-  }
+  fn default() -> Self { SpherePoint::new() }
 }
 
 #[derive(Clone)]
@@ -344,8 +362,16 @@ pub struct ClusterRelationship {
 }
 
 impl ClusterRelationship {
-  pub fn new(rotation: SpherePoint, at_counter: i64, target: i64, conditioned_on: &Vec<i64>, on_value: i8) -> ClusterRelationship {
-    ClusterRelationship { rotation, at_counter, target, conditioned_on: conditioned_on.clone(), on_value }
+  pub fn new(
+    rotation: SpherePoint, at_counter: i64, target: i64, conditioned_on: &Vec<i64>, on_value: i8
+  ) -> ClusterRelationship {
+    ClusterRelationship {
+      rotation,
+      at_counter,
+      target,
+      conditioned_on: conditioned_on.clone(),
+      on_value
+    }
   }
 }
 
@@ -360,7 +386,10 @@ pub struct QuantumState {
 
 impl QuantumState {
   pub fn new(meta: &Ptr<Metadata>) -> QuantumState {
-    let collection = QuantumState { state_graph: Ptr::from(HashMap::default()), metadata: meta.clone() };
+    let collection = QuantumState {
+      state_graph: Ptr::from(HashMap::default()),
+      metadata: meta.clone()
+    };
 
     // If we're the root collection in the hierarchy just mark us as such.
     if Ptr::is_null(&meta.root) {
@@ -419,7 +448,10 @@ impl QuantumState {
     let op_counter = with_mutable_self!(self.metadata.next_counter());
     match left_state {
       StateElement::Single(single) => {
-        right_history.add(op_counter.clone(), StateElement::Single(single.clone_with_counter(&op_counter)));
+        right_history.add(
+          op_counter.clone(),
+          StateElement::Single(single.clone_with_counter(&op_counter))
+        );
       }
       StateElement::Cluster(cluster) => {
         right_history.add(op_counter.clone(), StateElement::Cluster(cluster.clone()));
@@ -428,7 +460,10 @@ impl QuantumState {
 
     match right_state {
       StateElement::Single(single) => {
-        left_history.add(op_counter.clone(), StateElement::Single(single.clone_with_counter(&op_counter)));
+        left_history.add(
+          op_counter.clone(),
+          StateElement::Single(single.clone_with_counter(&op_counter))
+        );
       }
       StateElement::Cluster(cluster) => {
         left_history.add(op_counter.clone(), StateElement::Cluster(cluster.clone()));
@@ -457,20 +492,21 @@ pub struct Metadata {
 
 impl Metadata {
   pub fn new() -> Metadata {
-    Metadata { counter: 0, root: Ptr::default() }
+    Metadata {
+      counter: 0,
+      root: Ptr::default()
+    }
   }
 
   pub fn next_counter(&mut self) -> i64 {
     self.counter = self.counter + 1;
-    return self.counter
+    return self.counter;
   }
 }
 
 /// Transform radians into degrees for easy debugging for now.
 /// TODO: Likely change form later.
-fn conv(radians: &f64) -> i64 {
-  (radians * 180.0/f64::PI()) as i64
-}
+fn conv(radians: &f64) -> i64 { (radians * 180.0 / f64::PI()) as i64 }
 
 pub struct QuantumStatePredictor {
   state: QuantumState
@@ -478,7 +514,9 @@ pub struct QuantumStatePredictor {
 
 impl QuantumStatePredictor {
   pub fn new() -> QuantumStatePredictor {
-    QuantumStatePredictor { state: QuantumState::new(&Ptr::from(Metadata::new())) }
+    QuantumStatePredictor {
+      state: QuantumState::new(&Ptr::from(Metadata::new()))
+    }
   }
 
   pub fn add(&self, op: Ptr<QuantumOperations>) {
@@ -502,28 +540,39 @@ impl QuantumStatePredictor {
       QuantumOperations::Z(qb, radians) => {
         self.state.Z(qb.index, &conv(radians));
       }
-      QuantumOperations::CX(controls, targets, radians) => {
-        self.state.CX(
-          180, &targets.index,
-          &controls.iter().map(|val| val.index.clone()).collect::<Vec<_>>(), 1)
-      }
-      QuantumOperations::CZ(controls, targets, radians) => {
-        self.state.CZ(
-          180, &targets.index,
-          &controls.iter().map(|val| val.index.clone()).collect::<Vec<_>>(), 1)
-      }
-      QuantumOperations::CY(controls, targets, radians) => {
-        self.state.CY(
-          180, &targets.index,
-          &controls.iter().map(|val| val.index.clone()).collect::<Vec<_>>(), 1)
-      }
+      QuantumOperations::CX(controls, targets, radians) => self.state.CX(
+        180,
+        &targets.index,
+        &controls
+          .iter()
+          .map(|val| val.index.clone())
+          .collect::<Vec<_>>(),
+        1
+      ),
+      QuantumOperations::CZ(controls, targets, radians) => self.state.CZ(
+        180,
+        &targets.index,
+        &controls
+          .iter()
+          .map(|val| val.index.clone())
+          .collect::<Vec<_>>(),
+        1
+      ),
+      QuantumOperations::CY(controls, targets, radians) => self.state.CY(
+        180,
+        &targets.index,
+        &controls
+          .iter()
+          .map(|val| val.index.clone())
+          .collect::<Vec<_>>(),
+        1
+      ),
       QuantumOperations::Measure(qbs) => {
         for qb in qbs {
           self.state.measure(&qb.index);
         }
-      },
-      QuantumOperations::Initialize() |
-      QuantumOperations::I(_) => {},
+      }
+      QuantumOperations::Initialize() | QuantumOperations::I(_) => {}
     }
   }
 }
@@ -535,7 +584,7 @@ pub struct QuantumProjection {
   engines: Ptr<RuntimeCollection>,
   instructions: Vec<Ptr<QuantumOperations>>,
   cached_result: Option<AnalysisResult>,
-  cached_filtered: HashMap<String, AnalysisResult>,
+  cached_filtered: HashMap<String, AnalysisResult>
 }
 
 /// A for-now list of linear gates and hardware operations that we can store and send to our
@@ -562,14 +611,14 @@ impl QuantumOperations {
     match self {
       QuantumOperations::Initialize() => vec![],
       QuantumOperations::Reset(qbs) => qbs.iter().collect(),
-      QuantumOperations::I(qb) |
-      QuantumOperations::U(qb, _, _, _) |
-      QuantumOperations::X(qb, _) |
-      QuantumOperations::Y(qb, _) |
-      QuantumOperations::Z(qb, _) |
-      QuantumOperations::CX(_, qb, _) |
-      QuantumOperations::CZ(_, qb, _) |
-      QuantumOperations::CY(_, qb, _) => vec![qb],
+      QuantumOperations::I(qb)
+      | QuantumOperations::U(qb, _, _, _)
+      | QuantumOperations::X(qb, _)
+      | QuantumOperations::Y(qb, _)
+      | QuantumOperations::Z(qb, _)
+      | QuantumOperations::CX(_, qb, _)
+      | QuantumOperations::CZ(_, qb, _)
+      | QuantumOperations::CY(_, qb, _) => vec![qb],
       QuantumOperations::Measure(qbs) => qbs.iter().collect()
     }
   }
@@ -577,23 +626,63 @@ impl QuantumOperations {
 
 impl Display for QuantumOperations {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_str(match self {
-      QuantumOperations::Initialize() => "init".to_string(),
-      QuantumOperations::Reset(qb) => format!("Reset {}", qb.iter().map(|val| val.to_string()).collect::<Vec<_>>().join(", ")),
-      QuantumOperations::I(qb) => format!("id[{}]", qb),
-      QuantumOperations::U(qb, theta, phi, lambda) => format!("U[{}] {},{},{}", qb, theta, phi, lambda),
-      QuantumOperations::X(qb, theta) => format!("X[{}] {}", qb, theta),
-      QuantumOperations::Y(qb, theta) => format!("Y[{}] {}", qb, theta),
-      QuantumOperations::Z(qb, theta) => format!("Z[{}] {}", qb, theta),
-      QuantumOperations::CX(controlled, target, theta) =>
-        format!("CX[{}->{}] {}", controlled.iter().map(|val| val.to_string()).collect::<Vec<_>>().join(","), target, theta),
-      QuantumOperations::CZ(controlled, target, theta) =>
-        format!("CZ[{}->{}] {}", controlled.iter().map(|val| val.to_string()).collect::<Vec<_>>().join(","), target, theta),
-      QuantumOperations::CY(controlled, target, theta) =>
-        format!("CY[{}->{}] {}", controlled.iter().map(|val| val.to_string()).collect::<Vec<_>>().join(","), target, theta),
-      QuantumOperations::Measure(qb) =>
-        format!("Measure {}", qb.iter().map(|val| val.to_string()).collect::<Vec<_>>().join(","))
-    }.as_str())
+    f.write_str(
+      match self {
+        QuantumOperations::Initialize() => "init".to_string(),
+        QuantumOperations::Reset(qb) => format!(
+          "Reset {}",
+          qb.iter()
+            .map(|val| val.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+        ),
+        QuantumOperations::I(qb) => format!("id[{}]", qb),
+        QuantumOperations::U(qb, theta, phi, lambda) => {
+          format!("U[{}] {},{},{}", qb, theta, phi, lambda)
+        }
+        QuantumOperations::X(qb, theta) => format!("X[{}] {}", qb, theta),
+        QuantumOperations::Y(qb, theta) => format!("Y[{}] {}", qb, theta),
+        QuantumOperations::Z(qb, theta) => format!("Z[{}] {}", qb, theta),
+        QuantumOperations::CX(controlled, target, theta) => format!(
+          "CX[{}->{}] {}",
+          controlled
+            .iter()
+            .map(|val| val.to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+          target,
+          theta
+        ),
+        QuantumOperations::CZ(controlled, target, theta) => format!(
+          "CZ[{}->{}] {}",
+          controlled
+            .iter()
+            .map(|val| val.to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+          target,
+          theta
+        ),
+        QuantumOperations::CY(controlled, target, theta) => format!(
+          "CY[{}->{}] {}",
+          controlled
+            .iter()
+            .map(|val| val.to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+          target,
+          theta
+        ),
+        QuantumOperations::Measure(qb) => format!(
+          "Measure {}",
+          qb.iter()
+            .map(|val| val.to_string())
+            .collect::<Vec<_>>()
+            .join(",")
+        )
+      }
+      .as_str()
+    )
   }
 }
 
@@ -613,7 +702,9 @@ impl QuantumProjection {
     }
   }
 
-  pub fn with_tracer(engines: &Ptr<RuntimeCollection>, module: &Ptr<TracingModule>) -> QuantumProjection {
+  pub fn with_tracer(
+    engines: &Ptr<RuntimeCollection>, module: &Ptr<TracingModule>
+  ) -> QuantumProjection {
     QuantumProjection {
       engines: engines.clone(),
       instructions: Vec::new(),
@@ -624,9 +715,7 @@ impl QuantumProjection {
   }
 
   /// Quick helper module as right now there's no sub-definition for projections.
-  fn is_tracing(&self) -> bool {
-    self.trace_module.has(ActiveTracers::Projections)
-  }
+  fn is_tracing(&self) -> bool { self.trace_module.has(ActiveTracers::Projections) }
 
   /// Adds this operation to the projection.
   pub fn add(&mut self, inst: &Ptr<QuantumOperations>) {
@@ -652,8 +741,16 @@ impl QuantumProjection {
     let index_set: Option<HashSet<&i64>> = qbs.map(|val| HashSet::from_iter(val));
     for (ours, theirs) in zip(&self.instructions, &other.instructions) {
       if let Some(qubits) = index_set.as_ref() {
-        let ours_match = ours.associated_qubits().iter().map(|val| val.index).any(|val| qubits.contains(&val));
-        let theirs_match = theirs.associated_qubits().iter().map(|val| val.index).any(|val| qubits.contains(&val));
+        let ours_match = ours
+          .associated_qubits()
+          .iter()
+          .map(|val| val.index)
+          .any(|val| qubits.contains(&val));
+        let theirs_match = theirs
+          .associated_qubits()
+          .iter()
+          .map(|val| val.index)
+          .any(|val| qubits.contains(&val));
 
         // Skip comparison of instructions which don't have anything to do with our filter,
         // return false if we have one which does relate but the other does not.
@@ -675,19 +772,13 @@ impl QuantumProjection {
   }
 
   /// Is our projection simple enough to use algorithmic prediction?
-  pub fn can_predict(&self) -> bool {
-    false
-  }
+  pub fn can_predict(&self) -> bool { false }
 
   /// Perform algorithmic state value prediction.
-  fn predict(&mut self) -> AnalysisResult {
-    AnalysisResult::one()
-  }
+  fn predict(&mut self) -> AnalysisResult { AnalysisResult::one() }
 
   /// Get results for this entire state.
-  pub fn results(&mut self) -> AnalysisResult {
-    self.concretize().clone()
-  }
+  pub fn results(&mut self) -> AnalysisResult { self.concretize().clone() }
 
   /// Extracts the results for this particular set of qubits from the results of running this
   /// projection.
@@ -702,12 +793,16 @@ impl QuantumProjection {
   /// evaluations.
   pub fn results_for(&mut self, qb: &Vec<Qubit>) -> AnalysisResult {
     if qb.is_empty() {
-      return AnalysisResult::empty()
+      return AnalysisResult::empty();
     }
 
     // Check if we have a cached value, if so, return.
     let positions = qb.iter().map(|val| val.index as usize).collect::<Vec<_>>();
-    let cache_key = positions.iter().map(|val| val.to_string()).collect::<Vec<_>>().join(",");
+    let cache_key = positions
+      .iter()
+      .map(|val| val.to_string())
+      .collect::<Vec<_>>()
+      .join(",");
     if let Some(cached) = self.cached_filtered.get(&cache_key) {
       return cached.clone();
     }
@@ -719,7 +814,7 @@ impl QuantumProjection {
     for (key, value) in results.distribution.iter() {
       // -1 for zero-indexing.
       let key_length = key.len() - 1;
-      let mut new_key= String::new();
+      let mut new_key = String::new();
       for index in positions.iter() {
         if let Some(nth_value) = key.chars().nth(key_length - index) {
           new_key.push(nth_value);
@@ -729,7 +824,9 @@ impl QuantumProjection {
       if !new_key.is_empty() {
         let existing = if let Some(existing) = new_distribution.get(new_key.as_str()) {
           existing
-        } else { &0 };
+        } else {
+          &0
+        };
 
         new_distribution.insert(new_key.clone(), value + existing);
       }
@@ -738,7 +835,15 @@ impl QuantumProjection {
     let new_results = AnalysisResult::new(new_distribution);
     self.cached_filtered.insert(cache_key, new_results.clone());
     if self.is_tracing() {
-      log!(Level::Info, "Results for [{}]: {}", qb.iter().map(|val| val.to_string()).collect::<Vec<_>>().join(", "), new_results.to_string());
+      log!(
+        Level::Info,
+        "Results for [{}]: {}",
+        qb.iter()
+          .map(|val| val.to_string())
+          .collect::<Vec<_>>()
+          .join(", "),
+        new_results.to_string()
+      );
     }
 
     new_results
@@ -748,15 +853,20 @@ impl QuantumProjection {
   /// available QPU.
   pub fn concretize(&mut self) -> &AnalysisResult {
     if self.cached_result.is_some() {
-      return self.cached_result.as_ref().unwrap().borrow();
+      return self.cached_result.as_ref().unwrap();
     }
 
     let query_result = if self.can_predict() {
       self.predict()
     } else {
       let features = QuantumFeatures::default();
-      let runtime = self.engines.find_capable_QPU(&features)
-        .expect(format!("Cannot find QPU with these features available: [{}]", features).as_str());
+      let runtime = self.engines.find_capable_QPU(&features).expect(
+        format!(
+          "Cannot find QPU with these features available: [{}]",
+          features
+        )
+        .as_str()
+      );
 
       let builder = runtime.create_builder();
       for inst in self.instructions.iter() {
@@ -767,7 +877,9 @@ impl QuantumProjection {
               builder.reset(qubit);
             }
           }
-          QuantumOperations::I(qb) => { builder.i(qb); },
+          QuantumOperations::I(qb) => {
+            builder.i(qb);
+          }
           QuantumOperations::U(qb, theta, phi, lambda) => {
             builder.u(qb, theta.clone(), phi.clone(), lambda.clone());
           }
@@ -810,14 +922,20 @@ impl QuantumProjection {
       log!(Level::Info, "Projection results:");
 
       // Order results so you can easily compare two side-by-side.
-      let mut result_values = self.cached_result.as_ref().unwrap().distribution.iter().collect::<Vec<_>>();
+      let mut result_values = self
+        .cached_result
+        .as_ref()
+        .unwrap()
+        .distribution
+        .iter()
+        .collect::<Vec<_>>();
       result_values.sort_by(|(left_key, _), (right_key, _)| left_key.cmp(right_key));
       for (key, value) in result_values.iter() {
         log!(Level::Info, "  \"{}\": {}", key.clone(), value)
       }
     }
 
-    self.cached_result.as_ref().unwrap().borrow()
+    self.cached_result.as_ref().unwrap()
   }
 }
 
@@ -834,15 +952,11 @@ impl Clone for QuantumProjection {
 }
 
 impl Display for QuantumProjection {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("q-projection")
-    }
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { f.write_str("q-projection") }
 }
 
 impl PartialEq<Self> for QuantumProjection {
-  fn eq(&self, other: &Self) -> bool {
-    self.is_equal_for(other, None)
-  }
+  fn eq(&self, other: &Self) -> bool { self.is_equal_for(other, None) }
 }
 
 impl PartialOrd for QuantumProjection {
@@ -852,8 +966,7 @@ impl PartialOrd for QuantumProjection {
   }
 }
 
-impl Eq for QuantumProjection {
-}
+impl Eq for QuantumProjection {}
 
 /// Non-deferred result distribution from a QPU execution.
 pub struct AnalysisResult {
@@ -865,30 +978,23 @@ impl AnalysisResult {
     AnalysisResult { distribution }
   }
 
-  pub fn is_empty(&self) -> bool {
-    self.size() == 0
-  }
+  pub fn is_empty(&self) -> bool { self.size() == 0 }
 
   /// Return size of the results register in qubits.
   pub fn size(&self) -> usize {
-    self.distribution.keys().next().map_or(0, |val| val.len()).clone()
+    self
+      .distribution
+      .keys()
+      .next()
+      .map_or(0, |val| val.len())
+      .clone()
   }
 
-  pub fn one() -> AnalysisResult {
-    AnalysisResult::new(HashMap::from(
-      [("1".to_string(), 100)]
-    ))
-  }
+  pub fn one() -> AnalysisResult { AnalysisResult::new(HashMap::from([("1".to_string(), 100)])) }
 
-  pub fn zero() -> AnalysisResult {
-    AnalysisResult::new(HashMap::from(
-      [("0".to_string(), 100)]
-    ))
-  }
+  pub fn zero() -> AnalysisResult { AnalysisResult::new(HashMap::from([("0".to_string(), 100)])) }
 
-  pub fn empty() -> AnalysisResult {
-    AnalysisResult::default()
-  }
+  pub fn empty() -> AnalysisResult { AnalysisResult::default() }
 
   /// Compare whether this value is either 0/1 single qubit-wise, or if it's overwhelmingly
   /// one particular value. Aka 11110 or 00001.
@@ -919,13 +1025,9 @@ impl AnalysisResult {
     value_count >= (total_count / 2)
   }
 
-  pub fn is_one(&self) -> bool {
-    self.is_value('1')
-  }
+  pub fn is_one(&self) -> bool { self.is_value('1') }
 
-  pub fn is_zero(&self) -> bool {
-    self.is_value('0')
-  }
+  pub fn is_zero(&self) -> bool { self.is_value('0') }
 }
 
 impl PartialEq for AnalysisResult {
@@ -938,18 +1040,13 @@ impl PartialEq for AnalysisResult {
 }
 
 impl Default for AnalysisResult {
-  fn default() -> Self {
-    AnalysisResult::new(HashMap::new())
-  }
+  fn default() -> Self { AnalysisResult::new(HashMap::new()) }
 }
 
-impl Eq for AnalysisResult {
-}
+impl Eq for AnalysisResult {}
 
 impl Clone for AnalysisResult {
-  fn clone(&self) -> Self {
-    AnalysisResult::new(self.distribution.clone())
-  }
+  fn clone(&self) -> Self { AnalysisResult::new(self.distribution.clone()) }
 }
 
 impl Display for AnalysisResult {
