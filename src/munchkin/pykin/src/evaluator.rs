@@ -1518,7 +1518,7 @@ impl QIREvaluator {
               let inst_string = phi.to_string();
 
               // Do a dirty match to find the basic block names.
-              let bb_finder = Regex::new(", %([^\\]]+?)\\]+").unwrap();
+              let bb_finder = Regex::new(", %([^]]+?)]+").unwrap();
               let capture_groups: Vec<String> = bb_finder
                 .captures_iter(inst_string.as_str())
                 .map(|val| val.get(1).unwrap().as_str().trim().to_string())
