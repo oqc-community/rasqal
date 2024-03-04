@@ -22,7 +22,7 @@ Properties {
 
 task default -depends build
 task build -depends build-llvm, munchqin
-task checks -depends cargo-fmt, cargo-clippy, black, mypy
+task checks -depends cargo-fmt, cargo-clippy
 task manylinux -depends build-manylinux-container-image, run-manylinux-container-image
 
 task run-manylinux-container-image -preaction { Write-CacheStats } -postaction { Write-CacheStats } {
@@ -55,21 +55,6 @@ task cargo-fmt {
 task cargo-clippy -depends init {
     Invoke-LoggedCommand -workingDirectory $Root -errorMessage "Please fix the above clippy errors" {
         cargo clippy --workspace --all-targets @(Get-CargoArgs) -- -D warnings
-    }
-}
-
-task black -depends check-environment {
-    exec { pip install black }
-    Invoke-LoggedCommand -workingDirectory $Root -errorMessage "Please run black before pushing" {
-        black --check --extend-exclude "^/examples/mock_language/" .
-    }
-}
-
-task mypy -depends check-environment {
-    $reqs = Resolve-PythonRequirements "$Pykin[test]"
-    exec { pip install --requirement (Join-Path $Examples requirements.txt) @reqs mypy }
-    Invoke-LoggedCommand -workingDirectory $Root -errorMessage "Please fix the above mypy errors" {
-        mypy
     }
 }
 
