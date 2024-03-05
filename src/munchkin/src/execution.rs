@@ -32,7 +32,7 @@ pub fn run_file(
   run_graph(&parse_file(path, entry_point)?, args, runtimes, tracer)
 }
 
-/// Parses the file from the entry_point and returns the built-up graph.
+/// `entry_point`
 pub fn parse_file(
   path: impl AsRef<Path>, entry_point: Option<&str>
 ) -> Result<Ptr<ExecutableAnalysisGraph>, String> {
@@ -51,7 +51,7 @@ pub fn file_to_module(path: impl AsRef<Path>, context: &Context) -> Result<Modul
       .and_then(|buffer| context.create_module_from_ir(buffer))
       .map_err(|e| e.to_string()),
     Some("bc") => Module::parse_bitcode_from_path(path, context).map_err(|e| e.to_string()),
-    _ => Err(format!("Unsupported file extension '{:?}'.", extension))
+    _ => Err(format!("Unsupported file extension '{extension:?}'."))
   }
 }
 
@@ -73,7 +73,7 @@ pub fn build_graph_from_module(
   fpm.run_on(module);
 
   Target::initialize_native(&InitializationConfig::default())?;
-  inkwell::support::load_library_permanently(&Path::new(""));
+  inkwell::support::load_library_permanently(Path::new(""));
 
   let evaluator = QIREvaluator::new();
   evaluator.evaluate(
@@ -163,9 +163,9 @@ pub fn is_entry_point(function: FunctionValue) -> bool {
 pub fn choose_entry_point<'ctx>(
   functions: impl Iterator<Item = FunctionValue<'ctx>>, name: Option<&str>
 ) -> Result<FunctionValue<'ctx>, String> {
-  if name.is_some() {
+  if let Some(func_name) = name {
     functions
-      .filter(|f| name.unwrap() == f.get_name().to_str().unwrap())
+      .filter(|f| func_name == f.get_name().to_str().unwrap())
       .next()
       .ok_or("Can't find a method with this nane.".to_string())
   } else {
@@ -190,7 +190,6 @@ mod tests {
   use crate::instructions::Value;
   use crate::runtime::ActiveTracers;
   use crate::smart_pointers::Ptr;
-  use bitflags::Flags;
   use std::borrow::Borrow;
   use std::fs::canonicalize;
 

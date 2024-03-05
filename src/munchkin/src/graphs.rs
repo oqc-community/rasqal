@@ -40,16 +40,13 @@ impl LogicalPathwayIterator {
     vec.append(
       VecDeque::from(
         graph
-          .entry_points()
-          .iter()
-          .map(|val| val.clone())
-          .collect::<Vec<Ptr<Node>>>()
+          .entry_points().clone()
       )
       .borrow_mut()
     );
     LogicalPathwayIterator {
       graph: graph.clone(),
-      guard: Default::default(),
+      guard: HashSet::default(),
       next_node: vec
     }
   }
@@ -83,7 +80,7 @@ impl Iterator for LogicalPathwayIterator {
     let mut phis = Vec::new();
     let inc_nodes = current_node.incoming_nodes();
     if inc_nodes.len() > 1 {
-      for (edge, node) in inc_nodes.iter() {
+      for (edge, node) in &inc_nodes {
         if !self.guard.contains(&node.id()) {
           phis.push(current_node.clone());
         }
@@ -103,7 +100,7 @@ impl Iterator for LogicalPathwayIterator {
 
     // We want to analyze conditional pathways first, so any non-conditional we just defer.
     let mut uncond_next = None;
-    for edge in current_node.edges().outgoing.iter() {
+    for edge in &current_node.edges().outgoing {
       // If our edge dosen't exist in the graph, just skip.
       let node = self.graph.find_node(edge.end);
       if node.is_none() {
@@ -118,8 +115,8 @@ impl Iterator for LogicalPathwayIterator {
       }
     }
 
-    if uncond_next.is_some() {
-      self.next_node.push_back(uncond_next.unwrap().clone());
+    if let Some(next) = uncond_next {
+      self.next_node.push_back(next.clone());
     }
 
     Some(current_node.clone())
@@ -147,9 +144,7 @@ impl Edges {
   pub fn unconditional_out(&self) -> Option<&Ptr<Edge>> {
     self
       .outgoing
-      .iter()
-      .filter(|val| val.conditions.is_none())
-      .next()
+      .iter().find(|val| val.conditions.is_none())
   }
 
   pub fn has_unconditional_in(&self) -> bool {
@@ -159,9 +154,7 @@ impl Edges {
   pub fn unconditional_in(&self) -> Option<&Ptr<Edge>> {
     self
       .outgoing
-      .iter()
-      .filter(|val| val.conditions.is_none())
-      .next()
+      .iter().find(|val| val.conditions.is_none())
   }
 }
 
@@ -179,7 +172,7 @@ impl Display for Edges {
       .map(|val| val.end.to_string())
       .collect::<Vec<_>>()
       .join(", ");
-    f.write_str(format!("({})<->({})", inc, out).as_str())
+    f.write_str(format!("({inc})<->({out})").as_str())
   }
 }
 
@@ -208,18 +201,16 @@ impl AnalysisGraph {
 
   pub fn is_empty(&self) -> bool { self.nodes.len() == 0 }
 
-  pub fn nodes(&self) -> Vec<Ptr<Node>> { self.nodes.values().map(|val| val.clone()).collect() }
+  pub fn nodes(&self) -> Vec<Ptr<Node>> { self.nodes.values().cloned().collect() }
 
-  pub fn edges(&self) -> Vec<Ptr<Edges>> { self.edges.values().map(|val| val.clone()).collect() }
+  pub fn edges(&self) -> Vec<Ptr<Edges>> { self.edges.values().cloned().collect() }
 
   /// Returns all entry-points into the graph, so every node that has no natural incoming edge.
   pub fn entry_points(&self) -> Vec<Ptr<Node>> {
     self
       .nodes
       .values()
-      .into_iter()
-      .filter(|val| val.is_entry_node())
-      .map(|val| val.clone())
+      .filter(|val| val.is_entry_node()).cloned()
       .collect()
   }
 
@@ -228,9 +219,7 @@ impl AnalysisGraph {
     self
       .nodes
       .values()
-      .into_iter()
-      .filter(|val| val.is_exit_node())
-      .map(|val| val.clone())
+      .filter(|val| val.is_exit_node()).cloned()
       .collect()
   }
 
@@ -248,7 +237,7 @@ impl AnalysisGraph {
     ));
     let start_edges = self.edges_of_mut(start.id());
     if conjoining_edge.conditions.is_none() && start_edges.has_unconditional_out() {
-      panic!("Tried to add unconditional edge to target that already has one. This will leave an orphaned node. Start [{}], end [{}]", start.to_string(), end.to_string())
+      panic!("Tried to add unconditional edge to target that already has one. This will leave an orphaned node. Start [{start}], end [{end}]")
     }
 
     start_edges.outgoing.push(conjoining_edge.clone());
@@ -267,12 +256,9 @@ impl AnalysisGraph {
     new_node
   }
 
-  /// Same as [edges_of].
+  /// Same as [`edges_of`].
   pub fn edges_of_mut(&mut self, node_id: usize) -> &mut Ptr<Edges> {
-    if !self.edges.contains_key(&node_id) {
-      self.edges.insert(node_id, Ptr::from(Edges::new()));
-    }
-
+    self.edges.entry(node_id).or_insert_with(|| Ptr::from(Edges::new()));
     self.edges.get_mut(&node_id).unwrap()
   }
 
@@ -286,10 +272,10 @@ impl AnalysisGraph {
   }
 
   /// Adds this node to the graph, assigning it as the next auto-attach target. If you want
-  /// an addition without the attach, look at add_orphan.
+  /// `add_orphan`
   ///
   /// While this node always gets attached as the next aa-target, you can cohose whether to add
-  /// an unconditional edge between the previous and the new one by using add_attached_edge.
+  /// `add_attached_edge`
   /// You may not want to use this value in situations where you're dealing with the edge
   /// attachment via another means.
   pub fn add_node_with_edge(&mut self, node: &Ptr<Node>, add_attached_edge: bool) {
@@ -313,13 +299,13 @@ impl AnalysisGraph {
   pub fn reattach(&mut self, node: &mut Ptr<Node>) { self.add_node_with_edge(node, true); }
 
   pub fn set_next_auto_attach(&mut self, node: &Ptr<Node>) {
-    self.auto_attach_target = node.clone()
+    self.auto_attach_target = node.clone();
   }
 
   /// Returns next node you're auto-attaching too.
   pub fn next_auto_attach(&self) -> &Ptr<Node> { self.auto_attach_target.borrow() }
 
-  /// Same as [add_loose_node] but builds the node from the passed-in Instruction.
+  /// Same as [`add_loose_node`] but builds the node from the passed-in Instruction.
   pub fn add_loose(&mut self, inst: Instruction) -> Ptr<Node> {
     let mut val = Ptr::from(Node::new(&Ptr::from(inst)));
     self.add_loose_node(val.borrow_mut());
@@ -392,8 +378,7 @@ impl AnalysisGraph {
             .incoming
             .iter()
             .position(|ival| FlexiPtr::eq(edge, ival))
-            .unwrap()
-            .clone();
+            .unwrap();
           with_mutable!(edges.incoming.remove(current_position));
         }
       });
@@ -416,8 +401,7 @@ impl AnalysisGraph {
             .outgoing
             .iter()
             .position(|ival| FlexiPtr::eq(edge, ival))
-            .unwrap()
-            .clone();
+            .unwrap();
           with_mutable!(edges.outgoing.remove(current_position));
         }
       });
@@ -453,7 +437,7 @@ impl AnalysisGraph {
       .map(|val| val.clone_inner())
     {
       // Reassign edges on the other end.
-      for edge in self.edges_of_mut(edge.end).incoming.iter_mut() {
+      for edge in &mut self.edges_of_mut(edge.end).incoming {
         if edge.start == throwaway_id {
           edge.start = dest_id;
         }
@@ -471,7 +455,7 @@ impl AnalysisGraph {
       .map(|val| val.clone_inner())
     {
       // Reassign edges on the other end.
-      for edge in self.edges_of_mut(edge.end).outgoing.iter_mut() {
+      for edge in &mut self.edges_of_mut(edge.end).outgoing {
         if edge.end == throwaway_id {
           edge.end = dest_id;
         }
@@ -490,7 +474,7 @@ impl AnalysisGraph {
     let mut checked_nodes = HashSet::new();
     for next_node in graph_walker {
       checked_nodes.insert(Ptr::as_address(&next_node));
-      f.write_str(format!("{}\n", next_node.to_string()).as_str());
+      f.write_str(format!("{next_node}\n").as_str());
     }
 
     if checked_nodes.len() != self.nodes.len() {
@@ -501,7 +485,7 @@ impl AnalysisGraph {
         .values()
         .filter(|val| !checked_nodes.contains(&Ptr::as_address(&val)))
       {
-        f.write_str(format!("{}\n", node.to_string()).as_str());
+        f.write_str(format!("{node}\n").as_str());
       }
     }
 
@@ -553,8 +537,8 @@ impl Display for CallableAnalysisGraph {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     if !self.argument_mappings.is_empty() {
       f.write_str("Arguments:\n");
-      for (key, value) in self.argument_mappings.iter() {
-        f.write_str(format!("{} = {}\n", key, value.to_string()).as_str());
+      for (key, value) in &self.argument_mappings {
+        f.write_str(format!("{key} = {value}\n").as_str());
       }
       f.write_str("\n");
     }
@@ -582,7 +566,7 @@ impl PartialEq for CallableAnalysisGraph {
       }
     }
 
-    return true;
+    true
   }
 }
 
@@ -620,7 +604,7 @@ impl Display for ExecutableAnalysisGraph {
     if !self.context.globals.is_empty() {
       f.write_str("Globals:\n");
       for (key, value) in self.context.globals.iter() {
-        f.write_str(format!("{} = {}\n", key, value.to_string()).as_str());
+        f.write_str(format!("{key} = {value}\n").as_str());
       }
       f.write_str("\n");
     }
@@ -628,8 +612,8 @@ impl Display for ExecutableAnalysisGraph {
     // Print out the arguments needed for our root graph seperately.
     if !self.callable_graph.argument_mappings.is_empty() {
       f.write_str("Arguments:\n");
-      for (key, value) in self.callable_graph.argument_mappings.iter() {
-        f.write_str(format!("{}\n", key).as_str());
+      for (key, value) in &self.callable_graph.argument_mappings {
+        f.write_str(format!("{key}\n").as_str());
       }
       f.write_str("\n");
     }
@@ -651,7 +635,7 @@ impl Display for ExecutableAnalysisGraph {
   }
 }
 
-/// Wrapper for an AnalysisGraph that adds helper methods for building and manipulating the graph.
+/// `AnalysisGraph`
 /// Note: uses auto-deref to allow it to act as an extension.
 pub struct AnalysisGraphBuilder {
   pub graph: Ptr<AnalysisGraph>
@@ -840,13 +824,13 @@ pub struct Edge {
 impl Clone for Edge {
   fn clone(&self) -> Self {
     Edge {
-      start: self.start.clone(),
-      end: self.end.clone(),
+      start: self.start,
+      end: self.end,
       assignments: self
         .assignments
         .as_ref()
-        .map(|val| val.iter().map(|ival| ival.clone()).collect::<Vec<_>>()),
-      conditions: self.conditions.as_ref().map(|val| val.clone())
+        .map(|val| val.iter().cloned().collect::<Vec<_>>()),
+      conditions: self.conditions.clone()
     }
   }
 }
@@ -878,9 +862,7 @@ impl Edge {
   /// This will initialize the vector if it's None before returning it.
   pub fn conditions(&mut self) -> Option<Condition> {
     self
-      .conditions
-      .as_mut()
-      .map_or(None, |val| Some(val.clone()))
+      .conditions.clone()
   }
 
   /// Is this a conditional edge.
@@ -889,9 +871,9 @@ impl Edge {
   /// Returns a human-readable version of the condition.
   pub(crate) fn stringify_condition(&self) -> String {
     if let Some(val) = self.conditions.as_ref() {
-      format!(" if {}", val.to_string()).to_string()
+      format!(" if {val}").to_string()
     } else {
-      "".to_string()
+      String::new()
     }
   }
 
@@ -899,18 +881,18 @@ impl Edge {
   pub(crate) fn stringify_assigns(&self) -> String {
     if let Some(val) = self.assignments.as_ref() {
       if val.is_empty() {
-        return "".to_string();
+        return String::new();
       }
       format!(
         " with {}",
         val
           .iter()
-          .map(|val| { format!("{} = {}", val.0, val.1.to_string()).to_string() })
+          .map(|val| { format!("{} = {}", val.0, val.1).to_string() })
           .collect::<Vec<_>>()
           .join(", ")
       )
     } else {
-      "".to_string()
+      String::new()
     }
   }
 }
@@ -937,7 +919,7 @@ impl Display for Edge {
             assigns
           )
         } else {
-          "".to_string()
+          String::new()
         }
       )
       .as_str()
@@ -972,12 +954,12 @@ impl Node {
   pub fn id(&self) -> usize { Ptr::as_address(&self.instruction) }
 
   pub fn edges_mut(&mut self) -> &mut Ptr<Edges> {
-    let id = self.id().clone();
+    let id = self.id();
     self.linked_graph.edges_of_mut(id)
   }
 
   pub fn edges(&self) -> &Ptr<Edges> {
-    let id = self.id().clone();
+    let id = self.id();
     self.linked_graph.edges_of(id)
   }
 
@@ -1115,7 +1097,7 @@ impl Clone for Node {
     Node {
       linked_graph: self.linked_graph.clone(),
       instruction: self.instruction.clone(),
-      order: self.order.clone()
+      order: self.order
     }
   }
 }
@@ -1149,7 +1131,7 @@ impl Display for Node {
           "{}calling {}",
           var
             .as_ref()
-            .map_or(String::from(""), |val| format!("{} = ", val.to_string())),
+            .map_or(String::new(), |val| format!("{val} = ")),
           stringified_graph
         )
       }
@@ -1157,10 +1139,7 @@ impl Display for Node {
     };
 
     f.write_str(
-      format!(
-        "({}) -> ({}) {} -> ({})",
-        incoming, node_id, stringified_instruction, out
-      )
+      format!("({incoming}) -> ({node_id}) {stringified_instruction} -> ({out})")
       .as_str()
     )
   }

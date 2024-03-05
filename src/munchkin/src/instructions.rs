@@ -79,11 +79,7 @@ impl Display for Condition {
 
 impl Condition {
   pub fn new(left: Value, equality: Equalities, right: Value) -> Condition {
-    Condition {
-      left,
-      right,
-      equality
-    }
+    Condition { equality, left, right }
   }
 }
 
@@ -131,61 +127,61 @@ pub enum Instruction {
 pub struct InstructionBuilder {}
 
 impl InstructionBuilder {
-  /// See [Instruction::NoOp].
+  /// See [`Instruction::NoOp`].
   pub fn NoOp() -> Instruction { Instruction::NoOp }
 
-  /// See [Instruction::Initialize].
+  /// See [`Instruction::Initialize`].
   pub fn Initialize() -> Instruction { Instruction::Initialize() }
 
-  /// See [Instruction::Reset].
+  /// See [`Instruction::Reset`].
   pub fn Reset(val: Value) -> Instruction { Instruction::Reset(Ptr::from(val)) }
 
-  /// See [Instruction::ActivateQubit].
+  /// See [`Instruction::ActivateQubit`].
   pub fn ActivateQubit(variable: String, size: Option<Value>) -> Instruction {
     Instruction::ActivateQubit(variable, size.map(|val| Ptr::from(val)))
   }
 
-  /// See [Instruction::DeactivateQubit].
+  /// See [`Instruction::DeactivateQubit`].
   pub fn DeactivateQubit(value: Value) -> Instruction {
     Instruction::DeactivateQubit(Ptr::from(value))
   }
 
-  /// See [Instruction::Gate].
+  /// See [`Instruction::Gate`].
   pub fn Gate(gate: Gate) -> Instruction { Instruction::Gate(Ptr::from(gate)) }
 
-  /// See [Instruction::Return].
+  /// See [`Instruction::Return`].
   pub fn Return(value: Value) -> Instruction { Instruction::Return(Ptr::from(value)) }
 
-  /// See [Instruction::Assign].
+  /// See [`Instruction::Assign`].
   pub fn Assign(variable: String, value: Value) -> Instruction {
     Instruction::Assign(variable, Ptr::from(value))
   }
 
-  /// See [Instruction::Label].
+  /// See [`Instruction::Label`].
   pub fn Label(name: String) -> Instruction { Instruction::Label(name) }
 
-  /// See [Instruction::Arithmatic].
+  /// See [`Instruction::Arithmatic`].
   pub fn Arithmatic(variable: String, left: Value, op: Operator, right: Value) -> Instruction {
     Instruction::Arithmatic(variable, Ptr::from(left), op, Ptr::from(right))
   }
 
-  /// See [Instruction::Condition].
+  /// See [`Instruction::Condition`].
   pub fn Condition(variable: String, cond: Condition) -> Instruction {
     Instruction::Condition(variable, Ptr::from(cond))
   }
 
-  /// See [Instruction::Throw].
+  /// See [`Instruction::Throw`].
   pub fn Throw(message: Option<Value>) -> Instruction { Instruction::Throw(message) }
 
-  /// See [Instruction::Log].
+  /// See [`Instruction::Log`].
   pub fn Log(message: Value) -> Instruction { Instruction::Log(Ptr::from(message)) }
 
-  /// See [Instruction::Subgraph].
+  /// See [`Instruction::Subgraph`].
   pub fn Subgraph(reference: Value, result_var: Option<String>) -> Instruction {
     Instruction::Subgraph(Ptr::from(reference), result_var)
   }
 
-  /// See [Instruction::Expression].
+  /// See [`Instruction::Expression`].
   pub fn Expression(expr: Expression, result_var: Option<String>) -> Instruction {
     Instruction::Expression(expr, result_var)
   }
@@ -198,7 +194,7 @@ impl Display for Instruction {
         Instruction::NoOp => "noop".to_string(),
         Instruction::Initialize() => "init".to_string(),
         Instruction::Reset(qbs) => {
-          format!("reset {}", qbs.to_string())
+          format!("reset {qbs}")
         }
         Instruction::ActivateQubit(var, opt) => {
           format!(
@@ -206,27 +202,27 @@ impl Display for Instruction {
             var,
             opt
               .as_ref()
-              .map_or("".to_string(), |val| format!("[{}]", val.to_string()))
+              .map_or(String::new(), |val| format!("[{val}]"))
           )
         }
         Instruction::DeactivateQubit(qbs) => {
-          format!("deactivate qb {}", qbs.to_string())
+          format!("deactivate qb {qbs}")
         }
         Instruction::Gate(gate) => gate.to_string(),
         Instruction::Return(val) => {
-          format!("return {}", val.to_string())
+          format!("return {val}")
         }
         Instruction::Assign(name, val) => {
-          format!("{} = {}", name, val)
+          format!("{name} = {val}")
         }
         Instruction::Label(name) => {
-          format!("label {}", name)
+          format!("label {name}")
         }
         Instruction::Arithmatic(var, left, op, right) => {
-          format!("{} = {}{}{}", var, left, op, right)
+          format!("{var} = {left}{op}{right}")
         }
         Instruction::Condition(var, cond) => {
-          format!("{} = {}", var, cond.to_string())
+          format!("{var} = {cond}")
         }
         Instruction::Throw(ex) => {
           if ex.is_some() {
@@ -236,20 +232,20 @@ impl Display for Instruction {
           }
         }
         Instruction::Log(log) => {
-          format!("log '{}'", log)
+          format!("log '{log}'")
         }
         Instruction::Subgraph(sg, var) => {
           format!(
             "{}{}",
             var
               .as_ref()
-              .map_or(String::from(""), |val| format!("{} = ", val.to_string())),
-            sg.to_string()
+              .map_or(String::new(), |val| format!("{val} = ")),
+            sg
           )
         }
         Instruction::Expression(expr, var) => {
           if let Some(variable) = var {
-            format!("{} = {}", variable, expr.to_string())
+            format!("{variable} = {expr}")
           } else {
             expr.to_string()
           }
@@ -285,17 +281,17 @@ impl Display for Expression {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_str(
       match self {
-        Expression::Clone(value) => format!("clone {}", value.to_string()),
-        Expression::Length(value) => format!("length {}", value.to_string()),
-        Expression::NegateSign(value) => format!("sign negate {}", value.to_string()),
-        Expression::Stringify(value) => format!("stringify {}", value.to_string()),
+        Expression::Clone(value) => format!("clone {value}"),
+        Expression::Length(value) => format!("length {value}"),
+        Expression::NegateSign(value) => format!("sign negate {value}"),
+        Expression::Stringify(value) => format!("stringify {value}"),
         Expression::ArgInjection(graph, val) => format!(
           "inject {} into {}",
-          val.as_ref().map_or("".to_string(), |val| val.to_string()),
-          graph.to_string()
+          val.as_ref().map_or(String::new(), |val| val.to_string()),
+          graph
         ),
         Expression::MakeCtrlAdj(val, modifier) => {
-          format!("Swapping {} to {}", val.to_string(), match modifier {
+          format!("Swapping {} to {}", val, match modifier {
             LambdaModifier::Ctl => "ctrl",
             LambdaModifier::Adj => "adj"
           })
@@ -307,7 +303,7 @@ impl Display for Expression {
 }
 
 /// Q-sharps definition of pauli, the actual numbers don't really matter.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum Pauli {
   I = 0,
   X = -1,
@@ -322,7 +318,7 @@ impl Pauli {
       -1 => Pauli::X,
       -2 => Pauli::Z,
       -3 => Pauli::Y,
-      _ => panic!("Not a valid int for pauli: {}.", index.to_string())
+      _ => panic!("Not a valid int for pauli: {index}.")
     }
   }
 }
@@ -376,12 +372,12 @@ impl Clone for Value {
     // TODO: As above, strip pointers away from certain objects.
     match self {
       Value::Empty => Value::Empty,
-      Value::Byte(val) => Value::Byte(val.clone()),
-      Value::Short(val) => Value::Short(val.clone()),
-      Value::Int(val) => Value::Int(val.clone()),
-      Value::Long(val) => Value::Long(val.clone()),
-      Value::Bool(val) => Value::Bool(val.clone()),
-      Value::Float(val) => Value::Float(val.clone()),
+      Value::Byte(val) => Value::Byte(*val),
+      Value::Short(val) => Value::Short(*val),
+      Value::Int(val) => Value::Int(*val),
+      Value::Long(val) => Value::Long(*val),
+      Value::Bool(val) => Value::Bool(*val),
+      Value::Float(val) => Value::Float(*val),
       Value::String(val) => Value::String(val.clone()),
       Value::Pauli(val) => Value::Pauli(val.clone()),
       Value::Qubit(qb) => Value::Qubit(qb.clone()),
@@ -402,12 +398,12 @@ impl Value {
   /// Attempts to coerce this value into an int. Returns None if it can't.
   pub fn try_as_int(&self) -> Option<i64> {
     match self {
-      Value::Bool(b) => Some(if b.clone() == true { 1 } else { 0 }),
-      Value::Byte(b) => Some(b.clone() as i64),
-      Value::Short(s) => Some(s.clone() as i64),
-      Value::Int(i) => Some(i.clone()),
-      Value::Long(l) => Some(l.clone() as i64),
-      Value::Float(f) => Some(f.clone() as i64),
+      Value::Bool(b) => Some(i64::from(*b)),
+      Value::Byte(b) => Some(*b as i64),
+      Value::Short(s) => Some(*s as i64),
+      Value::Int(i) => Some(*i),
+      Value::Long(l) => Some(*l as i64),
+      Value::Float(f) => Some(*f as i64),
       Value::QuantumPromise(qbs, projection) => {
         Some(if with_mutable!(projection.results_for(qbs).is_one()) {
           1
@@ -423,18 +419,18 @@ impl Value {
   pub fn as_int(&self) -> i64 {
     self
       .try_as_int()
-      .expect(format!("Not a numeric: {}.", self.to_string()).as_str())
+      .expect(format!("Not a numeric: {self}.").as_str())
   }
 
   /// Attempts to coerce this value into a byte. Returns None if it can't.
   pub fn try_as_byte(&self) -> Option<i8> {
     match self {
-      Value::Bool(b) => Some(if b.clone() == true { 1 } else { 0 }),
-      Value::Byte(b) => Some(b.clone()),
-      Value::Short(s) => Some(s.clone() as i8),
-      Value::Int(i) => Some(i.clone() as i8),
-      Value::Long(l) => Some(l.clone() as i8),
-      Value::Float(f) => Some(f.clone() as i8),
+      Value::Bool(b) => Some(i8::from(b.clone())),
+      Value::Byte(b) => Some(*b),
+      Value::Short(s) => Some(*s as i8),
+      Value::Int(i) => Some(*i as i8),
+      Value::Long(l) => Some(*l as i8),
+      Value::Float(f) => Some(*f as i8),
       Value::QuantumPromise(qbs, projection) => {
         Some(if with_mutable!(projection.results_for(qbs).is_one()) {
           1
@@ -450,18 +446,18 @@ impl Value {
   pub fn as_byte(&self) -> i8 {
     self
       .try_as_byte()
-      .expect(format!("Not a byte: {}.", self.to_string()).as_str())
+      .expect(format!("Not a byte: {self}.").as_str())
   }
 
   /// Attempts to coerce this value into a short. Returns None if it can't.
   pub fn try_as_short(&self) -> Option<i16> {
     match self {
-      Value::Bool(b) => Some(if b.clone() == true { 1 } else { 0 }),
-      Value::Byte(b) => Some(b.clone() as i16),
-      Value::Short(s) => Some(s.clone()),
-      Value::Int(i) => Some(i.clone() as i16),
-      Value::Long(l) => Some(l.clone() as i16),
-      Value::Float(f) => Some(f.clone() as i16),
+      Value::Bool(b) => Some(if *b { 1 } else { 0 }),
+      Value::Byte(b) => Some(*b as i16),
+      Value::Short(s) => Some(*s),
+      Value::Int(i) => Some(*i as i16),
+      Value::Long(l) => Some(*l as i16),
+      Value::Float(f) => Some(*f as i16),
       Value::QuantumPromise(qbs, projection) => {
         Some(if with_mutable!(projection.results_for(qbs).is_one()) {
           1
@@ -477,18 +473,18 @@ impl Value {
   pub fn as_short(&self) -> i16 {
     self
       .try_as_short()
-      .expect(format!("Not a short: {}.", self.to_string()).as_str())
+      .expect(format!("Not a short: {self}.").as_str())
   }
 
   /// Attempts to coerce this value into a long. Returns None if it can't.
   pub fn try_as_long(&self) -> Option<i128> {
     match self {
-      Value::Bool(b) => Some(if b.clone() == true { 1 } else { 0 }),
-      Value::Byte(b) => Some(b.clone() as i128),
-      Value::Short(s) => Some(s.clone() as i128),
-      Value::Int(i) => Some(i.clone() as i128),
-      Value::Long(l) => Some(l.clone()),
-      Value::Float(f) => Some(f.clone() as i128),
+      Value::Bool(b) => Some(i128::from(*b)),
+      Value::Byte(b) => Some(*b as i128),
+      Value::Short(s) => Some(*s as i128),
+      Value::Int(i) => Some(*i as i128),
+      Value::Long(l) => Some(*l),
+      Value::Float(f) => Some(*f as i128),
       Value::QuantumPromise(qbs, projection) => {
         Some(if with_mutable!(projection.results_for(qbs).is_one()) {
           1
@@ -504,18 +500,18 @@ impl Value {
   pub fn as_long(&self) -> i128 {
     self
       .try_as_long()
-      .expect(format!("Not a long: {}.", self.to_string()).as_str())
+      .expect(format!("Not a long: {self}.").as_str())
   }
 
   /// Attempts to coerce this value into a float. Returns None if it can't.
   pub fn try_as_float(&self) -> Option<f64> {
     match self {
-      Value::Bool(b) => Some(if b.clone() == true { 1.0 } else { 0.0 }),
-      Value::Byte(b) => Some(b.clone() as f64),
-      Value::Short(s) => Some(s.clone() as f64),
-      Value::Int(i) => Some(i.clone() as f64),
-      Value::Long(l) => Some(l.clone() as f64),
-      Value::Float(f) => Some(f.clone()),
+      Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
+      Value::Byte(b) => Some(*b as f64),
+      Value::Short(s) => Some(*s as f64),
+      Value::Int(i) => Some(*i as f64),
+      Value::Long(l) => Some(*l as f64),
+      Value::Float(f) => Some(*f),
       Value::QuantumPromise(qbs, projection) => {
         Some(if with_mutable!(projection.results_for(qbs).is_one()) {
           1.0
@@ -531,13 +527,13 @@ impl Value {
   pub fn as_float(&self) -> f64 {
     self
       .try_as_float()
-      .expect(format!("Not a float: {}.", self.to_string()).as_str())
+      .unwrap_or_else(|| panic!("Not a float: {self}."))
   }
 
   /// Attempts to coerce this value into an array. Returns None if it can't.
   pub fn try_as_array(&self) -> Option<&Vec<Ptr<Value>>> {
     match self {
-      Value::Array(ar) => Some(ar.as_ref()),
+      Value::Array(ar) => Some(ar),
       _ => None
     }
   }
@@ -546,7 +542,7 @@ impl Value {
   pub fn as_array(&self) -> &Vec<Ptr<Value>> {
     self
       .try_as_array()
-      .expect(format!("Not an array: {}.", self.to_string()).as_str())
+      .unwrap_or_else(|| panic!("Not an array: {self}."))
   }
 
   /// Attempts to coerce this value into a qubit. Returns None if it can't.
@@ -561,11 +557,11 @@ impl Value {
   pub fn as_qubit(&self) -> &Qubit {
     self
       .try_as_qubit()
-      .expect(format!("Not a qubit: {}.", self.to_string()).as_str())
+      .unwrap_or_else(|| panic!("Not a qubit: {self}."))
   }
 
-  /// Attempts to retrieve the inner value of a Value::String.
-  /// Important to note it does not do a to_string on the object, it only retrieves the
+  /// `Value::String`
+  /// `to_string`
   /// inner string from a Value designated as a string.
   pub fn try_as_string(&self) -> Option<String> {
     match self {
@@ -574,12 +570,12 @@ impl Value {
     }
   }
 
-  /// Attempts to retrieve the inner value of a Value::String.
+  /// `Value::String`
   /// See [`Value::try_as_string`] for some additional details.
   pub fn as_string(&self) -> String {
     self
       .try_as_string()
-      .expect(format!("Not a string: {}.", self.to_string()).as_str())
+      .unwrap_or_else(|| panic!("Not a string: {self}."))
   }
 
   /// Attempts to coerce this value into a bool. Returns None if it can't.
@@ -593,7 +589,7 @@ impl Value {
     }
 
     match self {
-      Value::Bool(val) => Some(val.clone()),
+      Value::Bool(val) => Some(*val),
       _ => None
     }
   }
@@ -602,14 +598,14 @@ impl Value {
   pub fn as_bool(&self) -> bool {
     self
       .try_as_bool()
-      .expect(format!("Not a bool: {}.", self.to_string()).as_str())
+      .unwrap_or_else(|| panic!("Not a bool: {self}."))
   }
 
   /// Attempts to coerce this value into a reference. Returns None if it can't.
   pub fn try_as_reference(&self) -> Option<(String, Option<Ptr<Value>>)> {
     match self {
       Value::Ref(ref_, additional) => {
-        Some((ref_.clone(), additional.as_ref().map(|val| val.clone())))
+        Some((ref_.clone(), additional.clone()))
       }
       _ => None
     }
@@ -619,7 +615,7 @@ impl Value {
   pub fn as_reference(&self) -> (String, Option<Ptr<Value>>) {
     self
       .try_as_reference()
-      .expect(format!("Not a reference: {}.", self.to_string()).as_str())
+      .unwrap_or_else(|| panic!("Not a reference: {self}."))
   }
 
   /// Attempts to coerce this value into a pauli. Returns None if it can't.
@@ -639,7 +635,7 @@ impl Value {
   pub fn as_pauli(&self) -> Pauli {
     self
       .try_as_pauli()
-      .expect(format!("Not a pauli: {}.", self.to_string()).as_str())
+      .unwrap_or_else(|| panic!("Not a pauli: {self}."))
   }
 
   /// Attempts to coerce this value into an analysis result. Returns None if it can't.
@@ -655,7 +651,7 @@ impl Value {
   pub fn as_analysis_result(&self) -> Ptr<AnalysisResult> {
     self
       .try_as_analysis_result()
-      .expect(format!("Not an analysis result: {}.", self.to_string()).as_str())
+      .unwrap_or_else(|| panic!("Not an analysis result: {self}."))
   }
 
   /// Attempts to coerce this value into a callable graph. Returns None if it can't.
@@ -670,7 +666,7 @@ impl Value {
   pub fn as_callable(&self) -> Ptr<CallableAnalysisGraph> {
     self
       .try_as_callable()
-      .expect(format!("Not a callable: {}.", self.to_string()).as_str())
+      .unwrap_or_else(|| panic!("Not a callable: {self}."))
   }
 }
 
@@ -701,7 +697,7 @@ impl PartialEq<Self> for Value {
             .iter()
             .zip(other_arr.iter())
             .map(|(l, r)| l == r)
-            .all(|val| val == true)
+            .all(|val| val)
       }),
       Value::Ref(ref_, additional) => match other {
         Value::Ref(other_ref, other_additional) => {
@@ -720,7 +716,7 @@ impl PartialEq<Self> for Value {
             }
           }
 
-          return true;
+          true
         }
         _ => false
       },
@@ -776,9 +772,7 @@ fn value_bitand(lhs: &Value, rhs: &Value) -> Value {
     Value::Long(l) => Value::from(l & rhs.as_long()),
     Value::Bool(b) => Value::from(b & rhs.as_bool()),
     _ => panic!(
-      "Attempted | on {} and {} which is illegal.",
-      lhs.to_string(),
-      rhs.to_string()
+      "Attempted | on {lhs} and {rhs} which is illegal."
     )
   }
 }
@@ -790,12 +784,12 @@ impl BitAnd for Value {
 
 impl BitAnd for &Value {
   type Output = Value;
-  fn bitand(self, rhs: Self) -> Self::Output { value_bitand(&self, &rhs) }
+  fn bitand(self, rhs: Self) -> Self::Output { value_bitand(&self, rhs) }
 }
 
 impl BitAnd for &mut Value {
   type Output = Value;
-  fn bitand(self, rhs: Self) -> Self::Output { value_bitand(&self, &rhs) }
+  fn bitand(self, rhs: Self) -> Self::Output { value_bitand(self, rhs) }
 }
 
 fn value_bitor(lhs: &Value, rhs: &Value) -> Value {
@@ -806,9 +800,7 @@ fn value_bitor(lhs: &Value, rhs: &Value) -> Value {
     Value::Long(l) => Value::from(l | rhs.as_long()),
     Value::Bool(b) => Value::from(b | rhs.as_bool()),
     _ => panic!(
-      "Attempted | on {} and {} which is illegal.",
-      lhs.to_string(),
-      rhs.to_string()
+      "Attempted | on {lhs} and {rhs} which is illegal."
     )
   }
 }
@@ -825,7 +817,7 @@ impl BitOr for &Value {
 
 impl BitOr for &mut Value {
   type Output = Value;
-  fn bitor(self, rhs: Self) -> Self::Output { value_bitor(&self, &rhs) }
+  fn bitor(self, rhs: Self) -> Self::Output { value_bitor(self, rhs) }
 }
 
 fn value_bitxor(lhs: &Value, rhs: &Value) -> Value {
@@ -836,16 +828,14 @@ fn value_bitxor(lhs: &Value, rhs: &Value) -> Value {
     Value::Long(l) => Value::from(l ^ rhs.as_long()),
     Value::Bool(b) => Value::from(b ^ rhs.as_bool()),
     _ => panic!(
-      "Attempted ^ on {} and {} which is illegal.",
-      lhs.to_string(),
-      rhs.to_string()
+      "Attempted ^ on {lhs} and {rhs} which is illegal."
     )
   }
 }
 
 impl BitXor for &mut Value {
   type Output = Value;
-  fn bitxor(self, rhs: Self) -> Self::Output { value_bitxor(&self, &rhs) }
+  fn bitxor(self, rhs: Self) -> Self::Output { value_bitxor(self, rhs) }
 }
 
 impl BitXor for Value {
@@ -866,9 +856,7 @@ fn value_subtract(lhs: &Value, rhs: &Value) -> Value {
     Value::Long(l) => Value::Long(l - rhs.as_long()),
     Value::Float(f) => Value::Float(f - rhs.as_float()),
     _ => panic!(
-      "Can't subtract these two values: {} - {}.",
-      lhs.to_string(),
-      rhs.to_string()
+      "Can't subtract these two values: {lhs} - {rhs}."
     )
   }
 }
@@ -941,26 +929,22 @@ fn value_add(lhs: &Value, rhs: &Value) -> Value {
       let potential_array = rhs.try_as_array();
       if let Some(other) = potential_array {
         let mut result = Vec::new();
-        for val in array.iter() {
+        for val in array {
           result.push(val.clone());
         }
 
-        for val in other.iter() {
+        for val in other {
           result.push(val.clone());
         }
         return Value::Array(result);
       }
 
       panic!(
-        "Can't add these two values: {} + {}.",
-        lhs.to_string(),
-        rhs.to_string()
+        "Can't add these two values: {lhs} + {rhs}."
       )
     }
     _ => panic!(
-      "Can't add these two values: {} + {}.",
-      lhs.to_string(),
-      rhs.to_string()
+      "Can't add these two values: {lhs} + {rhs}."
     )
   }
 }
@@ -988,9 +972,7 @@ fn value_divide(lhs: &Value, rhs: &Value) -> Value {
     Value::Long(l) => Value::Long(l / rhs.as_long()),
     Value::Float(f) => Value::Float(f / rhs.as_float()),
     _ => panic!(
-      "Can't divide these two values: {} / {}.",
-      lhs.to_string(),
-      rhs.to_string()
+      "Can't divide these two values: {lhs} / {rhs}."
     )
   }
 }
@@ -1018,9 +1000,7 @@ fn value_multiply(lhs: &Value, rhs: &Value) -> Value {
     Value::Long(l) => Value::Long(l * rhs.as_long()),
     Value::Float(f) => Value::Float(f * rhs.as_float()),
     _ => panic!(
-      "Can't multiply these two values: {} * {}.",
-      lhs.to_string(),
-      rhs.to_string()
+      "Can't multiply these two values: {lhs} * {rhs}."
     )
   }
 }
@@ -1066,11 +1046,11 @@ impl Display for Value {
         }
         Value::Ref(ref_, further) => further.as_ref().map_or_else(
           || ref_.clone(),
-          |val| format!("{}[{}]", ref_.clone(), val.to_string())
+          |val| format!("{}[{}]", ref_.clone(), val)
         ),
         Value::QuantumPromise(qbs, proj) => format!(
           "deferred execution of {} for {}",
-          proj.to_string(),
+          proj,
           qbs
             .iter()
             .map(|val| val.to_string())
@@ -1085,7 +1065,7 @@ impl Display for Value {
           call
             .argument_mappings
             .iter()
-            .map(|(key, val)| format!("{} = {}", key.clone(), val.to_string()))
+            .map(|(key, val)| format!("{} = {}", key.clone(), val))
             .collect::<Vec<_>>()
             .join(", ")
         )
@@ -1164,10 +1144,10 @@ pub enum Gate {
 pub struct GateBuilder {}
 
 impl GateBuilder {
-  /// See [Gate::I].
+  /// See [`Gate::I`].
   pub fn I(qubit: Value) -> Gate { Gate::I(Ptr::from(qubit)) }
 
-  /// See [Gate::U].
+  /// See [`Gate::U`].
   pub fn U(qubit: Value, theta: Value, phi: Value, lambda: Value) -> Gate {
     Gate::U(
       Ptr::from(qubit),
@@ -1177,7 +1157,7 @@ impl GateBuilder {
     )
   }
 
-  /// See [Gate::R].
+  /// See [`Gate::R`].
   pub fn R(pauli: Value, qubit: Value, theta: Value) -> Gate {
     Gate::R(Ptr::from(pauli), Ptr::from(qubit), Ptr::from(theta))
   }
@@ -1194,7 +1174,7 @@ impl GateBuilder {
     GateBuilder::R(Value::Pauli(Pauli::Z), qubit, theta)
   }
 
-  /// See [Gate::CR].
+  /// See [`Gate::CR`].
   pub fn CR(pauli: Value, controllers: Value, target: Value, theta: Value) -> Gate {
     Gate::CR(
       Ptr::from(pauli),
@@ -1216,7 +1196,7 @@ impl GateBuilder {
     GateBuilder::CR(Value::Pauli(Pauli::Y), controllers, target, theta)
   }
 
-  /// See [Gate::Measure].
+  /// See [`Gate::Measure`].
   pub fn Measure(pauli: Value, qubits: Value, results: Value) -> Gate {
     Gate::Measure(Ptr::from(pauli), Ptr::from(qubits), Ptr::from(results))
   }
@@ -1227,43 +1207,39 @@ impl Display for Gate {
     f.write_str(
       match self {
         Gate::I(qb) => {
-          format!("I {}", qb.to_string())
+          format!("I {qb}")
         }
         Gate::U(qb, theta, phi, lambda) => {
           format!(
-            "U[{}] theta: {}, phi: {}, lambda: {}",
-            qb, theta, phi, lambda
+            "U[{qb}] theta: {theta}, phi: {phi}, lambda: {lambda}"
           )
         }
         Gate::X(qb, radian) => {
-          format!("X[{}] {}", qb, radian)
+          format!("X[{qb}] {radian}")
         }
         Gate::Y(qb, radian) => {
-          format!("Y[{}] {}", qb, radian)
+          format!("Y[{qb}] {radian}")
         }
         Gate::Z(qb, radian) => {
-          format!("Z[{}] {}", qb, radian)
+          format!("Z[{qb}] {radian}")
         }
         Gate::CX(cont, target, radian) => {
-          format!("CX[{}->{}] {}", cont, target, radian)
+          format!("CX[{cont}->{target}] {radian}")
         }
         Gate::CZ(cont, target, radian) => {
-          format!("CZ[{}->{}] {}", cont, target, radian)
+          format!("CZ[{cont}->{target}] {radian}")
         }
         Gate::CY(cont, target, radian) => {
-          format!("CY[{}->{}] {}", cont, target, radian)
+          format!("CY[{cont}->{target}] {radian}")
         }
         Gate::Measure(paulis, qbs, target) => {
-          format!("{} = measure {} across {}", target, qbs, paulis)
+          format!("{target} = measure {qbs} across {paulis}")
         }
         Gate::R(pauli, qubit, val) => format!(
-          "R{}[{}] {}",
-          pauli.to_string(),
-          qubit.to_string(),
-          val.to_string()
+          "R{pauli}[{qubit}] {val}"
         ),
         Gate::CR(pauli, cont, target, radian) => {
-          format!("C{}[{}->{}] {}", pauli, cont, target, radian)
+          format!("C{pauli}[{cont}->{target}] {radian}")
         }
       }
       .as_str()

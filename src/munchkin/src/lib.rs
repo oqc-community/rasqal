@@ -111,7 +111,7 @@ fn initialize_loggers(log_path: Option<String>) {
     appended_messages.push(format!(
       "Attempted to open file at {} to log, failed with: {}",
       logging_path,
-      file.err().unwrap().to_string()
+      file.err().unwrap()
     ));
   }
 

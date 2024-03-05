@@ -19,7 +19,7 @@ macro_rules! with_mutable {
     };
 }
 
-/// See [with_mutable]. Just a modification of that macro that allows the target pointer
+/// See [`with_mutable`]. Just a modification of that macro that allows the target pointer
 /// to be a field on an object (since you can't seemingly match on 'self').
 #[macro_export]
 macro_rules! with_mutable_self {
@@ -30,7 +30,7 @@ macro_rules! with_mutable_self {
     };
 }
 
-/// Inner container of a FlexiPtr that holds the actual value pointer as well as a counter of
+/// `FlexiPtr`
 /// current live references.
 pub struct FlexiRef<T: ?Sized> {
   counter: *mut Cell<usize>,
@@ -89,7 +89,7 @@ impl<T: ?Sized> FlexiRef<T> {
   }
 
   /// Returns the count of currently active references this object has.
-  pub fn ref_count(&self) -> usize { unsafe { (*self.counter).get().clone() } }
+  pub fn ref_count(&self) -> usize { unsafe { (*self.counter).get() } }
 
   /// Fetch the inner pointer as a reference.
   pub fn value(&self) -> &mut T { unsafe { (*self.value).get_mut() } }
@@ -119,7 +119,7 @@ impl<T: Display> Display for FlexiRef<T> {
       format!(
         "Value: [{}] '{}', count: [{}] {}",
         self.value.addr(),
-        self.value().to_string(),
+        self.value(),
         self.counter.addr(),
         self.ref_count()
       )
@@ -269,14 +269,12 @@ impl<T: ?Sized> FlexiPtr<T> {
     unsafe {
       // Borrows don't require a drop, neither does None, only if we're the owner of
       // an object do we want to do anything to it.
-      match self {
-        FlexiPtr::RefCounted(ref_) => {
-          (**ref_).dec();
-          if (**ref_).ref_count() <= 0 {
-            drop(Box::from_raw(*ref_));
-          }
+      
+      if let FlexiPtr::RefCounted(ref_) = self {
+        (**ref_).dec();
+        if (**ref_).ref_count() <= 0 {
+          drop(Box::from_raw(*ref_));
         }
-        _ => {}
       }
     }
   }

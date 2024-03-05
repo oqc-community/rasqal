@@ -73,22 +73,22 @@ impl FromPyObject<'_> for Value {
     let transformed = if ob.is_instance_of::<PyInt>().is_ok_and(|val| val) {
       let value: i128 = ob
         .extract()
-        .expect(format!("Can't map {} to Munchkin value.", ob.to_string()).as_str());
+        .unwrap_or_else(|_| panic!("Can't map {ob} to Munchkin value."));
       Value::Long(value)
     } else if ob.is_instance_of::<PyFloat>().is_ok_and(|val| val) {
       let value: f64 = ob
         .extract()
-        .expect(format!("Can't map {} to Munchkin value.", ob.to_string()).as_str());
+        .unwrap_or_else(|_| panic!("Can't map {ob} to Munchkin value."));
       Value::Float(value)
     } else if ob.is_instance_of::<PyBool>().is_ok_and(|val| val) {
       let value: bool = ob
         .extract()
-        .expect(format!("Can't map {} to Munchkin value.", ob.to_string()).as_str());
+        .unwrap_or_else(|_| panic!("Can't map {ob} to Munchkin value."));
       Value::Bool(value)
     } else if ob.is_instance_of::<PyString>().is_ok_and(|val| val) {
       let value: String = ob
         .extract()
-        .expect(format!("Can't map {} to Munchkin value.", ob.to_string()).as_str());
+        .unwrap_or_else(|_| panic!("Can't map {ob} to Munchkin value."));
       Value::String(value)
     } else {
       return Err(PyValueError::new_err(
@@ -163,7 +163,6 @@ impl Executor {
         .map_err(PyValueError::new_err)
         .map(|value| {
           let result: Py<Graph> = Py::new(py, Graph::new(value.borrow()))
-            .ok()
             .expect("Unable to build Python graph representation.");
           result
         })
@@ -182,7 +181,7 @@ impl Executor {
       for runtime in runtimes {
         collection.add(&Ptr::from(IntegrationRuntime::Python(PythonRuntime::new(
           runtime
-        ))))
+        ))));
       }
 
       let graph: Graph = graph.extract(py).expect("Unable to extract graph.");
@@ -218,7 +217,7 @@ impl Executor {
       for runtime in runtimes {
         collection.add(&Ptr::from(IntegrationRuntime::Python(PythonRuntime::new(
           runtime
-        ))))
+        ))));
       }
 
       let args: Vec<Value> = arguments.extract()?;

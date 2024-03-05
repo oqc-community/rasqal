@@ -71,19 +71,19 @@ macro_rules! operand_to_bb {
 pub fn get_ref_id_from_instruction(inst: &InstructionValue) -> String {
   let inst_str = inst
     .to_string()
-    .trim_end_matches("\"")
-    .trim_start_matches("\"")
+    .trim_end_matches('"')
+    .trim_start_matches('"')
     .trim()
     .to_string();
   parse_ref_id_from_instruction(inst).expect("Can't find ref-id from instruction")
 }
 
-/// Same as [get_ref_id_from_instruction] which doesn't panic.
+/// Same as [`get_ref_id_from_instruction`] which doesn't panic.
 pub fn parse_ref_id_from_instruction(inst: &InstructionValue) -> Option<String> {
   let inst_str = inst
     .to_string()
-    .trim_end_matches("\"")
-    .trim_start_matches("\"")
+    .trim_end_matches('"')
+    .trim_start_matches('"')
     .trim()
     .to_string();
   parse_ref_id_from_instruction_str(&inst_str)
@@ -97,12 +97,12 @@ pub fn parse_ref_id_from_instruction_str(inst_str: &String) -> Option<String> {
   )
 }
 
-/// Gets the variable name, %var_name, from a type/value string.
+/// `var_name`
 pub fn get_ref_id_from_value(ptr_string: String) -> String {
   parse_ref_id_from_value(ptr_string).expect("Can't parse ref-id from value.")
 }
 
-/// Gets the variable name, %var_name, from a type/value string.
+/// `var_name`
 /// TODO: Need a proper way to get the variables from a general state, while this works it's not
 ///     entirely bulletproof and needs tweaking as issues come up. And issues caused from it are not
 ///     immediately obvious.
@@ -111,13 +111,13 @@ pub fn parse_ref_id_from_value(ptr_string: String) -> Option<String> {
   let pointer_variable_finder = Regex::new("^.*\\s(%[\\w0-9\\-]+)$").unwrap();
   let capture_groups = pointer_variable_finder.captures(ptr_string);
   let mut ref_id =
-    capture_groups.map_or(None, |val| Some(val.get(1).unwrap().as_str().to_string()));
+    capture_groups.map(|val| val.get(1).unwrap().as_str().to_string());
 
   // If we can't find a local variable, look globally.
   ref_id = ref_id.or_else(|| {
     let pointer_variable_finder = Regex::new("^.*\\s(@[\\w0-9\\-]+)$").unwrap();
     let capture_groups = pointer_variable_finder.captures(ptr_string);
-    capture_groups.map_or(None, |val| {
+    capture_groups.and_then(|val| {
       let val = val.get(1).unwrap().as_str().to_string();
       if val.trim().is_empty() {
         None
@@ -131,7 +131,7 @@ pub fn parse_ref_id_from_value(ptr_string: String) -> Option<String> {
   ref_id.or_else(|| {
     let pointer_variable_finder = Regex::new("^@[^\\s*]+(\\s|$)").unwrap();
     let capture_groups = pointer_variable_finder.captures(ptr_string);
-    capture_groups.map_or(None, |value| {
+    capture_groups.and_then(|value| {
       let mut value = value.get(0).unwrap().as_str();
       value = value.trim();
       if value.is_empty() {
@@ -202,7 +202,7 @@ impl<'a> EvaluationContext<'a> {
   }
 }
 
-/// Parser for turning QIR LLVM Modules into an [AnalysisGraph].
+/// Parser for turning QIR LLVM Modules into an [`AnalysisGraph`].
 pub struct QIREvaluator {}
 
 impl QIREvaluator {
@@ -260,11 +260,11 @@ impl QIREvaluator {
     }
 
     let mut operation_name = inst.print_to_string().to_string();
-    let start = operation_name.find("@")?;
-    let end = operation_name.find("(")?;
+    let start = operation_name.find('@')?;
+    let end = operation_name.find('(')?;
     let mut call_name = operation_name.split_off(start + 1);
     call_name.truncate(end - start - 1);
-    Some(String::from(call_name))
+    Some(call_name)
   }
 
   /// Note: on the exit of a basic block there should be no auto-attach point. Each BB is isolated
@@ -315,7 +315,7 @@ impl QIREvaluator {
       self.walk_basic_block(bb, &builder, subcontext.borrow());
     }
 
-    return builder;
+    builder
   }
 
   /// Hacked-together method to centralize GEP extraction. Done using llvm-sys objects because
@@ -376,15 +376,15 @@ impl QIREvaluator {
     }
   }
 
-  /// Private recursive method for as_value, extracted out for easier access to state. You will
-  /// almost never want to use this directly. Use [as_value] instead.
+  /// `as_value`
+  /// almost never want to use this directly. Use [`as_value`] instead.
   fn _as_value_recursive(
     &self, graph: &Ptr<AnalysisGraphBuilder>, type_enum: &AnyTypeEnum, val_enum: &AnyValueEnum,
     context: &Ptr<EvaluationContext>
   ) -> Option<Value> {
     let ref_id = parse_ref_id_from_value(val_enum.to_string());
-    if ref_id.is_some() {
-      return Some(Value::Ref(ref_id.unwrap(), None));
+    if let Some(ref_id_value) = ref_id {
+      return Some(Value::Ref(ref_id_value, None));
     }
 
     match type_enum {
@@ -431,7 +431,7 @@ impl QIREvaluator {
           .0;
 
         // TODO: Find a way to make f128 work, if it needs it.
-        return if t == llvm_context.f16_type().borrow_mut() {
+        if t == llvm_context.f16_type().borrow_mut() {
           Some(Value::Float(numeric))
         } else if t == llvm_context.f32_type().borrow_mut() {
           Some(Value::Float(numeric))
@@ -441,7 +441,7 @@ impl QIREvaluator {
           Some(Value::Float(numeric))
         } else {
           Some(Value::Float(numeric))
-        };
+        }
       }
       AnyTypeEnum::IntType(t) => {
         let llvm_context = t.get_context();
@@ -504,7 +504,7 @@ impl QIREvaluator {
             ptr_val
               .const_to_int(context.module.get_context().i64_type())
               .get_sign_extended_constant()
-              .unwrap_or_default() as i64
+              .unwrap_or_default()
           };
 
           // TODO: Make custom results object, probably re-use projection results.
@@ -558,7 +558,7 @@ impl QIREvaluator {
     }
   }
 
-  /// See [as_value] but returns value wrapped in a flexi-pointer.
+  /// See [`as_value`] but returns value wrapped in a flexi-pointer.
   fn as_value_ptr(
     &self, any_val: &AnyValueEnum, graph: &Ptr<AnalysisGraphBuilder>,
     context: &Ptr<EvaluationContext>
@@ -770,7 +770,7 @@ impl QIREvaluator {
     let parse_as_value = |inst: &Ptr<InstructionValue>, index: u32| -> Option<Value> {
       let op = inst
         .get_operand(index)
-        .expect(&*format!("Operand at {} doesn't exist", 0));
+        .unwrap_or_else(|| panic!("Operand at {} doesn't exist", 0));
       let qb_value = op.left().expect("Operand isn't a value.");
       self.as_value(qb_value.as_any_value_enum().borrow(), graph, context)
     };
@@ -784,8 +784,7 @@ impl QIREvaluator {
     let parse_default_callable = |global_name: &String| -> Option<Ptr<AnalysisGraph>> {
       context
         .global_variables
-        .get(global_name)
-        .map_or(None, |callable_array| {
+        .get(global_name).and_then(|callable_array| {
           let mut first = None;
           for val in callable_array.as_array() {
             if let Some((method_name, _)) = val.try_as_reference() {
@@ -817,13 +816,13 @@ impl QIREvaluator {
     let fix_pauli = |mut pauli: Value| -> Value {
       if let Value::Int(mut i) = pauli {
         if i == 1 {
-          i = -1
+          i = -1;
         }
 
         pauli = Value::Pauli(Pauli::from_num(&(i as i8)));
       }
 
-      return pauli;
+      pauli
     };
 
     // Expands the qis__ctrl argument tuples out.
@@ -1152,7 +1151,7 @@ impl QIREvaluator {
         // Base profiles only have one method, so don't need to care about child
         // contexts.
         if !context.is_base_profile.deref() {
-          with_mutable!(context.is_base_profile.expand_into(&Ptr::from(true)))
+          with_mutable!(context.is_base_profile.expand_into(&Ptr::from(true)));
         }
       }
       "__quantum__rt__string_equal" | "__quantum__rt__result_equal" => {
@@ -1365,7 +1364,7 @@ impl QIREvaluator {
       | "__quantum__rt__string_get_length"
       | "__quantum__rt__tuple_copy"
       | _ => {
-        warn!("Attempted to process unknown intrinsic {}.", name)
+        warn!("Attempted to process unknown intrinsic {}.", name);
       }
     }
 
@@ -1380,7 +1379,7 @@ impl QIREvaluator {
       .get_method_name(inst.borrow())
       .expect("Can't resolve method name of call operation.");
     let called_func = context.module.get_function(method_name.as_str());
-    if called_func.is_none() || called_func.unwrap().get_basic_blocks().len() == 0 {
+    if called_func.is_none() || called_func.unwrap().get_basic_blocks().is_empty() {
       self.eval_intrinsic(method_name, inst, graph, context);
     } else {
       let func = called_func.unwrap();
@@ -1392,7 +1391,7 @@ impl QIREvaluator {
         let param = func.get_nth_param(index).unwrap().to_string();
         let param_ref_id = get_ref_id_from_value(param.clone());
         let value = self
-          .as_value_ptr(operand_to_value!(inst, index.clone()), graph, context)
+          .as_value_ptr(operand_to_value!(inst, index), graph, context)
           .expect("Unable to resolve value.");
         args.insert(param_ref_id, value);
         index += 1;
@@ -1630,23 +1629,21 @@ impl QIREvaluator {
         FloatPredicate::OLE => Equalities::LessOrEqualThan,
         _ => panic!("Untranslatable fcompare.")
       }
-    } else {
-      if let Some(pred) = inst.get_icmp_predicate() {
-        match pred {
-          IntPredicate::EQ => Equalities::Equals,
-          IntPredicate::NE => Equalities::NotEquals,
-          IntPredicate::UGT => Equalities::GreaterThan,
-          IntPredicate::UGE => Equalities::GreaterOrEqualThan,
-          IntPredicate::ULT => Equalities::LessThan,
-          IntPredicate::ULE => Equalities::LessOrEqualThan,
-          IntPredicate::SGT => Equalities::GreaterThan,
-          IntPredicate::SGE => Equalities::GreaterOrEqualThan,
-          IntPredicate::SLT => Equalities::LessThan,
-          IntPredicate::SLE => Equalities::LessOrEqualThan
-        }
-      } else {
-        panic!("Comparison operator that looks strange.")
+    } else if let Some(pred) = inst.get_icmp_predicate() {
+      match pred {
+        IntPredicate::EQ => Equalities::Equals,
+        IntPredicate::NE => Equalities::NotEquals,
+        IntPredicate::UGT => Equalities::GreaterThan,
+        IntPredicate::UGE => Equalities::GreaterOrEqualThan,
+        IntPredicate::ULT => Equalities::LessThan,
+        IntPredicate::ULE => Equalities::LessOrEqualThan,
+        IntPredicate::SGT => Equalities::GreaterThan,
+        IntPredicate::SGE => Equalities::GreaterOrEqualThan,
+        IntPredicate::SLT => Equalities::LessThan,
+        IntPredicate::SLE => Equalities::LessOrEqualThan
       }
+    } else {
+      panic!("Comparison operator that looks strange.")
     };
 
     let left = self
@@ -1667,7 +1664,7 @@ impl QIREvaluator {
   ) {
     let lhs = self
       .as_value(operand_to_value!(inst, 0), graph, context)
-      .expect(format!("Can't resolve left side of {}.", op.to_string()).as_str());
+      .unwrap_or_else(|| panic!("Can't resolve left side of {op}."));
     let lhs_as_int = match lhs {
       Value::Int(i) => Some(i),
       _ => None
@@ -1675,7 +1672,7 @@ impl QIREvaluator {
 
     let rhs = self
       .as_value(operand_to_value!(inst, 1), graph, context)
-      .expect(format!("Can't resolve right side of {}.", op.to_string()).as_str());
+      .unwrap_or_else(|| panic!("Can't resolve right side of {op}."));
     let rhs_as_int = match rhs {
       Value::Int(i) => Some(i),
       _ => None
@@ -1739,7 +1736,7 @@ impl QIREvaluator {
         index_values.push(
           indexer
             .parse::<i64>()
-            .expect(format!("Unable to parse {} as an int", indexer).as_str())
+            .unwrap_or_else(|_| panic!("Unable to parse {indexer} as an int"))
         );
       }
     }
@@ -1785,7 +1782,7 @@ impl QIREvaluator {
         index_values.push(
           indexer
             .parse::<i64>()
-            .expect(format!("Unable to parse {} as an int", indexer).as_str())
+            .unwrap_or_else(|_| panic!("Unable to parse {indexer} as an int"))
         );
       }
     }

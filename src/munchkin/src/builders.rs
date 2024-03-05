@@ -19,7 +19,9 @@ pub enum IntegrationRuntime {
 }
 
 impl Default for IntegrationRuntime {
-  fn default() -> Self { IntegrationRuntime::Empty }
+  fn default() -> Self {
+    IntegrationRuntime::Empty
+  }
 }
 
 impl IntegrationRuntime {
@@ -34,9 +36,9 @@ impl IntegrationRuntime {
     if let IntegrationRuntime::Python(py) = self {
       if let IntegrationBuilder::Python(builder) = builder.deref() {
         return py.execute(builder);
-      } else {
-        panic!("Runtime/Builder execution type mismatch.")
-      }
+      } 
+      
+      panic!("Runtime/Builder execution type mismatch.")
     }
 
     AnalysisResult::empty()
@@ -340,7 +342,7 @@ impl PythonRuntime {
 
   /// Returns whether this runtime can be actively used.
   pub fn is_valid(&mut self) -> bool {
-    if let None = self.is_valid {
+    if self.is_valid.is_none() {
       let mut builder = self.create_builder();
       self.is_valid = Some(builder.is_valid() && !self.wrapped.is_adaptor_empty());
     }
@@ -420,7 +422,7 @@ impl PythonBuilder {
 
   /// Returns whether this builder can be actively used.
   pub fn is_valid(&mut self) -> bool {
-    if let None = self.is_valid {
+    if self.is_valid.is_none() {
       self.is_valid = Some(!self.wrapped.is_adaptor_empty());
     }
 

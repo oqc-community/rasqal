@@ -35,7 +35,7 @@ fn scope_variables(graph: &Ptr<AnalysisGraph>, context: &Ptr<RuntimeContext>) {
   scope_variables_rec(graph, context, &mut guard);
 }
 
-/// Same as [scope_variables] just recursive.
+/// Same as [`scope_variables`] just recursive.
 fn scope_variables_rec(
   graph: &Ptr<AnalysisGraph>, context: &Ptr<RuntimeContext>, guard: &mut HashSet<String>
 ) {
@@ -71,13 +71,13 @@ fn scope_variables_rec(
         Instruction::Assign(var, _)
         | Instruction::Arithmatic(var, _, _, _)
         | Instruction::Condition(var, _) => {
-          for scope in active_scopes.iter_mut() {
+          for scope in &mut active_scopes {
             scope.captured_variables.insert(var.clone());
           }
         }
         Instruction::Expression(_, var_opt) | Instruction::Subgraph(_, var_opt) => {
           if let Some(var) = var_opt {
-            for scope in active_scopes.iter_mut() {
+            for scope in &mut active_scopes {
               scope.captured_variables.insert(var.clone());
             }
           }
@@ -99,7 +99,7 @@ fn scope_variables_rec(
   if let Some(results) = context.scopes.get(&graph.identity) {
     for scopes in active_scopes {
       if !scopes.captured_variables.is_empty() {
-        with_mutable!(results.insert(scopes.start.clone(), scopes));
+        with_mutable!(results.insert(scopes.start, scopes));
       }
     }
   }
@@ -162,19 +162,19 @@ pub fn check_condition(cond: &Condition, context: &Ptr<RuntimeContext>) -> bool 
   }
 }
 
-/// Follows a Value::Ref to the value it's actually pointing at, which includes delving into arrays
+/// `Value::Ref`
 /// and following references.
 fn follow_reference(qx: &Ptr<Value>, context: &Ptr<RuntimeContext>) -> Ptr<Value> {
   match qx.deref() {
     Value::Ref(ref_, additional) => {
       let fetched_ref = context
         .get(ref_)
-        .expect(format!("Dangling variable: {}.", ref_.clone()).as_str());
+        .unwrap_or_else(|| panic!("Dangling variable: {}.", ref_.clone()));
 
       // If we're self-referencing, just return a reference to the original value.
       if let Value::Ref(target, target_add) = fetched_ref.deref() {
         if ref_ == target && additional == target_add {
-          panic!("Circular reference found: {}.", fetched_ref.to_string())
+          panic!("Circular reference found: {fetched_ref}.")
         }
       }
 
@@ -198,8 +198,7 @@ fn follow_reference(qx: &Ptr<Value>, context: &Ptr<RuntimeContext>) -> Ptr<Value
             }
           }
           _ => panic!(
-            "Tried indexer on value that wasn't an array: {}.",
-            value.to_string()
+            "Tried indexer on value that wasn't an array: {value}."
           )
         })
     }
@@ -224,12 +223,12 @@ impl Expression {
       Expression::NegateSign(value) => {
         let followed = follow_reference(&Ptr::from(value), context);
         Ptr::from(match followed.deref() {
-          Value::Byte(b) => Value::Byte(-b.clone()),
-          Value::Short(s) => Value::Short(-s.clone()),
-          Value::Int(i) => Value::Int(-i.clone()),
-          Value::Long(l) => Value::Long(-l.clone()),
-          Value::Float(f) => Value::Float(-f.clone()),
-          _ => panic!("Can't negate sign of {}", followed.to_string())
+          Value::Byte(b) => Value::Byte(-*b),
+          Value::Short(s) => Value::Short(-*s),
+          Value::Int(i) => Value::Int(-*i),
+          Value::Long(l) => Value::Long(-*l),
+          Value::Float(f) => Value::Float(-*f),
+          _ => panic!("Can't negate sign of {followed}")
         })
       }
       Expression::Stringify(value) => {
@@ -306,11 +305,17 @@ pub struct TracingModule {
   pub tracers: ActiveTracers
 }
 
-impl TracingModule {
-  pub fn new() -> TracingModule {
+impl Default for TracingModule {
+  fn default() -> Self {
     TracingModule {
       tracers: ActiveTracers::empty()
     }
+  }
+}
+
+impl TracingModule {
+  pub fn new() -> TracingModule {
+    TracingModule::default()
   }
 
   pub fn with(tracers: ActiveTracers) -> TracingModule {
@@ -322,7 +327,7 @@ impl TracingModule {
   pub fn is_active(&self) -> bool { !self.tracers.is_empty() }
 
   pub fn has(&self, check_against: ActiveTracers) -> bool {
-    return self.tracers.contains(check_against);
+    self.tracers.contains(check_against)
   }
 }
 
@@ -359,8 +364,7 @@ impl QuantumRuntime {
       let mut required_arguments = exe_graph
         .callable_graph
         .argument_mappings
-        .keys()
-        .map(|val| val.clone())
+        .keys().cloned()
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -381,11 +385,11 @@ impl QuantumRuntime {
     }
 
     let mut index = 0;
-    for (key, _) in exe_graph.callable_graph.argument_mappings.iter() {
+    for (key, _) in &exe_graph.callable_graph.argument_mappings {
       if let Some(value) = arguments.get(index as usize) {
         context.add(key, &Ptr::from(value));
       }
-      index = index + 1;
+      index += 1;
     }
 
     // Loop through active graphs in this execution and perform pre-execution analysis.
@@ -405,9 +409,7 @@ impl QuantumRuntime {
         &mut context
       )
       .map(|val| {
-        if val.is_none() {
-          return None;
-        }
+        val.as_ref()?;
         let val = follow_reference(&val.unwrap(), &context);
 
         Some(match val.deref() {
@@ -459,7 +461,7 @@ impl QuantumRuntime {
       if self.is_tracing() {
         let mut changed_variables = Vec::new();
         let mut updated_variables = HashMap::new();
-        for (key, value) in context.variables.iter() {
+        for (key, value) in &context.variables {
           // We need to follow references to check for value differences.
           let followed_value = follow_reference(value, context);
           let changed = if let Some(old_var) = old_variables.get(key) {
@@ -472,7 +474,7 @@ impl QuantumRuntime {
             changed_variables.push(format!(
               "({} = {})",
               key.clone(),
-              followed_value.to_string()
+              followed_value
             ));
           }
 
@@ -521,13 +523,13 @@ impl QuantumRuntime {
                 scope
                   .captured_variables
                   .iter()
-                  .map(|val| val.as_str())
+                  .map(String::as_str)
                   .collect::<Vec<_>>()
                   .join(", ")
-              )
+              );
             }
 
-            for key in scope.captured_variables.iter() {
+            for key in &scope.captured_variables {
               if context.variables.contains_key(key) {
                 context.variables.remove(&key.clone());
               }
@@ -569,11 +571,11 @@ impl QuantumRuntime {
         Instruction::Subgraph(subgraph, var) => {
           let subgraph = follow_reference(subgraph, context).as_callable();
           let mut subcontext = Ptr::from(context.create_subcontext());
-          for (arg, value) in subgraph.argument_mappings.iter() {
+          for (arg, value) in &subgraph.argument_mappings {
             // Need to deep-clone as the value sticks around in the Graph shell.
             subcontext
               .variables
-              .insert(arg.clone(), follow_reference(&value, context).clone());
+              .insert(arg.clone(), follow_reference(value, context).clone());
           }
 
           if self.is_tracing() {
@@ -589,7 +591,7 @@ impl QuantumRuntime {
 
           if self.is_tracing() {
             log!(Level::Info, "");
-            log!(Level::Info, "{} <--", graph.identity)
+            log!(Level::Info, "{} <--", graph.identity);
           }
         }
         Instruction::Assign(variable, val) => {
@@ -652,7 +654,7 @@ impl QuantumRuntime {
               context.deactivate_qubit(&qb);
             }
             Value::Array(array) => {
-              for value in array.iter() {
+              for value in array {
                 let followed = follow_reference(value, context);
                 let qubit = followed.as_qubit();
 
@@ -826,9 +828,7 @@ impl QuantumRuntime {
               };
 
               let mut projection = context.activate_projection(
-                &qubits
-                  .iter()
-                  .next()
+                &qubits.first()
                   .expect("Should have at least one qubit to measure.")
               );
               projection.add(&Ptr::from(QuantumOperations::Measure(qubits.clone())));
@@ -847,10 +847,10 @@ impl QuantumRuntime {
               let variable = if let Value::String(val) = followed_var.deref() {
                 val.clone()
               } else {
-                format!("%cr_{}", followed_var.to_string())
+                format!("%cr_{followed_var}")
               };
 
-              with_mutable!(context.add(&variable, promise.borrow()))
+              with_mutable!(context.add(&variable, promise.borrow()));
             }
           }
         }
@@ -899,13 +899,19 @@ pub struct VariableScopes {
   end: i64
 }
 
-impl VariableScopes {
-  pub fn new() -> VariableScopes {
+impl Default for VariableScopes {
+  fn default() -> Self {
     VariableScopes {
       captured_variables: HashSet::new(),
       start: 0,
       end: 0
     }
+  }
+}
+
+impl VariableScopes {
+  pub fn new() -> VariableScopes {
+    VariableScopes::default()
   }
 }
 
@@ -948,8 +954,8 @@ pub struct RuntimeContext {
 // TODO: Might want to split the concept of constant runtime data and variable data. The evaluated
 //  data is relatively constant.
 
-impl RuntimeContext {
-  pub fn new() -> RuntimeContext {
+impl Default for RuntimeContext {
+  fn default() -> Self {
     RuntimeContext {
       globals: Ptr::from(HashMap::new()),
       variables: HashMap::default(),
@@ -961,6 +967,12 @@ impl RuntimeContext {
       is_base_profile: false
     }
   }
+}
+
+impl RuntimeContext {
+  pub fn new() -> RuntimeContext {
+    RuntimeContext::default()
+  }
 
   pub fn from_evaluation(context: &Ptr<EvaluationContext>) -> RuntimeContext {
     RuntimeContext {
@@ -971,7 +983,7 @@ impl RuntimeContext {
       scopes: Ptr::from(HashMap::new()),
       method_graphs: context.method_graphs.clone(),
       associated_runtime: Ptr::default(),
-      is_base_profile: context.is_base_profile.deref().clone()
+      is_base_profile: *context.is_base_profile.deref()
     }
   }
 
@@ -984,7 +996,7 @@ impl RuntimeContext {
       scopes: self.scopes.clone(),
       method_graphs: self.method_graphs.clone(),
       associated_runtime: self.associated_runtime.clone(),
-      is_base_profile: self.is_base_profile.clone()
+      is_base_profile: self.is_base_profile
     }
   }
 
@@ -1009,7 +1021,7 @@ impl RuntimeContext {
   }
 
   /// Releases a qubit from the context freeing it up for re-allocation.
-  /// Different from [deactivate_qubit] in that it doesn't have any interaction with
+  /// Different from [`deactivate_qubit`] in that it doesn't have any interaction with
   /// active projections.
   fn release_qubit(&mut self, qb: &Qubit) {
     if let Some(qb) = self.active_qubits.get(&qb.index) {
@@ -1039,8 +1051,7 @@ impl RuntimeContext {
       || {
         self
           .globals
-          .get(var.as_str())
-          .map_or(None, |val| Some(val.clone_inner()))
+          .get(var.as_str()).map(|val| val.clone_inner())
       },
       |val| Some(val.clone())
     )

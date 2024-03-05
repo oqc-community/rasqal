@@ -63,7 +63,7 @@ impl StateHistory {
     StateHistory {
       timeline: Ptr::from(HashMap::new()),
       metadata: meta.clone(),
-      index: index.clone()
+      index: *index
     }
   }
 
@@ -94,7 +94,7 @@ impl StateHistory {
     // We measure first to collapse any state then just reset our timeline to 0.
     let counter = with_mutable_self!(self.metadata.next_counter());
     self.add(
-      counter.clone(),
+      counter,
       StateElement::Single(SingleState::new(&counter, SpherePoint::new(), &self.index))
     );
   }
@@ -133,7 +133,7 @@ impl StateHistory {
   fn add_cluster(&self, counter: &i64, cluster: &Ptr<ClusterState>) {
     with_mutable_self!(self
       .timeline
-      .insert(counter.clone(), StateElement::Cluster(cluster.clone())));
+      .insert(*counter, StateElement::Cluster(cluster.clone())));
   }
 
   /// Forms a cluster group with the states at the passed-in index.
@@ -141,8 +141,7 @@ impl StateHistory {
     if let StateElement::Cluster(cluster) = self.state_of() {
       if cluster.spans()
         == targets
-          .iter()
-          .map(|val| val.clone())
+          .iter().copied()
           .collect::<HashSet<_>>()
       {
         return cluster.clone();
@@ -152,7 +151,7 @@ impl StateHistory {
     // If any of our targets are already clusters then we expand over those clusters as well.
     let mut target_indexes = targets
       .iter()
-      .map(|val| val.clone())
+      .map(|val| *val)
       .collect::<HashSet<_>>();
     for target in targets {
       let state = with_mutable_self!(self.metadata.root.get_history(target));
@@ -207,10 +206,10 @@ pub struct SingleState {
 impl SingleState {
   pub fn new(counter: &i64, state: SpherePoint, index: &i64) -> SingleState {
     SingleState {
-      counter: counter.clone(),
+      counter: *counter,
       state,
       collapsed: false,
-      index: index.clone()
+      index: *index
     }
   }
 
@@ -258,7 +257,7 @@ impl ClusterState {
     let entry = with_mutable!(graph.remove(target).unwrap());
     with_mutable_self!(self
       .collapse_history
-      .insert(self.metadata.counter.clone(), (target.clone(), entry)));
+      .insert(self.metadata.counter, (*target, entry)));
   }
 
   pub fn X(&self, radii: i64, index: &i64) { self.clustered_state.X(radii, index); }
@@ -273,8 +272,7 @@ impl ClusterState {
     self
       .clustered_state
       .state_graph
-      .keys()
-      .map(|val| val.clone())
+      .keys().copied()
       .collect::<HashSet<_>>()
   }
 }
@@ -379,7 +377,7 @@ impl ClusterRelationship {
 pub struct QuantumState {
   metadata: Ptr<Metadata>,
 
-  /// Key = index, Value = staet history.
+  /// Key = index, Value = state history.
   state_graph: Ptr<HashMap<i64, StateHistory>>
 }
 
@@ -396,13 +394,13 @@ impl QuantumState {
     }
     collection
   }
-
+  
   pub fn get_history(&self, index: &i64) -> &mut StateHistory {
     if let Some(qt) = with_mutable_self!(self.state_graph.get_mut(index)) {
       qt
     } else {
       let timeline = StateHistory::new(&self.metadata, index);
-      with_mutable_self!(self.state_graph.insert(index.clone(), timeline));
+      with_mutable_self!(self.state_graph.insert(*index, timeline));
       with_mutable_self!(self.state_graph.get_mut(index).unwrap())
     }
   }
@@ -448,24 +446,24 @@ impl QuantumState {
     match left_state {
       StateElement::Single(single) => {
         right_history.add(
-          op_counter.clone(),
+          op_counter,
           StateElement::Single(single.clone_with_counter(&op_counter))
         );
       }
       StateElement::Cluster(cluster) => {
-        right_history.add(op_counter.clone(), StateElement::Cluster(cluster.clone()));
+        right_history.add(op_counter, StateElement::Cluster(cluster.clone()));
       }
     }
 
     match right_state {
       StateElement::Single(single) => {
         left_history.add(
-          op_counter.clone(),
+          op_counter,
           StateElement::Single(single.clone_with_counter(&op_counter))
         );
       }
       StateElement::Cluster(cluster) => {
-        left_history.add(op_counter.clone(), StateElement::Cluster(cluster.clone()));
+        left_history.add(op_counter, StateElement::Cluster(cluster.clone()));
       }
     }
   }
@@ -498,8 +496,8 @@ impl Metadata {
   }
 
   pub fn next_counter(&mut self) -> i64 {
-    self.counter = self.counter + 1;
-    return self.counter;
+    self.counter += 1;
+    self.counter
   }
 }
 
@@ -522,7 +520,7 @@ impl QuantumStatePredictor {
     match op.deref() {
       QuantumOperations::Reset(qbs) => {
         for qubit in qbs {
-          self.state.reset(&qubit.index)
+          self.state.reset(&qubit.index);
         }
       }
       QuantumOperations::U(qb, theta, phi, lambda) => {
@@ -544,7 +542,7 @@ impl QuantumStatePredictor {
         &targets.index,
         &controls
           .iter()
-          .map(|val| val.index.clone())
+          .map(|val| val.index)
           .collect::<Vec<_>>(),
         1
       ),
@@ -553,7 +551,7 @@ impl QuantumStatePredictor {
         &targets.index,
         &controls
           .iter()
-          .map(|val| val.index.clone())
+          .map(|val| val.index)
           .collect::<Vec<_>>(),
         1
       ),
@@ -562,7 +560,7 @@ impl QuantumStatePredictor {
         &targets.index,
         &controls
           .iter()
-          .map(|val| val.index.clone())
+          .map(|val| val.index)
           .collect::<Vec<_>>(),
         1
       ),
@@ -635,13 +633,13 @@ impl Display for QuantumOperations {
             .collect::<Vec<_>>()
             .join(", ")
         ),
-        QuantumOperations::I(qb) => format!("id[{}]", qb),
+        QuantumOperations::I(qb) => format!("id[{qb}]"),
         QuantumOperations::U(qb, theta, phi, lambda) => {
-          format!("U[{}] {},{},{}", qb, theta, phi, lambda)
+          format!("U[{qb}] {theta},{phi},{lambda}")
         }
-        QuantumOperations::X(qb, theta) => format!("X[{}] {}", qb, theta),
-        QuantumOperations::Y(qb, theta) => format!("Y[{}] {}", qb, theta),
-        QuantumOperations::Z(qb, theta) => format!("Z[{}] {}", qb, theta),
+        QuantumOperations::X(qb, theta) => format!("X[{qb}] {theta}"),
+        QuantumOperations::Y(qb, theta) => format!("Y[{qb}] {theta}"),
+        QuantumOperations::Z(qb, theta) => format!("Z[{qb}] {theta}"),
         QuantumOperations::CX(controlled, target, theta) => format!(
           "CX[{}->{}] {}",
           controlled
@@ -685,7 +683,7 @@ impl Display for QuantumOperations {
   }
 }
 
-/// A projection is the umbralla for each individual quantum execution. When a qubit is first
+/// A projection is the umbrella for each individual quantum execution. When a qubit is first
 /// activated a projection is created that will then take care of execution and analysis.
 ///
 /// For a full description see the paper, but otherwise consider this a quantum analysis
@@ -731,10 +729,8 @@ impl QuantumProjection {
     // TODO: Needs far more nuanced equality check, as we want to check on predicted values.
 
     // If we're full comparison, do a quick short-circuit.
-    if let None = qbs {
-      if self.instructions.len() != other.instructions.len() {
-        return false;
-      }
+    if qbs.is_none() && self.instructions.len() != other.instructions.len() {
+      return false;
     }
 
     let index_set: Option<HashSet<&i64>> = qbs.map(|val| HashSet::from_iter(val));
@@ -767,7 +763,7 @@ impl QuantumProjection {
       }
     }
 
-    return true;
+    true
   }
 
   /// Is our projection simple enough to use algorithmic prediction?
@@ -859,13 +855,7 @@ impl QuantumProjection {
       self.predict()
     } else {
       let features = QuantumFeatures::default();
-      let runtime = self.engines.find_capable_QPU(&features).expect(
-        format!(
-          "Cannot find QPU with these features available: [{}]",
-          features
-        )
-        .as_str()
-      );
+      let runtime = self.engines.find_capable_QPU(&features).unwrap_or_else(|| panic!("Cannot find QPU with these features available: [{}]", features));
 
       let builder = runtime.create_builder();
       for inst in self.instructions.iter() {
@@ -880,25 +870,25 @@ impl QuantumProjection {
             builder.i(qb);
           }
           QuantumOperations::U(qb, theta, phi, lambda) => {
-            builder.u(qb, theta.clone(), phi.clone(), lambda.clone());
+            builder.u(qb, *theta, *phi, *lambda);
           }
           QuantumOperations::X(qb, radians) => {
-            builder.x(qb, radians.clone());
+            builder.x(qb, *radians);
           }
           QuantumOperations::Y(qb, radians) => {
-            builder.y(qb, radians.clone());
+            builder.y(qb, *radians);
           }
           QuantumOperations::Z(qb, radians) => {
-            builder.z(qb, radians.clone());
+            builder.z(qb, *radians);
           }
           QuantumOperations::CX(controls, targets, radians) => {
-            builder.cx(controls, targets, radians.clone());
+            builder.cx(controls, targets, *radians);
           }
           QuantumOperations::CZ(controls, targets, radians) => {
-            builder.cz(controls, targets, radians.clone());
+            builder.cz(controls, targets, *radians);
           }
           QuantumOperations::CY(controls, targets, radians) => {
-            builder.cy(controls, targets, radians.clone());
+            builder.cy(controls, targets, *radians);
           }
           QuantumOperations::Measure(qbs) => {
             for qb in qbs {
@@ -916,7 +906,7 @@ impl QuantumProjection {
     if self.is_tracing() {
       log!(Level::Info, "Executed circuit:");
       for inst in self.instructions.iter() {
-        log!(Level::Info, "{}", inst.to_string())
+        log!(Level::Info, "{}", inst.to_string());
       }
       log!(Level::Info, "Projection results:");
 
@@ -930,7 +920,7 @@ impl QuantumProjection {
         .collect::<Vec<_>>();
       result_values.sort_by(|(left_key, _), (right_key, _)| left_key.cmp(right_key));
       for (key, value) in result_values.iter() {
-        log!(Level::Info, "  \"{}\": {}", key.clone(), value)
+        log!(Level::Info, "  \"{}\": {}", key, value);
       }
     }
 
@@ -986,7 +976,6 @@ impl AnalysisResult {
       .keys()
       .next()
       .map_or(0, |val| val.len())
-      .clone()
   }
 
   pub fn one() -> AnalysisResult { AnalysisResult::new(HashMap::from([("1".to_string(), 100)])) }
