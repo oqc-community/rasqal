@@ -2,7 +2,7 @@
 name = "munchqin"
 version = "0.1.0"
 requires-python = ">=3.9"
-description = "A dynamically executed quantum-classical hybrid runtime."
+description = "A dynamically executed quantum-classical hybrid optimizing runtime."
 license = { file = "LICENSE" }
 readme = "README.md"
 classifiers = [
@@ -17,6 +17,7 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
 ]
+
 authors = [
     { name = "John Dumbell", email = "euphoricEulogy@gmail.com" }
 ]
