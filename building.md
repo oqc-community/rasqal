@@ -24,7 +24,7 @@ When these tools have been downloaded you run `build.ps1` at `/src/munchkin/buil
 From this point you can build the Rust project with cargo and deal with it seperately.
 But if you need to redeploy the wheel and test things from Python you need to run the build script again.
 
-If you still have issues you can look at the CI cross-OS build script and see what might bemissing.
+If you have issues you can look at the [CI cross-OS build script](https://github.com/oqc-community/munchkin/blob/develop/.github/workflows/deploy-wheels.yaml) and see what might be missing or out of date from the documentation.
 
 #### Building LLVM from source
 
