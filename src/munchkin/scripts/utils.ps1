@@ -51,7 +51,6 @@ function Test-InDevContainer {
     $IsLinux -and (Test-Path env:\IN_DEV_CONTAINER)
 }
 
-
 # Sets the LLVM path in the env section of the .cargo/config.toml
 # Configures vscode rust analyzer to the correct features
 function Use-LlvmInstallation {
@@ -300,17 +299,26 @@ function install-llvm {
     Write-BuildLog "installationDirectory: $installationDirectory"
     New-Item -ItemType Directory -Force $installationDirectory | Out-Null
     if (($operation -eq "download")) {
-        if (!(Test-Path -Path "$installationDirectory/$llvm_release_file" -PathType Leaf)) {
-            Invoke-WebRequest -Uri "$llvm_release" -OutFile "$installationDirectory/$llvm_release_file"
-        }
-        else {
-            Write-BuildLog "Already downloaded pre-built LLVM binaries"
-        }
-        if (!(Test-Path -Path "$installationDirectory/bin" -PathType Leaf)) {
-            Write-BuildLog "Extracting LLVM binaries under $installationDirectory"
-            tar -xvf "$installationDirectory/$llvm_release_file" -C $installationDirectory --strip-components=1
+        if ($IsWindows) {
+            if (!(Test-Path -Path "$installationDirectory/bin" -PathType Leaf)) {
+                Write-BuildLog "Extracting LLVM binaries under $installationDirectory"
+                7z x -y "$buildllvmDir/zipped/$feature.7z" -o"$installationDirectory"
+            } else {
+                Write-BuildLog "Already extracted LLVM binaries"
+            }
         } else {
-            Write-BuildLog "Already extracted LLVM binaries"
+            if (!(Test-Path -Path "$installationDirectory/$llvm_release_file" -PathType Leaf)) {
+                Invoke-WebRequest -Uri "$llvm_release" -OutFile "$installationDirectory/$llvm_release_file"
+            } else {
+                Write-BuildLog "Already downloaded pre-built LLVM binaries"
+            }
+
+            if (!(Test-Path -Path "$installationDirectory/bin" -PathType Leaf)) {
+                Write-BuildLog "Extracting LLVM binaries under $installationDirectory"
+                tar -xvf "$installationDirectory/$llvm_release_file" -C $installationDirectory --strip-components=1
+            } else {
+                Write-BuildLog "Already extracted LLVM binaries"
+            }
         }
     }
     elseif (($operation -eq "build")) {
