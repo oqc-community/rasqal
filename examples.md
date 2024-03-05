@@ -1,7 +1,7 @@
 ### Getting started
 
 To run Munchkin you'll need a QIR file, whether in its human-readable .ll form or bitcode. 
-We have some pre-built QIR that we use for tests (`src/munchkin/tests/qsharp`) that you can use and modify if needed.
+We have some pre-built QIR that we use for tests (`src/tests/qsharp`) that you can use and modify if needed.
 
 For our first example we're going to use the default simulator backend, so will not delve into the details required to add your own.
 
@@ -54,7 +54,7 @@ It's called sequentially with all the gates and instructions that are going to b
 }
 ```
 
-Both API's can be found [here](https://github.com/oqc-community/munchkin/blob/develop/src/munchkin/pykin/pykin/adaptors.py).
+Both API's can be found [here](https://github.com/oqc-community/munchkin/blob/develop/src/munchkin/munchqin/adaptors.py).
 
 So you now have a custom builder and runtime all you need to do then is to make sure they get run correctly. This is where you would use a `MunchkinRuntime` to help:
 ```python
@@ -78,7 +78,7 @@ The `fetch_qasm_runtime` method we used earlier is simply a wrapper which loads 
 
 With that, our custom classes will now be called when a quantum execution is needed, well if we put in the various methods anyway.
 
-If you'd like a template, our [QASM backends](https://github.com/oqc-community/munchkin/blob/develop/src/munchkin/pykin/pykin/simulators.py) can provide one.
+If you'd like a template, our [QASM backends](https://github.com/oqc-community/munchkin/blob/develop/src/munchkin/munchqin/simulators.py) can provide one.
 
 ### Debugging
 
