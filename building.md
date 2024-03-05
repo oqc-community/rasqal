@@ -2,17 +2,36 @@
 
 Prerequisites:
 
-1. LLVM. Our build scripts can download a binary, or you can [build it yourself](https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-llvm).
-2. [Python 3.9](https://www.python.org/downloads/).
-3. [Rust](https://www.rust-lang.org/tools/install).
-4. [Powershell 7](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell?view=powershell-7.4).
+1. [Python 3.9](https://www.python.org/downloads/).
+2. [Rust](https://www.rust-lang.org/tools/install).
 
-When these tools have been downloaded you run `build.ps1` in the root project folder: `/src/munchkin/build.ps1`. This will initialize a Python venv, build the Rust projects, install the resultant wheel into that environment and run tests. 
+With these installed then run:
 
-#### LLVM
+[Linux]
 
-If you want to customize how LLVM is built/found, the script has environment variables for a variety of ways to do so. The main ones are:
+`sudo apt install -y build-essential libffi-dev xz-utils powershell curl wget gnupg apt-transport-https`
 
+[Windows]
+
+`winget install build-essential libffi-dev xz-utils powershell curl wget gnupg apt-transport-https 7-zip`
+
+[Mac]
+
+Soon to come.
+
+When these tools have been downloaded you run `build.ps1` at `/src/munchkin/build.ps1`. This will initialize a Python venv, build the Rust projects, install the resultant wheel into that environment and run tests. 
+
+From this point you can build the Rust project with cargo and deal with it seperately.
+But if you need to redeploy the wheel and test things from Python you need to run the build script again.
+
+If you still have issues you can look at the CI cross-OS build script and see what might bemissing.
+
+#### Building LLVM from source
+
+If your system has no LLVM binaries available you can [build it yourself](https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-llvm).
+You should only attempt this if you're familiar with LLVM already or have no binaries available.
+
+You can use these environmental variables to customize the LLVM build:
 ```bash
 MK_LLVM_EXTERNAL_DIR=/path/to/llvm # Directory to locally-built LLVM.
 MK_DOWNLOAD_LLVM=true # Whether to download and build LLVM.
