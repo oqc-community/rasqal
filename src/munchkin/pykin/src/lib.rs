@@ -19,7 +19,9 @@ extern crate core;
 
 use log::{log, log_enabled, Level, LevelFilter};
 use std::env::current_exe;
+use std::fs;
 use std::fs::File;
+use std::path::Path;
 
 mod analysis;
 mod builders;
@@ -87,7 +89,12 @@ fn initialize_loggers(log_path: Option<String>) {
 
   let mut appended_messages = Vec::new();
   if let Some(logging_path) = log_path {
-    let file = File::create(logging_path.clone());
+    let log_file = Path::new(logging_path.as_str());
+    if let Some(dir) = log_file.parent() {
+      fs::create_dir_all(dir);
+    }
+
+    let file = File::create(log_file);
     if let Ok(file) = file {
       // TODO: Just print to both commandline and file.
       let target = Box::new(file);
