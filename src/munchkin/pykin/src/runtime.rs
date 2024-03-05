@@ -598,8 +598,6 @@ impl QuantumRuntime {
           //  they can't also be in-line.
           let cloned_value = val.clone_inner();
           if let Value::Callable(callable) = cloned_value.deref() {
-            let more_dave = "";
-
             for key in callable.argument_mappings.keys().clone() {
               with_mutable!(callable.argument_mappings.insert(
                 key.clone(),
