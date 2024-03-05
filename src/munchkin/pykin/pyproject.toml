@@ -31,7 +31,6 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://readthedocs.org"
 Repository = "https://github.com/oqc-community/munchkin.git"
 Issues = "https://github.com/oqc-community/munchkin/issues"
 
