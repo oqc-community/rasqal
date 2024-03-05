@@ -6,14 +6,10 @@ Include utils.ps1
 Properties {
     $Root = Resolve-Path (Split-Path -Parent $PSScriptRoot)
     $BuildLlvm = Join-Path $Root build-llvm
-    $Pykin = Join-Path $Root pykin
-    $Examples = Join-Path $Root examples
+    $Munchkin = Join-Path $Root munchkin
     $Target = Join-Path $Root target
     $Wheels = Join-Path $Target wheels
     $CargoConfigToml = Join-Path $Root .cargo config.toml
-    $VscodeSettingsJson = Join-Path $Root .vscode settings.json
-    $DocsRoot = Join-Path $Root docs
-    $DocsBuild = Join-Path $DocsRoot _build
     $RustVersion = "1.64.0"
     $Python = Resolve-Python
 }
@@ -42,7 +38,7 @@ task build-llvm -depends init {
 task build-munchkin -depends init {
     $env:MATURIN_PEP517_ARGS = (Get-CargoArgs) -Join " "
     Get-Wheels munchqin | Remove-Item -Verbose
-    Invoke-LoggedCommand { pip --verbose wheel --no-deps --wheel-dir $Wheels $Pykin }
+    Invoke-LoggedCommand { pip --verbose wheel --no-deps --wheel-dir $Wheels $Munchkin }
 
     if (Test-CommandExists auditwheel) {
         $unauditedWheels = Get-Wheels munchqin
@@ -59,7 +55,7 @@ task build-munchkin -depends init {
 }
 
 task test-munchkin -depends build-munchkin {
-    Invoke-LoggedCommand -workingDirectory $Pykin {
+    Invoke-LoggedCommand -workingDirectory $Munchkin {
         cargo test --release @(Get-CargoArgs)
     }
 
@@ -172,8 +168,8 @@ task check-licenses {
 #     # https://github.com/EmbarkStudios/cargo-about
 #     $config = Join-Path $Root notice.toml
 #     $template = Join-Path $Root notice.hbs
-#     $notice = Join-Path $Pykin NOTICE-WHEEL.txt
-#     Invoke-LoggedCommand -workingDirectory $Pykin {
+#     $notice = Join-Path $Munchkin NOTICE-WHEEL.txt
+#     Invoke-LoggedCommand -workingDirectory $Munchkin {
 #         cargo about generate --config $config --all-features --output-file $notice $template
 #         $contents = Get-Content -Raw $notice
 #         [System.Web.HttpUtility]::HtmlDecode($contents) | Out-File $notice

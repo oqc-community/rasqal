@@ -1,6 +1,6 @@
 [package]
-authors = ["Oxford Quantum Circuits"]
-name = "pykin"
+authors = ["John Dumbell"]
+name = "munchkin"
 version = "0.1.0"
 edition = "2021"
 license = ""

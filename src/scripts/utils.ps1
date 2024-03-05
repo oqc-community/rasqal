@@ -74,18 +74,6 @@ function Use-LlvmInstallation {
     New-Item -ItemType File -Path $CargoConfigToml -Force
     Add-Content -Path $CargoConfigToml -Value "[env]"
     Add-Content -Path $CargoConfigToml -Value "$($prefix) = `"$($path)`""
-
-    # Add llvm feature version for rust-analyzer extension
-    $vscode_settings = @{}
-    if (!(Test-Path $VscodeSettingsJson)) {
-        New-Item -ItemType File -Path $VscodeSettingsJson -Force
-    }
-    else {
-        $vscode_settings = Get-Content $VscodeSettingsJson | ConvertFrom-Json -AsHashtable
-    }
-
-    $vscode_settings."rust-analyzer.cargo.features" = @("$(Get-LLVMFeatureVersion)")
-    $vscode_settings | ConvertTo-Json | Set-Content -Path $VscodeSettingsJson
 }
 
 function Test-LlvmConfig {
