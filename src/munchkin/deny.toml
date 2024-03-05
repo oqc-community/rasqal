@@ -1,0 +1,12 @@
+[licenses]
+copyleft = "deny"
+unused-allowed-license = "warn"
+confidence-threshold = 0.95
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MPL-2.0",
+    "BSD-3-Clause",
+    "ISC",
+]

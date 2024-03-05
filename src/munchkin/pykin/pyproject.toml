@@ -22,7 +22,6 @@ authors = [
 ]
 
 dependencies = [
-    "pytest",
     "qiskit==0.45.*",
     "qiskit-optimization==0.4.*",
     "qiskit-ignis==0.7.*",

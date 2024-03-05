@@ -46,11 +46,6 @@ function Test-CommandExists($name) {
     $null -ne (Get-Command $name -ErrorAction SilentlyContinue)
 }
 
-# Returns true if the current environment is a dev container.
-function Test-InDevContainer {
-    $IsLinux -and (Test-Path env:\IN_DEV_CONTAINER)
-}
-
 # Sets the LLVM path in the env section of the .cargo/config.toml
 # Configures vscode rust analyzer to the correct features
 function Use-LlvmInstallation {
@@ -189,51 +184,6 @@ function Test-InVirtualEnvironment {
     (Test-InCondaEnvironment) -or (Test-InVenvEnvironment)
 }
 
-function Get-LinuxTargetTriple {
-    $triple = rustc -vV | sed -n 's|host: ||p'
-    $triple
-}
-
-function Get-LinuxContainerUserId {
-    if (Test-Path env:\MK_CONTAINER_USERID) {
-        $env:MK_CONTAINER_USERID
-    }
-    else {
-        id -u
-    }
-}
-
-function Get-LinuxContainerGroupId {
-    if (Test-Path env:\MK_CONTAINER_GROUPID) {
-        $env:MK_CONTAINER_GROUPID
-    }
-    else {
-        id -g
-    }
-}
-
-function Get-LinuxContainerUserName {
-    if (Test-Path env:\MK_CONTAINER_USERNAME) {
-        $env:MK_CONTAINER_USERNAME
-    }
-    else {
-        [Environment]::UserName
-    }
-}
-
-function Write-CacheStats {
-    if (Test-CommandExists ccache) {
-        Write-BuildLog "ccache config:"
-        & { ccache --show-config } -ErrorAction SilentlyContinue
-        Write-BuildLog "ccache stats:"
-        & { ccache --show-stats } -ErrorAction SilentlyContinue
-    }
-    if (Test-CommandExists sccache) {
-        Write-BuildLog "sccache config/stats:"
-        & { sccache --show-stats } -ErrorAction SilentlyContinue
-    }
-}
-
 function Get-LLVMFeatureVersion {
     if (Test-Path env:\MK_LLVM_FEATURE_VERSION) {
         $env:MK_LLVM_FEATURE_VERSION
@@ -271,13 +221,6 @@ function Resolve-Python() {
         Write-BuildLog "Python 3"
         "python3"
     }
-}
-
-function Resolve-PythonRequirements([string[]] $projects) {
-    $report = pip --quiet install --dry-run --ignore-installed --report - @projects | ConvertFrom-Json
-    $report.install.metadata `
-    | Where-Object { !$_.name.StartsWith("munchqin") } `
-    | ForEach-Object { "$($_.name)==$($_.version)" }
 }
 
 function install-llvm {
@@ -326,31 +269,4 @@ function install-llvm {
             cargo build --release --no-default-features --features "$operation-llvm,$feature-no-llvm-linking" -vv
         }
     }
-}
-
-function Get-CCacheParams {
-    # only ccache is supported in the container for now.
-    # we would need a way to specify which cache is used to
-    # support both.
-    if (Test-CommandExists ccache) {
-        # we need to map the local cache dir into the
-        # container. If the env var isn't set, ask ccache
-        $cacheDir = ""
-        if (Test-Path env:\CCACHE_DIR) {
-            $cacheDir = $Env:CCACHE_DIR
-        }
-        else {
-            $cacheDir = exec { ccache -k cache_dir }
-        }
-        if (![string]::IsNullOrWhiteSpace($cacheDir)) {
-            New-Item -ItemType Directory -Force $cacheDir | Out-Null
-            
-            $cacheDir = Resolve-Path $cacheDir
-            # mount the cache outside of any runner mappings
-            $cacheMount = @("-v", "${cacheDir}:/ccache")
-            $cacheEnv = @("-e", "CCACHE_DIR=`"/ccache`"")
-            return $cacheMount, $cacheEnv
-        }
-    }
-    return "", ""
 }
