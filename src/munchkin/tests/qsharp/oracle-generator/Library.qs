@@ -24,14 +24,14 @@ namespace Microsoft.Quantum.OracleGenerator {
                         if cb { X(b); }
                         if cc { X(c); }
 
-                        let r1 = IsResultOne(MResetZ(a));
-                        let r2 = IsResultOne(MResetZ(b));
-                        let r3 = IsResultOne(MResetZ(c));
+                        let m1 = M(a);
+                        let m2 = M(b);
+                        let m3 = M(c);
+
+                        let r1 = IsResultOne(m1);
+                        let r2 = IsResultOne(m2);
+                        let r3 = IsResultOne(m3);
                         let result = (r1 or r2) and (r1 or r3) and (r2 or r3);
-
-                        // Majority3((a, b, c), f);
-                        // let result = IsResultOne(MResetZ(b));
-
                         Message($"{cc} {cb} {ca} -> {result}");
                     }
                 }

@@ -13,5 +13,10 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Update="Microsoft.Quantum.QSharp.Core" Version="0.28.302812" />
+    <PackageReference Update="Microsoft.Quantum.Standard" Version="0.28.302812" />
+  </ItemGroup>
 
 </Project>

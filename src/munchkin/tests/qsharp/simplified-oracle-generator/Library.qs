@@ -8,19 +8,19 @@ namespace Microsoft.Quantum.OracleGenerator {
 
     @EntryPoint()
     operation RunProgram() : Unit {
-        use (a, b, c) = (Qubit(), Qubit(), Qubit());
-        use f = Qubit();
-
         for ca in [false, true] {
             for cb in [false, true] {
                 for cc in [false, true] {
+                    use (a, b, c) = (Qubit(), Qubit(), Qubit());
                     within {
                         if ca { X(a); }
                         if cb { X(b); }
                         if cc { X(c); }
                     } apply {
-                        let result = IsResultOne(MResetZ(f));
-                        Message($"{cc} {cb} {ca} -> {result}");
+                        let first = M(a);
+                        let second = M(b);
+                        let third = M(c);
+                        Message($"{cc} {cb} {ca} -> {IsResultOne(first)}, {IsResultOne(second)}, {IsResultOne(third)}");
                     }
                 }
             }
