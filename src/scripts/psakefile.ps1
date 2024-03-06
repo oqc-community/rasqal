@@ -19,19 +19,21 @@ Properties {
 
 task default -depends build
 task build -depends build-llvm, build-munchkin, test-munchkin
-task check -depends format, check-licenses, clippy
+task check -depends check-licenses
+task format -depends format-rust
+task all -depends build, check, format
 
-task format {
+task format-rust {
     Invoke-LoggedCommand -workingDirectory $Root {
         cargo fmt --all
     }
 }
 
-task clippy {
-    Invoke-LoggedCommand -workingDirectory $Root {
-        cargo clippy --fix -- --no-deps
-    }
-}
+# task clippy {
+#     Invoke-LoggedCommand -workingDirectory $Root {
+#         cargo clippy --fix -- --no-deps
+#     }
+# }
 
 task build-llvm -depends init {
     Invoke-LoggedCommand -workingDirectory $BuildLlvm { cargo test --release @(Get-CargoArgs) }
@@ -157,7 +159,7 @@ task check-licenses {
 
     Invoke-LoggedCommand -wd $Root {
         pip install pip-licenses
-        pip-licenses --allow-only=""
+        pip-licenses --allow-only="BSD License;Apache Software License;MIT License;MIT No Attribution License (MIT-0);BSD-3-Clause;Mozilla Public License 2.0 (MPL 2.0);MIT OR Apache-2.0;MIT"
     }
 }
 

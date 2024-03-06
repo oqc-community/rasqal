@@ -10,16 +10,14 @@
 [cmdletbinding()]
 param(
     [Parameter(Position = 0, Mandatory = 0)]
-    [string]$buildFile = "$(Join-Path $PSScriptRoot psakefile.ps1)",
-    [Parameter(Position = 1, Mandatory = 0)]
     [string[]]$taskList = @(),
-    [Parameter(Position = 2, Mandatory = 0)]
+    [Parameter(Position = 1, Mandatory = 0)]
     [switch]$docs = $false,
-    [Parameter(Position = 3, Mandatory = 0)]
+    [Parameter(Position = 2, Mandatory = 0)]
     [System.Collections.Hashtable]$parameters = @{},
-    [Parameter(Position = 4, Mandatory = 0)]
+    [Parameter(Position = 3, Mandatory = 0)]
     [System.Collections.Hashtable]$properties = @{},
-    [Parameter(Position = 5, Mandatory = $false)]
+    [Parameter(Position = 4, Mandatory = $false)]
     [switch]$detailedDocs = $false,
     [Parameter(Position = 5, Mandatory = $false)]
     [switch]$buildFromSource = $false
@@ -46,6 +44,7 @@ if ($help) {
     return
 }
 
+$buildFile = "$(Join-Path $PSScriptRoot psakefile.ps1)"
 if ($buildFile -and (-not (Test-Path -Path $buildFile))) {
     $absoluteBuildFile = (Join-Path -Path $scriptPath -ChildPath $buildFile)
     if (Test-path -Path $absoluteBuildFile) {

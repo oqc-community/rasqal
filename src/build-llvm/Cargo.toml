@@ -2,7 +2,7 @@
 name = "build-llvm"
 version = "0.1.0"
 edition = "2021"
-license = ""
+license = "MIT"
 description = ""
 build = "build.rs"
 readme = "README.md"
