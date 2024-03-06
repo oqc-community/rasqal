@@ -13,6 +13,8 @@ With these installed then run:
 
 [Windows]
 
+[Winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) is the windows package manager and should be installed first.
+
 `winget install build-essential libffi-dev xz-utils powershell curl wget gnupg apt-transport-https 7-zip`
 
 [Mac]
@@ -29,7 +31,7 @@ If you have issues you can look at the [CI cross-OS build script](https://github
 #### Building LLVM from source
 
 If your system has no LLVM binaries available you can [build it yourself](https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-llvm).
-You should only attempt this if you're familiar with LLVM already or have no binaries available.
+You should only attempt this if you're familiar with LLVM already or have no binaries available, as it is rather involved and finicky on certain operating systems.
 
 You can use these environmental variables to customize the LLVM build:
 ```bash
@@ -43,7 +45,7 @@ MK_CACHE_DIR=/where/to/extract # Where to store the downloaded LLVM build. Defau
 
 [PyCharm]
 
-To get PyCharm to recognize the LLVM file path you need to add  `LLVM_SYS_140_PREFIX={path_to_repo}/src/munchkin/target/llvm14-0` to the environment variables for any Rust command. You can also use a config.toml with the same value.
+To get PyCharm to recognize the LLVM file path you need to add  `LLVM_SYS_140_PREFIX={path_to_repo}/src/target/llvm14-0` to the environment variables for any Rust command. You can also use a config.toml with the same value.
 
 [Windows]
 
