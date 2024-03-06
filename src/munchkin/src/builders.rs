@@ -19,9 +19,7 @@ pub enum IntegrationRuntime {
 }
 
 impl Default for IntegrationRuntime {
-  fn default() -> Self {
-    IntegrationRuntime::Empty
-  }
+  fn default() -> Self { IntegrationRuntime::Empty }
 }
 
 impl IntegrationRuntime {
@@ -36,8 +34,8 @@ impl IntegrationRuntime {
     if let IntegrationRuntime::Python(py) = self {
       if let IntegrationBuilder::Python(builder) = builder.deref() {
         return py.execute(builder);
-      } 
-      
+      }
+
       panic!("Runtime/Builder execution type mismatch.")
     }
 

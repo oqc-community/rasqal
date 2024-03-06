@@ -37,13 +37,7 @@ pub struct LogicalPathwayIterator {
 impl LogicalPathwayIterator {
   fn new(graph: &Ptr<AnalysisGraph>) -> LogicalPathwayIterator {
     let mut vec = VecDeque::new();
-    vec.append(
-      VecDeque::from(
-        graph
-          .entry_points().clone()
-      )
-      .borrow_mut()
-    );
+    vec.append(VecDeque::from(graph.entry_points().clone()).borrow_mut());
     LogicalPathwayIterator {
       graph: graph.clone(),
       guard: HashSet::default(),
@@ -142,9 +136,7 @@ impl Edges {
   }
 
   pub fn unconditional_out(&self) -> Option<&Ptr<Edge>> {
-    self
-      .outgoing
-      .iter().find(|val| val.conditions.is_none())
+    self.outgoing.iter().find(|val| val.conditions.is_none())
   }
 
   pub fn has_unconditional_in(&self) -> bool {
@@ -152,9 +144,7 @@ impl Edges {
   }
 
   pub fn unconditional_in(&self) -> Option<&Ptr<Edge>> {
-    self
-      .outgoing
-      .iter().find(|val| val.conditions.is_none())
+    self.outgoing.iter().find(|val| val.conditions.is_none())
   }
 }
 
@@ -210,7 +200,8 @@ impl AnalysisGraph {
     self
       .nodes
       .values()
-      .filter(|val| val.is_entry_node()).cloned()
+      .filter(|val| val.is_entry_node())
+      .cloned()
       .collect()
   }
 
@@ -219,7 +210,8 @@ impl AnalysisGraph {
     self
       .nodes
       .values()
-      .filter(|val| val.is_exit_node()).cloned()
+      .filter(|val| val.is_exit_node())
+      .cloned()
       .collect()
   }
 
@@ -258,7 +250,10 @@ impl AnalysisGraph {
 
   /// Same as [`edges_of`].
   pub fn edges_of_mut(&mut self, node_id: usize) -> &mut Ptr<Edges> {
-    self.edges.entry(node_id).or_insert_with(|| Ptr::from(Edges::new()));
+    self
+      .edges
+      .entry(node_id)
+      .or_insert_with(|| Ptr::from(Edges::new()));
     self.edges.get_mut(&node_id).unwrap()
   }
 
@@ -860,10 +855,7 @@ impl Edge {
   }
 
   /// This will initialize the vector if it's None before returning it.
-  pub fn conditions(&mut self) -> Option<Condition> {
-    self
-      .conditions.clone()
-  }
+  pub fn conditions(&mut self) -> Option<Condition> { self.conditions.clone() }
 
   /// Is this a conditional edge.
   pub fn is_unconditional(&self) -> bool { self.conditions.is_none() }
@@ -1139,8 +1131,7 @@ impl Display for Node {
     };
 
     f.write_str(
-      format!("({incoming}) -> ({node_id}) {stringified_instruction} -> ({out})")
-      .as_str()
+      format!("({incoming}) -> ({node_id}) {stringified_instruction} -> ({out})").as_str()
     )
   }
 }

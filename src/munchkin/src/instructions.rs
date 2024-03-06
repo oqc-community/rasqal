@@ -79,7 +79,11 @@ impl Display for Condition {
 
 impl Condition {
   pub fn new(left: Value, equality: Equalities, right: Value) -> Condition {
-    Condition { equality, left, right }
+    Condition {
+      equality,
+      left,
+      right
+    }
   }
 }
 
@@ -200,9 +204,7 @@ impl Display for Instruction {
           format!(
             "{} = activate qb{}",
             var,
-            opt
-              .as_ref()
-              .map_or(String::new(), |val| format!("[{val}]"))
+            opt.as_ref().map_or(String::new(), |val| format!("[{val}]"))
           )
         }
         Instruction::DeactivateQubit(qbs) => {
@@ -604,9 +606,7 @@ impl Value {
   /// Attempts to coerce this value into a reference. Returns None if it can't.
   pub fn try_as_reference(&self) -> Option<(String, Option<Ptr<Value>>)> {
     match self {
-      Value::Ref(ref_, additional) => {
-        Some((ref_.clone(), additional.clone()))
-      }
+      Value::Ref(ref_, additional) => Some((ref_.clone(), additional.clone())),
       _ => None
     }
   }
@@ -771,9 +771,7 @@ fn value_bitand(lhs: &Value, rhs: &Value) -> Value {
     Value::Int(i) => Value::from(i & rhs.as_int()),
     Value::Long(l) => Value::from(l & rhs.as_long()),
     Value::Bool(b) => Value::from(b & rhs.as_bool()),
-    _ => panic!(
-      "Attempted | on {lhs} and {rhs} which is illegal."
-    )
+    _ => panic!("Attempted | on {lhs} and {rhs} which is illegal.")
   }
 }
 
@@ -799,9 +797,7 @@ fn value_bitor(lhs: &Value, rhs: &Value) -> Value {
     Value::Int(i) => Value::from(i | rhs.as_int()),
     Value::Long(l) => Value::from(l | rhs.as_long()),
     Value::Bool(b) => Value::from(b | rhs.as_bool()),
-    _ => panic!(
-      "Attempted | on {lhs} and {rhs} which is illegal."
-    )
+    _ => panic!("Attempted | on {lhs} and {rhs} which is illegal.")
   }
 }
 
@@ -827,9 +823,7 @@ fn value_bitxor(lhs: &Value, rhs: &Value) -> Value {
     Value::Int(i) => Value::from(i ^ rhs.as_int()),
     Value::Long(l) => Value::from(l ^ rhs.as_long()),
     Value::Bool(b) => Value::from(b ^ rhs.as_bool()),
-    _ => panic!(
-      "Attempted ^ on {lhs} and {rhs} which is illegal."
-    )
+    _ => panic!("Attempted ^ on {lhs} and {rhs} which is illegal.")
   }
 }
 
@@ -855,9 +849,7 @@ fn value_subtract(lhs: &Value, rhs: &Value) -> Value {
     Value::Int(i) => Value::Int(i - rhs.as_int()),
     Value::Long(l) => Value::Long(l - rhs.as_long()),
     Value::Float(f) => Value::Float(f - rhs.as_float()),
-    _ => panic!(
-      "Can't subtract these two values: {lhs} - {rhs}."
-    )
+    _ => panic!("Can't subtract these two values: {lhs} - {rhs}.")
   }
 }
 
@@ -939,13 +931,9 @@ fn value_add(lhs: &Value, rhs: &Value) -> Value {
         return Value::Array(result);
       }
 
-      panic!(
-        "Can't add these two values: {lhs} + {rhs}."
-      )
+      panic!("Can't add these two values: {lhs} + {rhs}.")
     }
-    _ => panic!(
-      "Can't add these two values: {lhs} + {rhs}."
-    )
+    _ => panic!("Can't add these two values: {lhs} + {rhs}.")
   }
 }
 
@@ -971,9 +959,7 @@ fn value_divide(lhs: &Value, rhs: &Value) -> Value {
     Value::Int(i) => Value::Int(i / rhs.as_int()),
     Value::Long(l) => Value::Long(l / rhs.as_long()),
     Value::Float(f) => Value::Float(f / rhs.as_float()),
-    _ => panic!(
-      "Can't divide these two values: {lhs} / {rhs}."
-    )
+    _ => panic!("Can't divide these two values: {lhs} / {rhs}.")
   }
 }
 
@@ -999,9 +985,7 @@ fn value_multiply(lhs: &Value, rhs: &Value) -> Value {
     Value::Int(i) => Value::Int(i * rhs.as_int()),
     Value::Long(l) => Value::Long(l * rhs.as_long()),
     Value::Float(f) => Value::Float(f * rhs.as_float()),
-    _ => panic!(
-      "Can't multiply these two values: {lhs} * {rhs}."
-    )
+    _ => panic!("Can't multiply these two values: {lhs} * {rhs}.")
   }
 }
 
@@ -1044,10 +1028,9 @@ impl Display for Value {
           }
           format!("[{}]", stringified.join(", "))
         }
-        Value::Ref(ref_, further) => further.as_ref().map_or_else(
-          || ref_.clone(),
-          |val| format!("{}[{}]", ref_.clone(), val)
-        ),
+        Value::Ref(ref_, further) => further
+          .as_ref()
+          .map_or_else(|| ref_.clone(), |val| format!("{}[{}]", ref_.clone(), val)),
         Value::QuantumPromise(qbs, proj) => format!(
           "deferred execution of {} for {}",
           proj,
@@ -1210,9 +1193,7 @@ impl Display for Gate {
           format!("I {qb}")
         }
         Gate::U(qb, theta, phi, lambda) => {
-          format!(
-            "U[{qb}] theta: {theta}, phi: {phi}, lambda: {lambda}"
-          )
+          format!("U[{qb}] theta: {theta}, phi: {phi}, lambda: {lambda}")
         }
         Gate::X(qb, radian) => {
           format!("X[{qb}] {radian}")
@@ -1235,9 +1216,7 @@ impl Display for Gate {
         Gate::Measure(paulis, qbs, target) => {
           format!("{target} = measure {qbs} across {paulis}")
         }
-        Gate::R(pauli, qubit, val) => format!(
-          "R{pauli}[{qubit}] {val}"
-        ),
+        Gate::R(pauli, qubit, val) => format!("R{pauli}[{qubit}] {val}"),
         Gate::CR(pauli, cont, target, radian) => {
           format!("C{pauli}[{cont}->{target}] {radian}")
         }

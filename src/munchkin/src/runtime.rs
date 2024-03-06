@@ -197,9 +197,7 @@ fn follow_reference(qx: &Ptr<Value>, context: &Ptr<RuntimeContext>) -> Ptr<Value
               value
             }
           }
-          _ => panic!(
-            "Tried indexer on value that wasn't an array: {value}."
-          )
+          _ => panic!("Tried indexer on value that wasn't an array: {value}.")
         })
     }
     _ => qx.clone()
@@ -314,9 +312,7 @@ impl Default for TracingModule {
 }
 
 impl TracingModule {
-  pub fn new() -> TracingModule {
-    TracingModule::default()
-  }
+  pub fn new() -> TracingModule { TracingModule::default() }
 
   pub fn with(tracers: ActiveTracers) -> TracingModule {
     TracingModule {
@@ -326,9 +322,7 @@ impl TracingModule {
 
   pub fn is_active(&self) -> bool { !self.tracers.is_empty() }
 
-  pub fn has(&self, check_against: ActiveTracers) -> bool {
-    self.tracers.contains(check_against)
-  }
+  pub fn has(&self, check_against: ActiveTracers) -> bool { self.tracers.contains(check_against) }
 }
 
 /// A runtime monitors, executes and maintains a cluster of graphs against the backend instances it
@@ -364,7 +358,8 @@ impl QuantumRuntime {
       let mut required_arguments = exe_graph
         .callable_graph
         .argument_mappings
-        .keys().cloned()
+        .keys()
+        .cloned()
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -471,11 +466,7 @@ impl QuantumRuntime {
           };
 
           if changed {
-            changed_variables.push(format!(
-              "({} = {})",
-              key.clone(),
-              followed_value
-            ));
+            changed_variables.push(format!("({} = {})", key.clone(), followed_value));
           }
 
           // Arrays copy their pointers so get updated in-line. Need a full copy to check
@@ -828,7 +819,8 @@ impl QuantumRuntime {
               };
 
               let mut projection = context.activate_projection(
-                &qubits.first()
+                &qubits
+                  .first()
                   .expect("Should have at least one qubit to measure.")
               );
               projection.add(&Ptr::from(QuantumOperations::Measure(qubits.clone())));
@@ -910,9 +902,7 @@ impl Default for VariableScopes {
 }
 
 impl VariableScopes {
-  pub fn new() -> VariableScopes {
-    VariableScopes::default()
-  }
+  pub fn new() -> VariableScopes { VariableScopes::default() }
 }
 
 impl Display for VariableScopes {
@@ -970,9 +960,7 @@ impl Default for RuntimeContext {
 }
 
 impl RuntimeContext {
-  pub fn new() -> RuntimeContext {
-    RuntimeContext::default()
-  }
+  pub fn new() -> RuntimeContext { RuntimeContext::default() }
 
   pub fn from_evaluation(context: &Ptr<EvaluationContext>) -> RuntimeContext {
     RuntimeContext {
@@ -1048,11 +1036,7 @@ impl RuntimeContext {
   /// Get this variables value, returns Option:None if doesn't exist.
   pub fn get(&self, var: &String) -> Option<Ptr<Value>> {
     self.variables.get(var.as_str()).map_or_else(
-      || {
-        self
-          .globals
-          .get(var.as_str()).map(|val| val.clone_inner())
-      },
+      || self.globals.get(var.as_str()).map(|val| val.clone_inner()),
       |val| Some(val.clone())
     )
   }

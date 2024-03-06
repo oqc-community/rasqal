@@ -269,7 +269,7 @@ impl<T: ?Sized> FlexiPtr<T> {
     unsafe {
       // Borrows don't require a drop, neither does None, only if we're the owner of
       // an object do we want to do anything to it.
-      
+
       if let FlexiPtr::RefCounted(ref_) = self {
         (**ref_).dec();
         if (**ref_).ref_count() <= 0 {

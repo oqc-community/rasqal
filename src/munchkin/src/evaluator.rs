@@ -110,8 +110,7 @@ pub fn parse_ref_id_from_value(ptr_string: String) -> Option<String> {
   let ptr_string = ptr_string.trim_matches('"').trim();
   let pointer_variable_finder = Regex::new("^.*\\s(%[\\w0-9\\-]+)$").unwrap();
   let capture_groups = pointer_variable_finder.captures(ptr_string);
-  let mut ref_id =
-    capture_groups.map(|val| val.get(1).unwrap().as_str().to_string());
+  let mut ref_id = capture_groups.map(|val| val.get(1).unwrap().as_str().to_string());
 
   // If we can't find a local variable, look globally.
   ref_id = ref_id.or_else(|| {
@@ -784,7 +783,8 @@ impl QIREvaluator {
     let parse_default_callable = |global_name: &String| -> Option<Ptr<AnalysisGraph>> {
       context
         .global_variables
-        .get(global_name).and_then(|callable_array| {
+        .get(global_name)
+        .and_then(|callable_array| {
           let mut first = None;
           for val in callable_array.as_array() {
             if let Some((method_name, _)) = val.try_as_reference() {

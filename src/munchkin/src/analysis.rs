@@ -139,20 +139,13 @@ impl StateHistory {
   /// Forms a cluster group with the states at the passed-in index.
   fn form_cluster(&self, counter: &i64, targets: &Vec<i64>) -> Ptr<ClusterState> {
     if let StateElement::Cluster(cluster) = self.state_of() {
-      if cluster.spans()
-        == targets
-          .iter().copied()
-          .collect::<HashSet<_>>()
-      {
+      if cluster.spans() == targets.iter().copied().collect::<HashSet<_>>() {
         return cluster.clone();
       }
     }
 
     // If any of our targets are already clusters then we expand over those clusters as well.
-    let mut target_indexes = targets
-      .iter()
-      .map(|val| *val)
-      .collect::<HashSet<_>>();
+    let mut target_indexes = targets.iter().map(|val| *val).collect::<HashSet<_>>();
     for target in targets {
       let state = with_mutable_self!(self.metadata.root.get_history(target));
       if let StateElement::Cluster(cluster) = state.state_of() {
@@ -272,7 +265,8 @@ impl ClusterState {
     self
       .clustered_state
       .state_graph
-      .keys().copied()
+      .keys()
+      .copied()
       .collect::<HashSet<_>>()
   }
 }
@@ -394,7 +388,7 @@ impl QuantumState {
     }
     collection
   }
-  
+
   pub fn get_history(&self, index: &i64) -> &mut StateHistory {
     if let Some(qt) = with_mutable_self!(self.state_graph.get_mut(index)) {
       qt
@@ -540,28 +534,19 @@ impl QuantumStatePredictor {
       QuantumOperations::CX(controls, targets, radians) => self.state.CX(
         180,
         &targets.index,
-        &controls
-          .iter()
-          .map(|val| val.index)
-          .collect::<Vec<_>>(),
+        &controls.iter().map(|val| val.index).collect::<Vec<_>>(),
         1
       ),
       QuantumOperations::CZ(controls, targets, radians) => self.state.CZ(
         180,
         &targets.index,
-        &controls
-          .iter()
-          .map(|val| val.index)
-          .collect::<Vec<_>>(),
+        &controls.iter().map(|val| val.index).collect::<Vec<_>>(),
         1
       ),
       QuantumOperations::CY(controls, targets, radians) => self.state.CY(
         180,
         &targets.index,
-        &controls
-          .iter()
-          .map(|val| val.index)
-          .collect::<Vec<_>>(),
+        &controls.iter().map(|val| val.index).collect::<Vec<_>>(),
         1
       ),
       QuantumOperations::Measure(qbs) => {
@@ -855,7 +840,12 @@ impl QuantumProjection {
       self.predict()
     } else {
       let features = QuantumFeatures::default();
-      let runtime = self.engines.find_capable_QPU(&features).unwrap_or_else(|| panic!("Cannot find QPU with these features available: [{}]", features));
+      let runtime = self.engines.find_capable_QPU(&features).unwrap_or_else(|| {
+        panic!(
+          "Cannot find QPU with these features available: [{}]",
+          features
+        )
+      });
 
       let builder = runtime.create_builder();
       for inst in self.instructions.iter() {
@@ -970,13 +960,7 @@ impl AnalysisResult {
   pub fn is_empty(&self) -> bool { self.size() == 0 }
 
   /// Return size of the results register in qubits.
-  pub fn size(&self) -> usize {
-    self
-      .distribution
-      .keys()
-      .next()
-      .map_or(0, |val| val.len())
-  }
+  pub fn size(&self) -> usize { self.distribution.keys().next().map_or(0, |val| val.len()) }
 
   pub fn one() -> AnalysisResult { AnalysisResult::new(HashMap::from([("1".to_string(), 100)])) }
 
