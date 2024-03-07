@@ -1,10 +1,28 @@
 from typing import Dict, Tuple, List, Union
 
+from .runtime import MunchkinRuntime
 from pytket.architecture import Architecture
 from pytket import Circuit, OpType
 from pytket.passes import SequencePass, DefaultMappingPass
 
 from .adaptors import BuilderAdaptor, RuntimeAdaptor
+
+
+def build_ring_architecture(num_qubits):
+    """
+    Builds a default ring architecture for the number of qubits supplied. 0->1, 1->2, ...
+    """
+    return [(i % num_qubits, (i + 1) % num_qubits) for i in range(num_qubits)]
+
+
+def apply_routing(couplings: Union[Architecture, List[Tuple[int, int]]], runtime: Union[MunchkinRuntime, RuntimeAdaptor]):
+    if isinstance(runtime, MunchkinRuntime):
+        runtime.runtimes = [TketRuntime(couplings, rt) for rt in runtime.runtimes]
+        return runtime
+    elif isinstance(runtime, RuntimeAdaptor):
+        return TketRuntime(couplings, runtime)
+    else:
+        raise ValueError(f"Cannot apply routing to {str(runtime)}")
 
 
 class TketBuilder(BuilderAdaptor):

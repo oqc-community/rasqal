@@ -4,11 +4,10 @@
 from os import remove
 from os.path import dirname, exists, join
 from tempfile import NamedTemporaryFile
-from typing import Any, List, Union, Tuple
+from typing import Any, List, Union
 
-from .routing import TketRuntime
 from .utils import initialize_logger
-from .adaptors import BuilderAdaptor, RuntimeAdaptor
+from .adaptors import RuntimeAdaptor
 from ._native import DEFAULT_LOG_FILE, Executor
 
 dev_directory = join(dirname(__file__), "..", "..", "..", "munchkin")
@@ -30,10 +29,6 @@ class MunchkinRuntime:
 
         self.runtimes: List[RuntimeAdaptor] = runtime
         self.executor = Executor()
-
-    def apply_routing(self, couplings: List[Tuple[int, int]]):
-        """ Applies routing to all runtime adaptors currently loaded. """
-        self.runtimes = [TketRuntime(couplings, rt) for rt in self.runtimes]
 
     def trace_graphs(self) -> "MunchkinRuntime":
         """
@@ -61,7 +56,8 @@ class MunchkinRuntime:
 
     def run_ll(self, ll_string: str, args: List[Any] = None):
         """Runs a .ll string. Creates temporary file and writes to it."""
-        with NamedTemporaryFile(suffix=".ll", delete=False) as fp:
+        # Need to set as string not bytes for encoding purposes.
+        with NamedTemporaryFile(suffix=".ll", delete=False, mode="w+") as fp:
             fp.write(ll_string)
             fp.close()
             try:

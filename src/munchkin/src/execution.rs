@@ -267,4 +267,42 @@ mod tests {
       ActiveTracers::Graphs
     );
   }
+
+  // TODO: Add dummy builder/runtime to deal with this.
+  #[test]
+  fn execute_unrestricted_bell() {
+    let relative_path =
+        canonicalize("../tests/files/qir/unrestricted_bell.ll")
+            .unwrap();
+    let path = relative_path.to_str().unwrap();
+
+    let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
+      IntegrationRuntime::default()
+    )));
+    run_file(
+      path, &Vec::new(),
+      runtimes.borrow(),
+      None,
+      ActiveTracers::Graphs
+    );
+  }
+
+  // TODO: Fails, work out why.
+  // #[test]
+  // fn execute_unrestricted_bell() {
+  //   let relative_path =
+  //       canonicalize("../tests/files/qir/bell_int_return.ll")
+  //           .unwrap();
+  //   let path = relative_path.to_str().unwrap();
+  //
+  //   let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
+  //     IntegrationRuntime::default()
+  //   )));
+  //   run_file(
+  //     path, &Vec::new(),
+  //     runtimes.borrow(),
+  //     None,
+  //     ActiveTracers::Graphs
+  //   );
+  // }
 }

@@ -5,12 +5,11 @@ from os.path import abspath, dirname, join
 
 from munchqin.utils import initialize_logger
 
+from munchqin.routing import apply_routing, build_ring_architecture
 from .file_utils import get_qir_path
 from munchqin.simulators import fetch_qasm_runtime
-from munchqin.runtime import (
-    BuilderAdaptor,
-    RuntimeAdaptor, MunchkinRuntime,
-)
+from munchqin.adaptors import (BuilderAdaptor, RuntimeAdaptor)
+from munchqin.runtime import MunchkinRuntime
 
 
 initialize_logger(os.path.join(pathlib.Path(__file__).parent.resolve(), "logs", "munchkin_output.txt"))
@@ -113,10 +112,6 @@ def fetch_mock_runtime():
     return runtime, MunchkinRuntime(runtime)
 
 
-def build_architecture(num_qubits):
-    return [(i % num_qubits, (i + 1) % num_qubits) for i in range(num_qubits)]
-
-
 class TestMunchkin:
     def test_simulated_qaoa(self):
         qir = fetch_project_ll("qaoa")
@@ -197,7 +192,8 @@ class TestMunchkin:
 
     def test_routed_bell_psi_plus(self):
         mock, runtime = fetch_mock_runtime()
-        runtime.apply_routing(build_architecture(4))
+
+        runtime = apply_routing(build_ring_architecture(4), runtime)
         runtime.run(get_qir_path("bell_psi_plus.ll"))
 
         assert mock.builder_instructions == [

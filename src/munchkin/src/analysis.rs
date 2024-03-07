@@ -968,38 +968,36 @@ impl AnalysisResult {
 
   pub fn empty() -> AnalysisResult { AnalysisResult::default() }
 
-  /// Compare whether this value is either 0/1 single qubit-wise, or if it's overwhelmingly
-  /// one particular value. Aka 11110 or 00001.
+  /// Count the values in a bitstring for every result.
+  /// If it is overwhelmingly 1, then that bitstring is considered 'one'.
+  /// If there are more bitstrings that are overwhelmingly 1 then the result is considered one.
   ///
-  /// This is not precisely correct as you can't say a binary sequence is the same as zero or one,
-  /// but for interpretation if someone asks you 'is this one' or 'is this zero' with no nuanced
-  /// opinions about the matter, it's one of the nicer interpretations. Limiting it to purely
-  /// single-qubit calculations so it really IS zero or one is more accurate but too limiting in
-  /// my mind.
-  fn is_value(&self, value: char) -> bool {
-    let mut value_count = 0;
-    let total_count: i64 = self.distribution.values().sum();
+  /// If the values are equal then it
+  ///
+  /// Example:
+  /// "00": 50
+  /// "01": 10
+  /// "10": 20
+  /// "11": 70
+  ///
+  /// This will equal 0 because 01 and 10 don't overwhelmingly have a 1, so are considered zero.
+  /// So 50+10+20 > 70
+  pub fn is_one(&self) -> bool {
+    let mut zeros = 0;
+    let mut ones = 0;
     for (key, val) in self.distribution.iter() {
-      let mut count = 0;
-      for char in key.chars() {
-        if char == value {
-          count += 1;
-        }
-
-        // Ceiling due to <= comparison.
-        let key_count = key.chars().count() as f64;
-        if count >= (key_count / 2.0).ceil() as i64 {
-          value_count += val;
-        }
+      if key.matches("0").count() >= (key.len() / 2) {
+        zeros += val;
+      } else {
+        ones += val;
       }
     }
 
-    value_count >= (total_count / 2)
+    // We imply that if both are the same it isn't one.
+    ones > zeros
   }
 
-  pub fn is_one(&self) -> bool { self.is_value('1') }
-
-  pub fn is_zero(&self) -> bool { self.is_value('0') }
+  pub fn is_zero(&self) -> bool { !self.is_one() }
 }
 
 impl PartialEq for AnalysisResult {

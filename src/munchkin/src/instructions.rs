@@ -434,11 +434,7 @@ impl Value {
       Value::Long(l) => Some(*l as i8),
       Value::Float(f) => Some(*f as i8),
       Value::QuantumPromise(qbs, projection) => {
-        Some(if with_mutable!(projection.results_for(qbs).is_one()) {
-          1
-        } else {
-          0
-        })
+        Some(with_mutable!(projection.results_for(qbs).is_one()) as i8)
       }
       _ => None
     }
@@ -582,6 +578,10 @@ impl Value {
 
   /// Attempts to coerce this value into a bool. Returns None if it can't.
   pub fn try_as_bool(&self) -> Option<bool> {
+    if let Value::Bool(val) = self {
+      return Some(*val);
+    }
+
     if let Some(value) = self.try_as_byte() {
       if value != 0 && value != 1 {
         panic!("Bool int conversion not 0 or 1.")
@@ -590,10 +590,7 @@ impl Value {
       return Some(value == 1);
     }
 
-    match self {
-      Value::Bool(val) => Some(*val),
-      _ => None
-    }
+    None
   }
 
   /// Attempts to coerce this value into a bool. Panics if it can't.
