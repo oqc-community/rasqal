@@ -21,7 +21,7 @@ With these installed then run:
 
 Soon to come.
 
-When these tools have been downloaded you run `build.ps1` at `/src/munchkin/build.ps1`. This will initialize a Python venv, build the Rust projects, install the resultant wheel into that environment and run tests. 
+When these tools have been downloaded you run `build.ps1` at `/src/build.ps1`. This will initialize a Python venv, build the Rust projects, install the resultant wheel into that environment and run tests. 
 
 From this point you can build the Rust project with cargo and deal with it seperately.
 But if you need to redeploy the wheel and test things from Python you need to run the build script again.
