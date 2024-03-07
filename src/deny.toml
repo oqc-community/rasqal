@@ -8,6 +8,5 @@ allow = [
     "MIT",
     "MPL-2.0",
     "BSD-3-Clause",
-    "ISC",
     "Unicode-DFS-2016"
 ]
