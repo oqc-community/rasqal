@@ -311,10 +311,6 @@ declare void @__quantum__rt__result_update_reference_count(%Result*, i32)
 
 declare void @__quantum__rt__array_update_reference_count(%Array*, i32)
 
-declare %Result* @__quantum__rt__result_get_one()
-
-declare i1 @__quantum__rt__result_equal(%Result*, %Result*)
-
 declare void @__quantum__rt__array_update_alias_count(%Array*, i32)
 
 declare %Result* @__quantum__qis__measure__body(%Array*, %Array*)
@@ -358,6 +354,10 @@ entry:
   call void @__quantum__rt__array_update_alias_count(%Array* %__controlQubits__, i32 -1)
   ret void
 }
+
+declare %Result* @__quantum__rt__result_get_one()
+
+declare i1 @__quantum__rt__result_equal(%Result*, %Result*)
 
 define void @Microsoft__Quantum__OracleGenerator__RunProgram__Interop() #0 {
 entry:

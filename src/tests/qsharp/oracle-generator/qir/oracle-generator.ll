@@ -19,7 +19,7 @@
 define internal void @Microsoft__Quantum__OracleGenerator__RunProgram__body() {
 entry:
   %0 = call %Callable* @__quantum__rt__callable_create([4 x void (%Tuple*, %Tuple*, %Tuple*)*]* @Microsoft__Quantum__OracleGenerator__Classical__Majority3__FunctionTable, [2 x void (%Tuple*, i32)*]* null, %Tuple* null)
-  call void @Microsoft__Quantum__OracleGenerator___40b3040e4b88453eb953692d1b8773f8_InitOracleGeneratorFor__body(%Callable* %0)
+  call void @Microsoft__Quantum__OracleGenerator___29082b6c734043d5b3b463273699cd0e_InitOracleGeneratorFor__body(%Callable* %0)
   %1 = call %Array* @__quantum__rt__array_create_1d(i32 1, i64 2)
   %2 = call i8* @__quantum__rt__array_get_element_ptr_1d(%Array* %1, i64 0)
   %3 = bitcast i8* %2 to i1*
@@ -227,7 +227,7 @@ exit__3:                                          ; preds = %header__3
   br label %exiting__2
 }
 
-define internal void @Microsoft__Quantum__OracleGenerator___40b3040e4b88453eb953692d1b8773f8_InitOracleGeneratorFor__body(%Callable* %func) {
+define internal void @Microsoft__Quantum__OracleGenerator___29082b6c734043d5b3b463273699cd0e_InitOracleGeneratorFor__body(%Callable* %func) {
 entry:
   call void @__quantum__rt__capture_update_alias_count(%Callable* %func, i32 1)
   call void @__quantum__rt__callable_update_alias_count(%Callable* %func, i32 1)
@@ -629,10 +629,6 @@ entry:
   ret void
 }
 
-declare %Result* @__quantum__rt__result_get_one()
-
-declare i1 @__quantum__rt__result_equal(%Result*, %Result*)
-
 declare void @__quantum__rt__array_update_alias_count(%Array*, i32)
 
 declare void @__quantum__qis__x__ctl(%Array*, %Qubit*)
@@ -654,6 +650,10 @@ entry:
   call void @__quantum__rt__array_update_alias_count(%Array* %qubits, i32 -1)
   ret %Result* %0
 }
+
+declare %Result* @__quantum__rt__result_get_one()
+
+declare i1 @__quantum__rt__result_equal(%Result*, %Result*)
 
 define void @Microsoft__Quantum__OracleGenerator__RunProgram__Interop() #0 {
 entry:
