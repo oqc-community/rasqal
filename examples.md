@@ -1,3 +1,8 @@
+If you want to jump right in, here are some [full working examples](https://github.com/oqc-community/munchkin/blob/develop/docs/examples.py)
+of running .ll files and building various backends for integration.
+
+Everything this document talks about can be seen in action there.
+
 ### Getting started
 
 To run Munchkin you'll need a QIR file, whether in its human-readable .ll form or bitcode. 
@@ -56,7 +61,7 @@ It's called sequentially with all the gates and instructions that are going to b
 
 Both API's can be found [here](https://github.com/oqc-community/munchkin/blob/develop/src/munchkin/munchqin/adaptors.py).
 
-So you now have a custom builder and runtime all you need to do then is to make sure they get run correctly. This is where you would use a `MunchkinRuntime` to help:
+After you have both a Runtime and Builder you then can use them as a backend for execution by passing them to a Munchkin runtime:
 ```python
 from munchqin.adaptors import BuilderAdaptor, RuntimeAdaptor
 from munchqin.runtime import MunchkinRuntime
@@ -73,6 +78,13 @@ class CustomRuntime(RuntimeAdaptor):
 runtime = MunchkinRuntime(CustomRuntime())
 runtime.run("path_to_qir")
 ```
+
+If you have multiple backends you can just pass them in as a list to the constructor:
+```python
+runtime = MunchkinRuntime([QPURuntime(), SimulatorRuntime()])
+```
+When quantum code needs to be executed they will, in turn, be asked whether they can run it. 
+The first runtime which answers yes will then be used for that execution.
 
 The `fetch_qasm_runtime` method we used earlier is simply a wrapper which loads our QASM builder and runtime in.
 
@@ -104,5 +116,5 @@ runtime.trace_graphs()
 By default, these are all printed to the console. You can initialize Munchkins file logging mechanism by calling `initialize_logger` with a file path.
 This is recommended if you enable traces as it produces a _lot_ of output. 
 
-It should also be mentioned that traces are not lightweight and should only be used for debugging or informational purposes. 
+Traces are not lightweight and should only be used for debugging or informational purposes. 
 They should not be left on in a live system.
