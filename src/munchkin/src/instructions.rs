@@ -40,6 +40,7 @@ pub enum Operator {
   Divide,
   Add,
   Subtract,
+  PowerOf,
 
   // Binary operators
   Or,
@@ -56,7 +57,8 @@ impl Display for Operator {
       Operator::Subtract => "-",
       Operator::Or => "|",
       Operator::And => "&",
-      Operator::Xor => "^"
+      Operator::Xor => "^",
+      Operator::PowerOf => "pow"
     })
   }
 }

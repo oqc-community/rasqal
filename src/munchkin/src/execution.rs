@@ -264,7 +264,7 @@ mod tests {
       &vec![Value::Bool(true)],
       runtimes.borrow(),
       None,
-      ActiveTracers::Graphs
+      ActiveTracers::empty()
     );
   }
 
@@ -283,26 +283,26 @@ mod tests {
       path, &Vec::new(),
       runtimes.borrow(),
       None,
-      ActiveTracers::Graphs
+      ActiveTracers::empty()
     );
   }
 
   // TODO: Fails, work out why.
-  // #[test]
-  // fn execute_unrestricted_bell() {
-  //   let relative_path =
-  //       canonicalize("../tests/files/qir/bell_int_return.ll")
-  //           .unwrap();
-  //   let path = relative_path.to_str().unwrap();
-  //
-  //   let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
-  //     IntegrationRuntime::default()
-  //   )));
-  //   run_file(
-  //     path, &Vec::new(),
-  //     runtimes.borrow(),
-  //     None,
-  //     ActiveTracers::Graphs
-  //   );
-  // }
+  #[test]
+  fn execute_bell_int_return() {
+    let relative_path =
+        canonicalize("../tests/files/qir/bell_int_return.ll")
+            .unwrap();
+    let path = relative_path.to_str().unwrap();
+
+    let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
+      IntegrationRuntime::default()
+    )));
+    run_file(
+      path, &Vec::new(),
+      runtimes.borrow(),
+      None,
+      ActiveTracers::all()
+    );
+  }
 }

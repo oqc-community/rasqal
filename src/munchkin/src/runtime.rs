@@ -606,6 +606,7 @@ impl QuantumRuntime {
           let left = follow_reference(left, context);
           let right = follow_reference(right, context);
 
+          // TODO: Make smart-pointers forward operators.
           let result = Ptr::from(match op {
             Operator::Multiply => left.deref() * right.deref(),
             Operator::Divide => left.deref() / right.deref(),
@@ -613,7 +614,8 @@ impl QuantumRuntime {
             Operator::Subtract => left.deref() - right.deref(),
             Operator::Or => left.deref() | right.deref(),
             Operator::And => left.deref() & right.deref(),
-            Operator::Xor => left.deref() ^ right.deref()
+            Operator::Xor => left.deref() ^ right.deref(),
+            Operator::PowerOf => Value::from(left.as_int().pow(right.as_int() as u32))
           });
 
           with_mutable!(context.add(var, result.borrow()));
