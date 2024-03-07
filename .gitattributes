@@ -1,2 +1,2 @@
-src/munchkin/tests/files/** linguist-vendored
-src/munchkin/tests/qsharp/** linguist-vendored
+src/tests/files/** linguist-vendored
+src/tests/qsharp/** linguist-vendored

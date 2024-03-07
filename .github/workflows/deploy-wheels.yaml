@@ -20,13 +20,13 @@ jobs:
 #          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 #          export PATH="/root/.cargo/bin:${PATH}"
 #          export PATH="/root/.local/bin:$PATH"
-#          cd src/munchkin
+#          cd src
 #          MK_DOWNLOAD_LLVM=true pwsh ./build.ps1
 #      - name: Upload wheels
 #        uses: actions/upload-artifact@v3
 #        with:
 #          name: wheels
-#          path: src/munchkin/target/wheels
+#          path: src/target/wheels
 
   windows:
     runs-on: windows-latest
@@ -47,7 +47,7 @@ jobs:
       - name: Build wheels
         run: |
           winget install build-essential libffi-dev xz-utils powershell curl wget gnupg apt-transport-https 7-zip --disable-interactivity
-          cd src/munchkin
+          cd src
           $env:MK_DOWNLOAD_LLVM = 'true' 
           ./build.ps1; 
           Remove-Item Env:\MK_DOWNLOAD_LLVM
@@ -55,7 +55,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: wheels
-          path: src/munchkin/target/wheels
+          path: src/target/wheels
 
   linux:
     runs-on: ubuntu-latest
@@ -75,13 +75,13 @@ jobs:
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         export PATH="/root/.cargo/bin:${PATH}"
         export PATH="/root/.local/bin:$PATH"
-        cd src/munchkin
+        cd src
         MK_DOWNLOAD_LLVM=true pwsh ./build.ps1
     - name: Upload wheels
       uses: actions/upload-artifact@v3
       with:
         name: wheels
-        path: src/munchkin/target/wheels
+        path: src/target/wheels
 
   linux-cross:
     runs-on: ubuntu-latest
@@ -100,13 +100,13 @@ jobs:
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         export PATH="/root/.cargo/bin:${PATH}"
         export PATH="/root/.local/bin:$PATH"
-        cd src/munchkin
+        cd src
         MK_DOWNLOAD_LLVM=true pwsh ./build.ps1
     - name: Upload wheels
       uses: actions/upload-artifact@v3
       with:
         name: wheels
-        path: src/munchkin/target/wheels
+        path: src/target/wheels
 
 #  release:
 #    name: Release
