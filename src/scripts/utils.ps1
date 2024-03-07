@@ -1,4 +1,5 @@
 # Copyright (c) Microsoft Corporation.
+# Modified by Oxford Quantum Circuits Ltd
 # Licensed under the MIT License.
 
 Properties {
