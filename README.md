@@ -17,18 +17,11 @@ as well as providing a platform for dynamic optimization/lowering algorithms.
 
 ### Key Features
 
-* Can parse and execute full spec QIR (sans big ints). This also includes most of LLVMs classical instructions.
+* Executes full spec QIR and the majority of classical LLVM instructions in a fully interwoven form.
 * Multi/split-QPU execution capabilities. Each synthesized quantum circuit can be fired at a different machine depending on what features it requires to run.
 * Backend QPU execution code is pure Python to allow for easy integration with existing systems.
 
-### Experimental Features
-
-Munchkin is also a research platform for trying out novel approaches to quantum execution, verification or analysis. 
-This is loosely what we're experimenting with, or want too:
-
-1. Quantum state compressed representation. Trading precision for linear scalability.
-2. Distributed quantum execution using circuit weaving/snipping.
-3. Quantum static analysis structures / circuit value prediction.
+Please see [features and concepts](https://github.com/oqc-community/munchkin/blob/develop/building.md) for the details, these are just high-level summaries.
 
 ### Contributing
 
