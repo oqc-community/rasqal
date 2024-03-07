@@ -49,7 +49,6 @@ def execute_full_bell():
     # Wrap our mock runtime with a routing runtime. It's not needed here but acts as a good example.
     mock = apply_routing(build_ring_architecture(8), mock)
     runtime = MunchkinRuntime(mock)
-    runtime.trace_projections().trace_runtime()
 
     # We calculate that trying to ask 'is one' on a multi-qubit result is whether a bitstring is overwhelmingly 1.
     # In this case the only one which we can answer that with a definitive answer is 11.

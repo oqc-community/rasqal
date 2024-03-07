@@ -124,7 +124,6 @@ class TestMunchkin:
     def test_qaoa(self):
         qir = fetch_project_ll("qaoa")
         mock, runtime = fetch_mock_runtime()
-        runtime.trace_runtime().trace_projections()
         runtime.run(qir)
 
         for stats in [builder.metrics for builder in mock.executed]:
@@ -142,7 +141,6 @@ class TestMunchkin:
     def test_oracle_gen(self):
         qir = fetch_project_ll("oracle-generator")
         mock, runtime = fetch_mock_runtime()
-        runtime.trace_runtime().trace_projections()
         runtime.run(qir)
 
         assert mock.executed[0].gates == ['measure 0', 'measure 1', 'measure 2']
@@ -189,6 +187,19 @@ class TestMunchkin:
         qir = fetch_project_ll("def-classical-expression")
         mock, runtime = fetch_mock_runtime()
         runtime.run(qir)
+
+    # TODO: Results aren't entirely correct, find out what's up.
+    def test_bell_int_return(self):
+        mock, runtime = fetch_mock_runtime()
+        results = runtime.run(get_qir_path("bell_int_return.ll"))
+
+        assert mock.builder_instructions == [
+            "z 0 3.141592653589793",
+            "y 0 1.5707963267948966",
+            "cx [0] 1 3.141592653589793",
+            "measure 0",
+            "measure 1",
+        ]
 
     def test_routed_bell_psi_plus(self):
         mock, runtime = fetch_mock_runtime()
