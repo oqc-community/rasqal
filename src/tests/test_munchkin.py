@@ -3,20 +3,20 @@ import pathlib
 import unittest
 from os.path import abspath, dirname, join
 
-from munchqin.utils import initialize_logger
+from rasqal.utils import initialize_logger
 
-from munchqin.routing import apply_routing, build_ring_architecture
+from rasqal.routing import apply_routing, build_ring_architecture
 from .file_utils import get_qir_path
-from munchqin.simulators import fetch_qasm_runtime
-from munchqin.adaptors import (BuilderAdaptor, RuntimeAdaptor)
-from munchqin.runtime import MunchkinRuntime
+from rasqal.simulators import fetch_qasm_runtime
+from rasqal.adaptors import (BuilderAdaptor, RuntimeAdaptor)
+from rasqal.runtime import RasqalRuntime
 
 
-initialize_logger(os.path.join(pathlib.Path(__file__).parent.resolve(), "logs", "munchkin_output.txt"))
+initialize_logger(os.path.join(pathlib.Path(__file__).parent.resolve(), "logs", "rasqal_output.txt"))
 
 
 def fetch_project_ll(proj_name: str):
-    """Return a Munchkin test file for processing via the Python APIs."""
+    """Return a Q# test file for processing via the Python APIs."""
     return abspath(
         join(
             dirname(__file__),
@@ -109,10 +109,10 @@ class RuntimeMock(RuntimeAdaptor):
 
 def fetch_mock_runtime():
     runtime = RuntimeMock()
-    return runtime, MunchkinRuntime(runtime)
+    return runtime, RasqalRuntime(runtime)
 
 
-class TestMunchkin:
+class TestRasqal:
     def test_simulated_qaoa(self):
         qir = fetch_project_ll("qaoa")
         runtime = fetch_qasm_runtime(20)

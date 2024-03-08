@@ -10,14 +10,14 @@ from .utils import initialize_logger
 from .adaptors import RuntimeAdaptor
 from ._native import DEFAULT_LOG_FILE, Executor
 
-dev_directory = join(dirname(__file__), "..", "..", "..", "munchkin")
+dev_directory = join(dirname(__file__), "..", "..", "..", "rasqalkin")
 
 # Enable file logging if we're in a development environment.
 if exists(dev_directory):
     initialize_logger(join(f"{dev_directory}", f"{DEFAULT_LOG_FILE}"))
 
 
-class MunchkinRuntime:
+class RasqalRuntime:
     """
     Provides a wrapper around the Rust implementation details, allowing more natural extension
     from Python as well as utility and supporting methods.
@@ -30,7 +30,7 @@ class MunchkinRuntime:
         self.runtimes: List[RuntimeAdaptor] = runtime
         self.executor = Executor()
 
-    def trace_graphs(self) -> "MunchkinRuntime":
+    def trace_graphs(self) -> "RasqalRuntime":
         """
         Activates graph logging.
         Prints out the active execution graphs before running.
@@ -38,7 +38,7 @@ class MunchkinRuntime:
         self.executor.trace_graphs()
         return self
 
-    def trace_projections(self) -> "MunchkinRuntime":
+    def trace_projections(self) -> "RasqalRuntime":
         """
         Activates projection logging.
         Holds information in regards to value prediction as well as what circuit is actually built.
@@ -46,7 +46,7 @@ class MunchkinRuntime:
         self.executor.trace_projections()
         return self
 
-    def trace_runtime(self) -> "MunchkinRuntime":
+    def trace_runtime(self) -> "RasqalRuntime":
         """
         Activates runtime logging.
         Prints every step the symbolic executor takes.

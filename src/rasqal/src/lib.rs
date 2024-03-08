@@ -35,7 +35,7 @@ mod python;
 mod runtime;
 mod smart_pointers;
 
-const DEFAULT_LOG_FILE: &str = "mk_logs.txt";
+const DEFAULT_LOG_FILE: &str = "rasqal_logs.txt";
 
 /// Native initialization of the loggers. Defaults to executable position if deployed, if it
 /// detects it's in development mode it'll move log file back up the folder tree.
@@ -49,7 +49,7 @@ fn native_logger_initialize() {
 
     let current_folder = val.parent().unwrap();
 
-    // Walk back to root munchkin folder if we're in a build, otherwise at that folder level.
+    // Walk back to root rasqal folder if we're in a build, otherwise at that folder level.
     if current_folder.ends_with("deps") {
       Some(
         current_folder

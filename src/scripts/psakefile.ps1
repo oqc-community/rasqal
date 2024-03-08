@@ -7,7 +7,7 @@ Include utils.ps1
 Properties {
     $Root = Resolve-Path (Split-Path -Parent $PSScriptRoot)
     $BuildLlvm = Join-Path $Root build-llvm
-    $Munchkin = Join-Path $Root munchkin
+    $Rasqal = Join-Path $Root rasqal
     $Target = Join-Path $Root target
     $Wheels = Join-Path $Target wheels
     $CargoConfigToml = Join-Path $Root .cargo config.toml
@@ -16,7 +16,7 @@ Properties {
 }
 
 task default -depends build
-task build -depends build-llvm, build-munchkin, test-munchkin
+task build -depends build-llvm, build-rasqal, test-rasqal
 task check -depends check-licenses
 task format -depends format-rust
 task all -depends build, check, format
@@ -38,27 +38,27 @@ task build-llvm -depends init {
     Invoke-LoggedCommand -workingDirectory $BuildLlvm { cargo build --release @(Get-CargoArgs) }
 }
 
-task build-munchkin -depends init {
+task build-rasqal -depends init {
     $env:MATURIN_PEP517_ARGS = (Get-CargoArgs) -Join " "
-    Get-Wheels munchqin | Remove-Item -Verbose
-    Invoke-LoggedCommand { pip --verbose wheel --no-deps --wheel-dir $Wheels $Munchkin }
+    Get-Wheels rasqal | Remove-Item -Verbose
+    Invoke-LoggedCommand { pip --verbose wheel --no-deps --wheel-dir $Wheels $Rasqal }
 
     if (Test-CommandExists auditwheel) {
-        $unauditedWheels = Get-Wheels munchqin
+        $unauditedWheels = Get-Wheels rasqal
         Invoke-LoggedCommand { auditwheel repair --wheel-dir $Wheels $unauditedWheels }
         $unauditedWheels | Remove-Item
     }
 
     # Force reinstall the package if it exists, but not its dependencies.
-    $packages = Get-Wheels munchqin
+    $packages = Get-Wheels rasqal
     Invoke-LoggedCommand -workingDirectory $Root {
         pip install $packages
         pip install --force-reinstall --no-deps $packages
     }
 }
 
-task test-munchkin -depends build-munchkin {
-    Invoke-LoggedCommand -workingDirectory $Munchkin {
+task test-rasqal -depends build-rasqal {
+    Invoke-LoggedCommand -workingDirectory $Rasqal {
         cargo test --release @(Get-CargoArgs)
     }
 
@@ -102,7 +102,7 @@ task init -depends check-environment {
 
     # if an external LLVM is specified, make sure it exist and
     # skip further bootstapping
-    if (Test-Path env:\MK_LLVM_EXTERNAL_DIR) {
+    if (Test-Path env:\RSQL_LLVM_EXTERNAL_DIR) {
         Use-ExternalLlvmInstallation
     }
     else {
@@ -171,8 +171,8 @@ task check-licenses {
 #     # https://github.com/EmbarkStudios/cargo-about
 #     $config = Join-Path $Root notice.toml
 #     $template = Join-Path $Root notice.hbs
-#     $notice = Join-Path $Munchkin NOTICE-WHEEL.txt
-#     Invoke-LoggedCommand -workingDirectory $Munchkin {
+#     $notice = Join-Path $Rasqal NOTICE-WHEEL.txt
+#     Invoke-LoggedCommand -workingDirectory $Rasqal {
 #         cargo about generate --config $config --all-features --output-file $notice $template
 #         $contents = Get-Content -Raw $notice
 #         [System.Web.HttpUtility]::HtmlDecode($contents) | Out-File $notice

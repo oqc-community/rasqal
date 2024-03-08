@@ -26,7 +26,7 @@ When these tools have been downloaded you run `build.ps1` at `/src/build.ps1`. T
 From this point you can build the Rust project with cargo and deal with it seperately.
 But if you need to redeploy the wheel and test things from Python you need to run the build script again.
 
-If you have issues you can look at the [CI cross-OS build script](https://github.com/oqc-community/munchkin/blob/develop/.github/workflows/deploy-wheels.yaml) and see what might be missing or out of date from the documentation.
+If you have issues you can look at the [CI cross-OS build script](https://github.com/oqc-community/rasqal/blob/develop/.github/workflows/deploy-wheels.yaml) and see what might be missing or out of date from the documentation.
 
 #### Building LLVM from source
 
@@ -35,9 +35,9 @@ You should only attempt this if you're familiar with LLVM already or have no bin
 
 You can use these environmental variables to customize the LLVM build:
 ```bash
-MK_LLVM_EXTERNAL_DIR=/path/to/llvm # Directory to locally-built LLVM.
-MK_DOWNLOAD_LLVM=true # Whether to download and build LLVM.
-MK_CACHE_DIR=/where/to/extract # Where to store the downloaded LLVM build. Defaults to target which gets cleared on clean.
+RSQL_LLVM_EXTERNAL_DIR=/path/to/llvm # Directory to locally-built LLVM.
+RSQL_DOWNLOAD_LLVM=true # Whether to download anrd build LLVM.
+RSQL_CACHE_DIR=/where/to/extract # Where to store the downloaded LLVM build. Defaults to target which gets cleared on clean.
 ...
 ```
 
