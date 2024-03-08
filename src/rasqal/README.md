@@ -14,7 +14,7 @@ There is also a [full Python example](https://github.com/oqc-community/Rasqal/bl
 
 If you have any features or ideas you'd like to see implemented feel free to raise a [feature request](https://github.com/oqc-community/Rasqal/issues/new?assignees=&labels=enhancement&projects=&template=feature_request.md&title=)!
 
-**Note: Rasqal is still early days and the potential instruction combinations of LLVM and QIR immense, so we won't have been able to test all of them. If you have a file which dosen't work please raise an issue with it!**
+**Note: Rasqal is still early days and the potential instruction combinations of LLVM and QIR are immense, so we won't have been able to test all of them. If you have a file which dosen't work please raise an issue with it!**
 
 ### Getting Started
 
