@@ -14,11 +14,17 @@ branch = "master"
 default-features = false
 features = ["llvm14-0"]
 
+[dependencies.pyo3]
+version = "0.17"
+# pyo3 has problems with running cargo test and extension modules. Group them here so that we can disable 'default' features when running cargo test.
+# Add all features like normal as enabled features unless they mess with cargo test, which then means they go as a default.
+features = ["num-complex"]
+default = ["abi3-py37", "extension-module"]
+
 [dependencies]
 either = "1.8"
 libc = "0.2"
 const-str = "0.5"
-pyo3 = { version = "0.17", features = ["abi3-py37", "extension-module", "num-complex"] }
 llvm-sys = "140"
 regex = "1.7.1"
 log = "0.4.17"
