@@ -1,27 +1,26 @@
 ![build status](https://github.com/oqc-community/rasqal/actions/workflows/build.yaml/badge.svg)
 
-Rasqal is a symbolic execution quantum-classical hybrid runtime which consumes hybrid IR's such as QIR, runs 
-it while performing dynamic optimizations, then calls into a provided QPU backend to run the synthesized 
-circuits.
+Rasqal is a quantum-classical hybrid runtime which runs QIR in a fully dynamic fashion, building up quantum circuits on the fly and executing them against a provided quantum backend.
+It uses symbolic execution and heavily deferred execution to perform code transformations, optimizations and lowering on both the QIR and circuit.
 
-It provides hybrid computation capabilities to QPUs/tools that only have a circuit-level API available, 
-as well as providing a platform for dynamic optimization/lowering algorithms.
+Some of the key things this approach enables:
 
-**Note: Rasqal is still in a work-in-progress even though its core is there and usable. If you have a feature you'd like to see raise it as a request!**
+1. Unrestricted QIR and LLVM instructions fully interwoven. You can throw whatever form of IR you want at it and it'll process all classical bits locally (or lower them).
+2. Enabling hybrid algorithms to be run on machines and tools with only a gate-level API available. This includes QASM API's if you use its simulation framework.
+3. Lots of optimization potential when passed large amounts of classical context that a quantum algorithm uses to accentuate its own execution.
 
-### Quick-start
+For those interested in more detail we have a [full feature list and quick intro to its concepts](https://github.com/oqc-community/Rasqal/blob/develop/docs/features_and_concepts.py). 
+There is also a [full Python example](https://github.com/oqc-community/Rasqal/blob/develop/docs/examples.py) that people can use as a starting point for playing with it locally.
+
+If you have any features or ideas you'd like to see implemented feel free to raise a [feature request](https://github.com/oqc-community/Rasqal/issues/new?assignees=&labels=enhancement&projects=&template=feature_request.md&title=)!
+
+**Note: Rasqal is still early days and the potential instruction combinations of LLVM and QIR immense, so we won't have been able to test all of them. If you have a file which dosen't work please raise an issue with it!**
+
+### Getting Started
 
 1. Install Rasqal in your favourite Python venv by running `pip install rasqal`. Our current testing is done with `v3.9` of Python.
-2. Read the [examples](https://github.com/oqc-community/rasqal/blob/develop/examples.md).
-3. (Optional) Read the [draft paper](https://github.com/oqc-community/rasqal/blob/develop/docs/Rasqal%20Draft%20v2.pdf) for a deep-dive into Rasqals concepts and data structures.
-
-### Key Features
-
-* Executes full spec QIR and the majority of classical LLVM instructions in a fully interwoven form.
-* Multi/split-QPU execution capabilities. Each synthesized quantum circuit can be fired at a different machine depending on what features it requires to run.
-* Backend QPU execution code is pure Python to allow for easy integration with existing systems.
-
-Please see [features and concepts](https://github.com/oqc-community/rasqal/blob/develop/building.md) for the details, these are just high-level summaries.
+2. Read the [quick start](https://github.com/oqc-community/rasqal/blob/develop/examples.md) and/or look at our [Python example](https://github.com/oqc-community/Rasqal/blob/develop/docs/examples.py).
+3. (Optional) Read the [paper](https://github.com/oqc-community/rasqal/blob/develop/docs/Rasqal%20Draft%20v2.pdf) for a deep-dive into Rasqals concepts and data structures.
 
 ### Contributing
 

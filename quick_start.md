@@ -1,8 +1,3 @@
-If you want to jump right in, here are some [full working examples](https://github.com/oqc-community/rasqal/blob/develop/docs/examples.py)
-of running .ll files and building various backends for integration.
-
-Everything this document talks about can be seen in action there.
-
 ### Getting started
 
 To run Rasqal you'll need a QIR file, whether in its human-readable .ll form or bitcode. 

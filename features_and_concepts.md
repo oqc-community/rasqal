@@ -2,11 +2,11 @@ Whenever Rasqal is first introduced to people they usually ask "How is this diff
 On the surface it operates very similarly, so this question isn't that suprising.
 
 Its goals and the way it views the hybrid IRs is actually quite different, but to highlight these differences requires a bit of an explainer about some of its foundational concepts and philosophies.
-Giving an introduction to them will paint its features (and how it works) in a different light, so it's worth quickly explaining them before going into what it can do.
+Giving an introduction to them will paint its features (and how it works) in a different light, so we'll quickly cover them
 
-Or if you don't need convincing, feel free to jump straight to the features section.
+If you don't need that feel free to skip to the features list.
 
-## Foundational Concepts
+### Concepts
 
 Describing Rasqal as a symbolic-execution driven optimizing runtime, while accurate from a high level, also manages to tell us very little about how it works.
 
@@ -34,12 +34,14 @@ Sometimes it will run very close to the QIR as-written because it's simple enoug
 In early versions this might happen more often than not, but this is not its function.
 In fact the less the execution run looks like the incoming QIR the better, because it means we've been able to do a lot of optimization and prediction.
 
-And that's it! The introduction to its internals and its goals. 
-Hopefully this has given some insight into how it differs to other hybrid runtimes (it's barely a runtime) and will help give some nuance to how some of its features actually work.
+
 
 If you are interested in a more thorough breakdown of its internals and concepts it has [a paper](https://github.com/oqc-community/rasqal/blob/develop/docs/Rasqal%20Draft%20v2.pdf) which goes into them in detail.
 
-## Features
+### Features
+
+This is a loose list of the most important features and capabilities it has right now, as well as what we want to build in the future. 
+Like most documentation this may be slightly behind its actual capabilities, so if there's something marked as 'soon' that you'd like it may already be in.
 
 Currently available:
 
@@ -62,24 +64,22 @@ There are also some instructions we silently ignore because they have no impact 
 [2] The wording here is rather precise as we don't route the QIR, we route the circuit we generate just before its sent to the QPU.
 Routing fully interwoven instructions is very tricky, so we purposefully only do it after circuit synthesis.
 
-Soon to be implemented:
+Soon to be implemented/improved:
 
 1. Automatically lowering logic into the hardware if support is available, such as conditionals, loops and exceptions.
-2. Aggressive classical operation deference and folding. Currently if you do a measure and immediately do classical operations on the result then it'll execute the circuit built up to that point.
+2. Aggressive classical operation deference and folding. Currently, if you do a measure and immediately do classical operations on the result then it'll execute the circuit built up to that point.
 We want to also defer the classical operations until we find a point where we _absolutely_ need to execute.
-3. More required feature metadata to be passed to the backend. Circuit size, included gates, far more information about what's being run. 
+3. More circuit metadata to be passed to the backend when working out if it can run something. Circuit size, included gates, hardware features, as much as possible. 
 4. Predicted execution plans. Allows tools to pass in QIR and get back precise information about each quantum execution: what circuit, values, features it requires etc.
 This will allow tools sitting in front of Rasqal to tailor their own optimization passes.
 
 5. LLVM-15+.
 
-In the future:
+Then we also have highly experimental features that will be worked on until proven viable or not. 
+
+These will be available only if you enable them explicitly:
 
 1. Quantum state analysis structures for performing indepth static analysis as we go. This powers many other features.
 2. Quantum fragment simulation. Finding points in a circuit that if simulated/predicted allow for better optimization or distributed processing.
 3. Using our analysis tools and splice/weaving techniques to split up and run large quantum circuits across multiple smaller machines.
-
-These are our highly experimental features that will be continuously worked on alongside more tangential improvements.
-While being built they will only be enabled by experimental feature flags.
-
-Please see [our examples](https://github.com/oqc-community/rasqal/blob/develop/examples.md) for the sorts of code you could send to Munchkin as well as what it returns.
+community/rasqal/blob/develop/examples.md) for the sorts of code you could send to Munchkin as well as what it returns.
