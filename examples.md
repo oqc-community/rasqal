@@ -13,10 +13,10 @@ For our first example we're going to use the default simulator backend, so will 
 Since we're not providing a custom backend our Python to run Rasqal is relatively simple. 
 If your QIR has no return value or arguments, this is how you call it:
 ```python
-from rasqal.simulators import fetch_qasm_runtime
+from rasqal.simulators import fetch_qasm_runner
 
 # Create a QASM simulation backend with 20 qubits available.
-runtime = fetch_qasm_runtime(20)
+runtime = fetch_qasm_runner(20)
 runtime.run("path_to_ll_file")
 ```
 
@@ -64,7 +64,7 @@ Both API's can be found [here](https://github.com/oqc-community/rasqal/blob/deve
 After you have both a Runtime and Builder you then can use them as a backend for execution by passing them to a Rasqal runtime:
 ```python
 from rasqal.adaptors import BuilderAdaptor, RuntimeAdaptor
-from rasqal.runtime import RasqalRuntime
+from rasqal.runtime import RasqalRunner
 
 class CustomBuilder(BuilderAdaptor):
     ...
@@ -75,18 +75,18 @@ class CustomRuntime(RuntimeAdaptor):
     
     ...
 
-runtime = RasqalRuntime(CustomRuntime())
+runtime = RasqalRunner(CustomRuntime())
 runtime.run("path_to_qir")
 ```
 
 If you have multiple backends you can just pass them in as a list to the constructor:
 ```python
-runtime = RasqalRuntime([QPURuntime(), SimulatorRuntime()])
+runtime = RasqalRunner([QPURuntime(), SimulatorRuntime()])
 ```
 When quantum code needs to be executed they will, in turn, be asked whether they can run it. 
 The first runtime which answers yes will then be used for that execution.
 
-The `fetch_qasm_runtime` method we used earlier is simply a wrapper which loads our QASM builder and runtime in.
+The `fetch_qasm_runner` method we used earlier is simply a wrapper which loads our QASM builder and runtime in.
 
 With that, our custom classes will now be called when a quantum execution is needed, well if we put in the various methods anyway.
 
@@ -98,9 +98,9 @@ Symbolic execution engines are complicated by their nature so debugging it can b
 
 The runtime itself exposes various tracing mechanisms that you can activate for a run:
 ```python
-from rasqal.runtime import RasqalRuntime
+from rasqal.runtime import RasqalRunner
 
-runtime = RasqalRuntime(...)
+runtime = RasqalRunner(...)
 
 # Prints out every step the runtime takes.
 runtime.trace_runtime()

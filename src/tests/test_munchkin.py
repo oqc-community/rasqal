@@ -7,9 +7,9 @@ from rasqal.utils import initialize_logger
 
 from rasqal.routing import apply_routing, build_ring_architecture
 from .file_utils import get_qir_path
-from rasqal.simulators import fetch_qasm_runtime
+from rasqal.simulators import fetch_qasm_runner
 from rasqal.adaptors import (BuilderAdaptor, RuntimeAdaptor)
-from rasqal.runtime import RasqalRuntime
+from rasqal.runtime import RasqalRunner
 
 
 initialize_logger(os.path.join(pathlib.Path(__file__).parent.resolve(), "logs", "rasqal_output.txt"))
@@ -107,15 +107,15 @@ class RuntimeMock(RuntimeAdaptor):
         return builder.gates if builder is not None else None
 
 
-def fetch_mock_runtime():
+def fetch_mock_runner():
     runtime = RuntimeMock()
-    return runtime, RasqalRuntime(runtime)
+    return runtime, RasqalRunner(runtime)
 
 
 class TestRasqal:
     def test_simulated_qaoa(self):
         qir = fetch_project_ll("qaoa")
-        runtime = fetch_qasm_runtime(20)
+        runtime = fetch_qasm_runner(20)
         results = runtime.run(qir)
 
         # This prints its result, not returns.
@@ -123,10 +123,10 @@ class TestRasqal:
 
     def test_qaoa(self):
         qir = fetch_project_ll("qaoa")
-        mock, runtime = fetch_mock_runtime()
-        runtime.run(qir)
+        runtime, runner = fetch_mock_runner()
+        runner.run(qir)
 
-        for stats in [builder.metrics for builder in mock.executed]:
+        for stats in [builder.metrics for builder in runtime.executed]:
             stats: BuilderStats
             assert stats.x_count == 30
             assert stats.y_count == 6
@@ -140,60 +140,60 @@ class TestRasqal:
 
     def test_oracle_gen(self):
         qir = fetch_project_ll("oracle-generator")
-        mock, runtime = fetch_mock_runtime()
-        runtime.run(qir)
+        runtime, runner = fetch_mock_runner()
+        runner.run(qir)
 
-        assert mock.executed[0].gates == ['measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[1].gates == ['x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[2].gates == ['x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[3].gates == ['x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[4].gates == ['x 0 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[5].gates == ['x 0 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[6].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[7].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[0].gates == ['measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[1].gates == ['x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[2].gates == ['x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[3].gates == ['x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[4].gates == ['x 0 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[5].gates == ['x 0 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[6].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[7].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
 
     def test_minified_generator(self):
         qir = fetch_project_ll("minified-oracle-generator")
 
-        mock, runtime = fetch_mock_runtime()
-        runtime.run(qir, [True])
-        assert mock.builder_instructions == [
+        runtime, runner = fetch_mock_runner()
+        runner.run(qir, [True])
+        assert runtime.builder_instructions == [
             'x 0 3.141592653589793',
             'measure 0'
         ]
 
-        mock, runtime = fetch_mock_runtime()
-        runtime.run(qir, [False])
-        assert mock.builder_instructions == [
+        runtime, runner = fetch_mock_runner()
+        runner.run(qir, [False])
+        assert runtime.builder_instructions == [
             'measure 0'
         ]
 
     def test_simplified_generator(self):
         qir = fetch_project_ll("simplified-oracle-generator")
-        mock, runtime = fetch_mock_runtime()
-        runtime.run(qir)
+        runtime, runner = fetch_mock_runner()
+        runner.run(qir)
 
-        assert mock.executed[0].gates == ['measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[1].gates == ['x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[2].gates == ['x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[3].gates == ['x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[4].gates == ['x 0 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[5].gates == ['x 0 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[6].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert mock.executed[7].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[0].gates == ['measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[1].gates == ['x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[2].gates == ['x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[3].gates == ['x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[4].gates == ['x 0 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[5].gates == ['x 0 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[6].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[7].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
 
     @unittest.skip("Need to defer measure into classical results.")
     def test_deferred_classical_expression(self):
         qir = fetch_project_ll("def-classical-expression")
-        mock, runtime = fetch_mock_runtime()
-        runtime.run(qir)
+        runtime, runner = fetch_mock_runner()
+        runner.run(qir)
 
     # TODO: Results aren't entirely correct, find out what's up.
     def test_bell_int_return(self):
-        mock, runtime = fetch_mock_runtime()
-        results = runtime.run(get_qir_path("bell_int_return.ll"))
+        runtime, runner = fetch_mock_runner()
+        results = runner.run(get_qir_path("bell_int_return.ll"))
 
-        assert mock.builder_instructions == [
+        assert runtime.builder_instructions == [
             "z 0 3.141592653589793",
             "y 0 1.5707963267948966",
             "cx [0] 1 3.141592653589793",
@@ -202,12 +202,12 @@ class TestRasqal:
         ]
 
     def test_routed_bell_psi_plus(self):
-        mock, runtime = fetch_mock_runtime()
+        runtime, runner = fetch_mock_runner()
 
-        runtime = apply_routing(build_ring_architecture(4), runtime)
-        runtime.run(get_qir_path("bell_psi_plus.ll"))
+        runner = apply_routing(build_ring_architecture(4), runner)
+        runner.run(get_qir_path("bell_psi_plus.ll"))
 
-        assert mock.builder_instructions == [
+        assert runtime.builder_instructions == [
             "z 3 3.141592653589793",
             "y 3 1.5707963267948966",
             "cx [3] 0 3.141592653589793",
@@ -216,10 +216,10 @@ class TestRasqal:
         ]
 
     def test_parser_bell_psi_plus(self):
-        mock, runtime = fetch_mock_runtime()
-        runtime.run(get_qir_path("bell_psi_plus.ll"))
+        runtime, runner = fetch_mock_runner()
+        runner.run(get_qir_path("bell_psi_plus.ll"))
 
-        assert mock.builder_instructions == [
+        assert runtime.builder_instructions == [
             "z 0 3.141592653589793",
             "y 0 1.5707963267948966",
             "cx [0] 1 3.141592653589793",
@@ -228,10 +228,10 @@ class TestRasqal:
         ]
 
     def test_parser_bell_psi_minus(self):
-        mock, runtime = fetch_mock_runtime()
-        runtime.run(get_qir_path("bell_psi_minus.ll"))
+        runtime, runner = fetch_mock_runner()
+        runner.run(get_qir_path("bell_psi_minus.ll"))
 
-        assert mock.builder_instructions == [
+        assert runtime.builder_instructions == [
             "x 0 3.141592653589793",
             "z 0 3.141592653589793",
             "y 0 1.5707963267948966",
@@ -241,10 +241,10 @@ class TestRasqal:
         ]
 
     def test_parser_bell_theta_plus(self):
-        mock, runtime = fetch_mock_runtime()
-        runtime.run(get_qir_path("bell_theta_plus.ll"))
+        runtime, runner = fetch_mock_runner()
+        runner.run(get_qir_path("bell_theta_plus.ll"))
 
-        assert mock.builder_instructions == [
+        assert runtime.builder_instructions == [
             "x 1 3.141592653589793",
             "z 0 3.141592653589793",
             "y 0 1.5707963267948966",
@@ -254,10 +254,10 @@ class TestRasqal:
         ]
 
     def test_parser_bell_theta_minus(self):
-        mock, runtime = fetch_mock_runtime()
-        runtime.run(get_qir_path("bell_theta_minus.ll"))
+        runtime, runner = fetch_mock_runner()
+        runner.run(get_qir_path("bell_theta_minus.ll"))
 
-        assert mock.builder_instructions == [
+        assert runtime.builder_instructions == [
             "x 1 3.141592653589793",
             "x 0 3.141592653589793",
             "z 0 3.141592653589793",

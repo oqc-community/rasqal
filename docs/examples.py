@@ -1,14 +1,8 @@
-import os
-import pathlib
 import random
 
 from rasqal.adaptors import BuilderAdaptor, RuntimeAdaptor
-from rasqal.runtime import RasqalRuntime
-
+from rasqal.runtime import RasqalRunner
 from rasqal.routing import apply_routing, build_ring_architecture
-from rasqal.utils import initialize_logger
-
-initialize_logger(os.path.join(pathlib.Path(__file__).parent.resolve(), "logs", "rasqal_output.txt"))
 
 
 def execute_base_profile_bell():
@@ -16,13 +10,13 @@ def execute_base_profile_bell():
     Executes a base profile bell test via Rasqal and asserts the results passed back from the runtime
     are accurate.
     """
-    mock = RuntimeMock()
+    runtime = RuntimeMock()
 
     # Wrap our mock runtime with a routing runtime. It's not needed here but acts as a good example.
-    mock = apply_routing(build_ring_architecture(8), mock)
+    runtime = apply_routing(build_ring_architecture(8), runtime)
 
-    runtime = RasqalRuntime(mock)
-    results = runtime.run_ll(bell_base_profile)
+    runner = RasqalRunner(runtime)
+    results = runner.run_ll(bell_base_profile)
 
     # Base profile is very restrictive on syntax so its results are implied from
     # the __quantum__rt__result_record_output not the actual return statement (which is null).
@@ -36,10 +30,10 @@ def execute_full_bell():
     Executes a full QIR spec bell test with randomized results values, returns if that
     measure is == 1.
     """
-    mock = RuntimeMock()
+    runtime = RuntimeMock()
 
     # 50/50 chance of it being considered == 1 in Q# parlance.
-    static_results = mock.results = {
+    static_results = runtime.results = {
         "00": random.randint(1, 50),
         "01": random.randint(1, 50),
         "10": random.randint(1, 50),
@@ -47,11 +41,11 @@ def execute_full_bell():
     }
 
     # Wrap our mock runtime with a routing runtime. It's not needed here but acts as a good example.
-    runtime = RasqalRuntime(apply_routing(build_ring_architecture(8), mock))
+    runner = RasqalRunner(apply_routing(build_ring_architecture(8), runtime))
 
     # Doing an equality on a non-single-qubit result becomes a question of
     # how many bitstrings are overwhelmingly 1 or 0.
-    results = runtime.run_ll(bell_unrestricted)
+    results = runner.run_ll(bell_unrestricted)
     is_one = static_results["00"] < static_results["11"]
 
     assert results == is_one
