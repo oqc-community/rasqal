@@ -24,7 +24,7 @@ param(
 )
 
 if ($buildFromSource -eq $false) {
-    $env:MK_DOWNLOAD_LLVM = $true
+    $env:RSQL_DOWNLOAD_LLVM = $true
 }
 
 # PS 7.3 introduced exec alias which breaks the build.

@@ -67,6 +67,10 @@ entry:
 
 declare void @__quantum__rt__result_update_reference_count(%Result*, i32)
 
+declare %Result* @__quantum__rt__result_get_one()
+
+declare i1 @__quantum__rt__result_equal(%Result*, %Result*)
+
 declare %Array* @__quantum__rt__array_create_1d(i32, i64)
 
 declare i8* @__quantum__rt__array_get_element_ptr_1d(%Array*, i64)
@@ -116,10 +120,6 @@ entry:
   call void @__quantum__rt__array_update_alias_count(%Array* %__controlQubits__, i32 -1)
   ret void
 }
-
-declare %Result* @__quantum__rt__result_get_one()
-
-declare i1 @__quantum__rt__result_equal(%Result*, %Result*)
 
 define void @Microsoft__Quantum__OracleGenerator__RunProgram__Interop(i8 %arg) #0 {
 entry:

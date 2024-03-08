@@ -21,7 +21,7 @@ jobs:
 #          export PATH="/root/.cargo/bin:${PATH}"
 #          export PATH="/root/.local/bin:$PATH"
 #          cd src
-#          MK_DOWNLOAD_LLVM=true pwsh ./build.ps1
+#          ./build.ps1
 #      - name: Upload wheels
 #        uses: actions/upload-artifact@v3
 #        with:
@@ -48,9 +48,7 @@ jobs:
         run: |
           winget install build-essential libffi-dev xz-utils powershell curl wget gnupg apt-transport-https 7-zip --disable-interactivity
           cd src
-          $env:MK_DOWNLOAD_LLVM = 'true' 
-          ./build.ps1; 
-          Remove-Item Env:\MK_DOWNLOAD_LLVM
+          ./build.ps1;
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
@@ -76,7 +74,7 @@ jobs:
         export PATH="/root/.cargo/bin:${PATH}"
         export PATH="/root/.local/bin:$PATH"
         cd src
-        MK_DOWNLOAD_LLVM=true pwsh ./build.ps1
+        pwsh ./build.ps1
     - name: Upload wheels
       uses: actions/upload-artifact@v3
       with:
@@ -101,7 +99,7 @@ jobs:
         export PATH="/root/.cargo/bin:${PATH}"
         export PATH="/root/.local/bin:$PATH"
         cd src
-        MK_DOWNLOAD_LLVM=true pwsh ./build.ps1
+        pwsh ./build.ps1
     - name: Upload wheels
       uses: actions/upload-artifact@v3
       with:

@@ -1,5 +1,5 @@
 [project]
-name = "munchqin"
+name = "rasqal"
 version = "0.1.0"
 requires-python = ">=3.9"
 description = "A dynamically executed quantum-classical hybrid optimizing runtime."
@@ -31,8 +31,8 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/oqc-community/munchkin.git"
-Issues = "https://github.com/oqc-community/munchkin/issues"
+Repository = "https://github.com/oqc-community/rasqal.git"
+Issues = "https://github.com/oqc-community/rasqal/issues"
 
 [build-system]
 requires = ["maturin ~= 0.13.7"]

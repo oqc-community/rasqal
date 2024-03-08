@@ -101,21 +101,21 @@ fn main() -> Result<(), Box<dyn Error>> {
   println!("cargo:rerun-if-changed=external.rs");
 
   // Download vars passed to cmake
-  println!("cargo:rerun-if-env-changed=MK_DOWNLOAD_LLVM");
-  println!("cargo:rerun-if-env-changed=MK_LLVM_BUILDS_URL");
-  println!("cargo:rerun-if-env-changed=MK_LLVM_PKG_NAME");
+  println!("cargo:rerun-if-env-changed=RSQL_DOWNLOAD_LLVM");
+  println!("cargo:rerun-if-env-changed=RSQL_LLVM_BUILDS_URL");
+  println!("cargo:rerun-if-env-changed=RSQL_LLVM_PKG_NAME");
 
   // Package vars used only in here
-  println!("cargo:rerun-if-env-changed=MK_PKG_DEST");
+  println!("cargo:rerun-if-env-changed=RSQL_PKG_DEST");
 
   // Build vars passed to cmake
-  println!("cargo:rerun-if-env-changed=MK_LLVM_TAG");
+  println!("cargo:rerun-if-env-changed=RSQL_LLVM_TAG");
 
   // maps to CPACK_PACKAGE_FILE_NAME
-  println!("cargo:rerun-if-env-changed=MK_PACKAGE_FILE_NAME");
+  println!("cargo:rerun-if-env-changed=RSQL_PACKAGE_FILE_NAME");
 
   // maps to CMAKE_INSTALL_PREFIX passed to cmake in build and download
-  println!("cargo:rerun-if-env-changed=MK_CACHE_DIR");
+  println!("cargo:rerun-if-env-changed=RSQL_CACHE_DIR");
 
   if cfg!(feature = "download-llvm") {
     println!("Downloading llvm");
@@ -140,9 +140,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn download_llvm() -> Result<(), Box<dyn Error>> {
   // If the download url isn't set, we need to immediately fail.
-  let url = env::var("MK_LLVM_BUILDS_URL")?;
+  let url = env::var("RSQL_LLVM_BUILDS_URL")?;
 
-  let enable_download = env::var("MK_DOWNLOAD_LLVM").unwrap_or_else(|_| "true".to_owned());
+  let enable_download = env::var("RSQL_DOWNLOAD_LLVM").unwrap_or_else(|_| "true".to_owned());
 
   let build_dir = get_build_dir()?;
 
@@ -150,9 +150,9 @@ fn download_llvm() -> Result<(), Box<dyn Error>> {
   config
     .generator("Ninja")
     .no_build_target(true)
-    .env("MK_LLVM_PKG_NAME", get_package_file_name()?)
-    .env("MK_LLVM_BUILDS_URL", url)
-    .env("MK_DOWNLOAD_LLVM", enable_download)
+    .env("RSQL_LLVM_PKG_NAME", get_package_file_name()?)
+    .env("RSQL_LLVM_BUILDS_URL", url)
+    .env("RSQL_DOWNLOAD_LLVM", enable_download)
     .define("CPACK_PACKAGE_FILE_NAME", get_package_name()?)
     .define("CMAKE_INSTALL_PREFIX", get_llvm_install_dir())
     .very_verbose(true);
@@ -180,7 +180,7 @@ fn compile_llvm() -> Result<(), Box<dyn Error>> {
   config
     .generator("Ninja")
     .build_target(get_llvm_compile_target().as_str())
-    .env("MK_LLVM_TAG", get_llvm_tag())
+    .env("RSQL_LLVM_TAG", get_llvm_tag())
     .define("CPACK_PACKAGE_FILE_NAME", get_package_name()?)
     .define("CMAKE_INSTALL_PREFIX", get_llvm_install_dir());
   let _ = config.build();
@@ -200,7 +200,7 @@ fn package_llvm() -> Result<(), Box<dyn Error>> {
     .join("llvm-build")
     .join(get_package_file_name()?);
 
-  if let Ok(dest_dir) = env::var("MK_PKG_DEST") {
+  if let Ok(dest_dir) = env::var("RSQL_PKG_DEST") {
     let dest = PathBuf::from(dest_dir).join(get_package_file_name()?);
     println!(
       "Moving {} to {}.",
@@ -209,7 +209,7 @@ fn package_llvm() -> Result<(), Box<dyn Error>> {
     );
     fs::rename(output, dest)?;
   } else {
-    println!("Not moving package output. MK_PKG_DEST not set.");
+    println!("Not moving package output. RSQL_PKG_DEST not set.");
   }
 
   Ok(())
@@ -233,7 +233,7 @@ fn link_llvm() {
   println!(
     "cargo:config_path={}",
     llvm_sys::LLVM_CONFIG_PATH.clone().unwrap().display()
-  ); // will be DEP_MK_CONFIG_PATH
+  ); // will be DEP_RSQL_CONFIG_PATH
   println!("cargo:libdir={}", libdir); // DEP_KM_LIBDIR
 
   // Link LLVM libraries
@@ -268,7 +268,7 @@ fn get_package_file_name() -> Result<String, Box<dyn Error>> {
 }
 
 fn get_llvm_tag() -> String {
-  if let Ok(tag) = env::var("MK_LLVM_TAG") {
+  if let Ok(tag) = env::var("RSQL_LLVM_TAG") {
     tag
   } else if cfg!(feature = "llvm11-0") {
     "llvmorg-11.1.0".to_owned() // 1fdec59bf
@@ -279,17 +279,17 @@ fn get_llvm_tag() -> String {
   } else if cfg!(feature = "llvm14-0") {
     "llvmorg-14.0.6".to_owned() // 28c006
   } else {
-    panic!("Unsupported LLVM version. The LLVM feature flags or MK_LLVM_TAG must be set.")
+    panic!("Unsupported LLVM version. The LLVM feature flags or RSQL_LLVM_TAG must be set.")
   }
 }
 
 fn get_package_name() -> Result<String, Box<dyn Error>> {
-  if let Ok(file_name) = env::var("MK_PACKAGE_FILE_NAME") {
+  if let Ok(file_name) = env::var("RSQL_PACKAGE_FILE_NAME") {
     Ok(file_name)
   } else {
     let tag = get_llvm_tag();
     let triple = get_target_triple()?;
-    let package_name = format!("mk-llvm-{}-{}", triple, tag);
+    let package_name = format!("rqsl-llvm-{}-{}", triple, tag);
     Ok(package_name)
   }
 }
@@ -305,7 +305,7 @@ fn get_target_triple() -> Result<String, Box<dyn Error>> {
 }
 
 fn get_llvm_install_dir() -> PathBuf {
-  if let Ok(path) = env::var("MK_CACHE_DIR") {
+  if let Ok(path) = env::var("RSQL_CACHE_DIR") {
     PathBuf::from(path)
   } else {
     // if we install to OUT_DIR the llvm install task during the extraction

@@ -8,7 +8,7 @@ from qiskit.providers.models import QasmBackendConfiguration
 from qiskit import QiskitError, QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 
-from .runtime import MunchkinRuntime
+from .runtime import RasqalRuntime
 from .adaptors import BuilderAdaptor, RuntimeAdaptor
 
 
@@ -16,7 +16,7 @@ def fetch_qasm_runtime(qubit_count=30):
     """
     Returns a runtime which uses a QASM simulator as a backend.
     """
-    return MunchkinRuntime(QASMRuntime(qubit_count))
+    return RasqalRuntime(QASMRuntime(qubit_count))
 
 
 class QASMBuilder(BuilderAdaptor):

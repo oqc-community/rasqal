@@ -23,4 +23,4 @@ jobs:
           custom-allsigned-prcomment: 'All Contributors have signed the CLA.'
           custom-pr-sign-comment: 'I have read the Contributor License Agreement and I hereby accept the Terms.'
           allowlist: bot*
-          path-to-document: 'https://github.com/oqc-community/munchkin/blob/develop/contributor_license_agreement.md'
+          path-to-document: 'https://github.com/oqc-community/rasqal/blob/develop/contributor_license_agreement.md'

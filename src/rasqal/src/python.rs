@@ -39,7 +39,7 @@ impl RequiredFeatures {
   }
 }
 
-/// Proxy for initializing Munchkin loggers. Pass in path for file logger initialization.
+/// Proxy for initializing Rasqal loggers. Pass in path for file logger initialization.
 #[pyfunction]
 fn initialize_file_logger(file_path: &str) { initialize_loggers(Some(file_path.to_string())); }
 
@@ -73,26 +73,26 @@ impl FromPyObject<'_> for Value {
     let transformed = if ob.is_instance_of::<PyInt>().is_ok_and(|val| val) {
       let value: i128 = ob
         .extract()
-        .unwrap_or_else(|_| panic!("Can't map {ob} to Munchkin value."));
+        .unwrap_or_else(|_| panic!("Can't map {ob} to Rasqal value."));
       Value::Long(value)
     } else if ob.is_instance_of::<PyFloat>().is_ok_and(|val| val) {
       let value: f64 = ob
         .extract()
-        .unwrap_or_else(|_| panic!("Can't map {ob} to Munchkin value."));
+        .unwrap_or_else(|_| panic!("Can't map {ob} to Rasqal value."));
       Value::Float(value)
     } else if ob.is_instance_of::<PyBool>().is_ok_and(|val| val) {
       let value: bool = ob
         .extract()
-        .unwrap_or_else(|_| panic!("Can't map {ob} to Munchkin value."));
+        .unwrap_or_else(|_| panic!("Can't map {ob} to Rasqal value."));
       Value::Bool(value)
     } else if ob.is_instance_of::<PyString>().is_ok_and(|val| val) {
       let value: String = ob
         .extract()
-        .unwrap_or_else(|_| panic!("Can't map {ob} to Munchkin value."));
+        .unwrap_or_else(|_| panic!("Can't map {ob} to Rasqal value."));
       Value::String(value)
     } else {
       return Err(PyValueError::new_err(
-        "Can't resolve Python value to Munchkin value."
+        "Can't resolve Python value to Rasqal value."
       ));
     };
 

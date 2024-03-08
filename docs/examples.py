@@ -2,18 +2,18 @@ import os
 import pathlib
 import random
 
-from munchqin.adaptors import BuilderAdaptor, RuntimeAdaptor
-from munchqin.runtime import MunchkinRuntime
+from rasqal.adaptors import BuilderAdaptor, RuntimeAdaptor
+from rasqal.runtime import RasqalRuntime
 
-from munchqin.routing import apply_routing, build_ring_architecture
-from munchqin.utils import initialize_logger
+from rasqal.routing import apply_routing, build_ring_architecture
+from rasqal.utils import initialize_logger
 
-initialize_logger(os.path.join(pathlib.Path(__file__).parent.resolve(), "logs", "munchkin_output.txt"))
+initialize_logger(os.path.join(pathlib.Path(__file__).parent.resolve(), "logs", "rasqal_output.txt"))
 
 
 def execute_base_profile_bell():
     """
-    Executes a base profile bell test via Munchkin and asserts the results passed back from the runtime
+    Executes a base profile bell test via Rasqal and asserts the results passed back from the runtime
     are accurate.
     """
     mock = RuntimeMock()
@@ -21,7 +21,7 @@ def execute_base_profile_bell():
     # Wrap our mock runtime with a routing runtime. It's not needed here but acts as a good example.
     mock = apply_routing(build_ring_architecture(8), mock)
 
-    runtime = MunchkinRuntime(mock)
+    runtime = RasqalRuntime(mock)
     results = runtime.run_ll(bell_base_profile)
 
     # Base profile is very restrictive on syntax so its results are implied from
@@ -48,7 +48,7 @@ def execute_full_bell():
 
     # Wrap our mock runtime with a routing runtime. It's not needed here but acts as a good example.
     mock = apply_routing(build_ring_architecture(8), mock)
-    runtime = MunchkinRuntime(mock)
+    runtime = RasqalRuntime(mock)
 
     # We calculate that trying to ask 'is one' on a multi-qubit result is whether a bitstring is overwhelmingly 1.
     # In this case the only one which we can answer that with a definitive answer is 11.

@@ -1,6 +1,6 @@
 [package]
 authors = ["John Dumbell"]
-name = "munchkin"
+name = "rasqal"
 version = "0.1.0"
 edition = "2021"
 license = "BSD-3-Clause"
@@ -31,4 +31,4 @@ bitflags = "2.4.0"
 crate-type = ["cdylib"]
 
 [package.metadata.maturin]
-name = "munchqin._native"
+name = "rasqal._native"

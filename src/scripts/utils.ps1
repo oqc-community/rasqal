@@ -99,8 +99,8 @@ function Test-LlvmConfig {
 }
 
 function Resolve-InstallationDirectory {
-    if (Test-Path env:\MK_LLVM_EXTERNAL_DIR) {
-        return $env:MK_LLVM_EXTERNAL_DIR
+    if (Test-Path env:\RSQL_LLVM_EXTERNAL_DIR) {
+        return $env:RSQL_LLVM_EXTERNAL_DIR
     }
     else {
         $packagePath = Get-DefaultInstallDirectory
@@ -109,8 +109,8 @@ function Resolve-InstallationDirectory {
 }
 
 function Get-DefaultInstallDirectory {
-    if (Test-Path env:\MK_CACHE_DIR) {
-        $env:MK_CACHE_DIR
+    if (Test-Path env:\RSQL_CACHE_DIR) {
+        $env:RSQL_CACHE_DIR
     }
     else {
         Join-Path $Target (Get-LLVMFeatureVersion)
@@ -150,15 +150,15 @@ function Invoke-LoggedCommand {
 }
 
 function Use-ExternalLlvmInstallation {
-    Write-BuildLog "Using LLVM installation specified by MK_LLVM_EXTERNAL_DIR"
-    Assert (Test-Path $env:MK_LLVM_EXTERNAL_DIR) "MK_LLVM_EXTERNAL_DIR folder does not exist"
-    Use-LlvmInstallation $env:MK_LLVM_EXTERNAL_DIR
+    Write-BuildLog "Using LLVM installation specified by RSQL_LLVM_EXTERNAL_DIR"
+    Assert (Test-Path $env:RSQL_LLVM_EXTERNAL_DIR) "RSQL_LLVM_EXTERNAL_DIR folder does not exist"
+    Use-LlvmInstallation $env:RSQL_LLVM_EXTERNAL_DIR
 }
 
 function Test-AllowedToDownloadLlvm {
-    # If MK_DOWNLOAD_LLVM isn't set, we don't allow for download
+    # If RSQL_DOWNLOAD_LLVM isn't set, we don't allow for download
     # If it is set, then we use its value
-    ((Test-Path env:\MK_DOWNLOAD_LLVM) -and ($env:MK_DOWNLOAD_LLVM -eq $true))
+    ((Test-Path env:\RSQL_DOWNLOAD_LLVM) -and ($env:RSQL_DOWNLOAD_LLVM -eq $true))
 }
 
 function Test-InCondaEnvironment {
@@ -174,8 +174,8 @@ function Test-InVirtualEnvironment {
 }
 
 function Get-LLVMFeatureVersion {
-    if (Test-Path env:\MK_LLVM_FEATURE_VERSION) {
-        $env:MK_LLVM_FEATURE_VERSION
+    if (Test-Path env:\RSQL_LLVM_FEATURE_VERSION) {
+        $env:RSQL_LLVM_FEATURE_VERSION
     }
     else {
         # "llvm11-0", "llvm12-0", "llvm13-0", "llvm14-0"

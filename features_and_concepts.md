@@ -1,4 +1,4 @@
-Whenever Munchkin is first introduced to people they usually ask "How is this different from other hybrid runtimes? It looks exactly the same!".
+Whenever Rasqal is first introduced to people they usually ask "How is this different from other hybrid runtimes? It looks exactly the same!".
 On the surface it operates very similarly, so this question isn't that suprising.
 
 Its goals and the way it views the hybrid IRs is actually quite different, but to highlight these differences requires a bit of an explainer about some of its foundational concepts and philosophies.
@@ -8,12 +8,12 @@ Or if you don't need convincing, feel free to jump straight to the features sect
 
 ## Foundational Concepts
 
-Describing Munchkin as a symbolic-execution driven optimizing runtime, while accurate from a high level, also manages to tell us very little about how it works.
+Describing Rasqal as a symbolic-execution driven optimizing runtime, while accurate from a high level, also manages to tell us very little about how it works.
 
 A more precise description is that it's a quantum algorithm synthesis engine. 
 It treats hybrid IRs as nothing but a blueprint for the algorithms logic, but how that algorithm is actually realized is up to it.
 It may decide to recursively squash classical expressions into your circuit, alternatively expand quantum results into classical, or squash two quantum methods together. 
-As long as the codes logic ends up with the same result, how it gets there is entirely up to Munchkin to decide.
+As long as the codes logic ends up with the same result, how it gets there is entirely up to Rasqal to decide.
 Multiple -PU machines may also be roped in to run the algorithm or power its optimization passes: QPU, GPU, CPU, HPC(U). 
 Entirely depends upon what machines are nearby.
 
@@ -29,7 +29,7 @@ But as all our information is towards making these executions as optimized as po
 These nearly-constant graphs allow very strong assertions to be given around data- and control-flow, and inform us to how the circuit to be sent to the QPU should be built.
 The graphs are then executed, and as we step through them we dynamically build up the queries to send to other hardware, executing when we reach a point that we absolutely need the result.
 
-Munchkin doesn't execute QIR in a traditional sense, it uses it as a schema for encoding the logic that a hybrid algorithm uses. 
+Rasqal doesn't execute QIR in a traditional sense, it uses it as a schema for encoding the logic that a hybrid algorithm uses. 
 Sometimes it will run very close to the QIR as-written because it's simple enough to not need transformation.
 In early versions this might happen more often than not, but this is not its function.
 In fact the less the execution run looks like the incoming QIR the better, because it means we've been able to do a lot of optimization and prediction.
@@ -37,7 +37,7 @@ In fact the less the execution run looks like the incoming QIR the better, becau
 And that's it! The introduction to its internals and its goals. 
 Hopefully this has given some insight into how it differs to other hybrid runtimes (it's barely a runtime) and will help give some nuance to how some of its features actually work.
 
-If you are interested in a more thorough breakdown of its internals and concepts it has [a paper](https://github.com/oqc-community/munchkin/blob/develop/docs/Munchkin%20Draft%20v2.pdf) which goes into them in detail.
+If you are interested in a more thorough breakdown of its internals and concepts it has [a paper](https://github.com/oqc-community/rasqal/blob/develop/docs/Rasqal%20Draft%20v2.pdf) which goes into them in detail.
 
 ## Features
 
@@ -51,13 +51,13 @@ Currently available:
 5. Classical and quantum instructions can be fully interwoven including data- and control-flow.
 6. Support for more traditional constructs such as logging and exceptions. These in the future could be lowered into the hardware.
 
-The combination of these means that even if a QPU doesn't have built-in hybrid instruction support you can use Munchkin to execute hybrid code against it.
+The combination of these means that even if a QPU doesn't have built-in hybrid instruction support you can use Rasqal to execute hybrid code against it.
 All it needs is gate-level operation support. 
 
 We also have a QASM builder that is used to power our simulators, but this could also be used for integrations with anything that has a QASM API.
 
 [1] Big int is the one exception here, this isn't supported. 
-There are also some instructions we silently ignore because they have no impact on how Munchkin views the world, such as qubit reference counting.
+There are also some instructions we silently ignore because they have no impact on how Rasqal views the world, such as qubit reference counting.
 
 [2] The wording here is rather precise as we don't route the QIR, we route the circuit we generate just before its sent to the QPU.
 Routing fully interwoven instructions is very tricky, so we purposefully only do it after circuit synthesis.
@@ -69,7 +69,7 @@ Soon to be implemented:
 We want to also defer the classical operations until we find a point where we _absolutely_ need to execute.
 3. More required feature metadata to be passed to the backend. Circuit size, included gates, far more information about what's being run. 
 4. Predicted execution plans. Allows tools to pass in QIR and get back precise information about each quantum execution: what circuit, values, features it requires etc.
-This will allow tools sitting in front of Munchkin to tailor their own optimization passes.
+This will allow tools sitting in front of Rasqal to tailor their own optimization passes.
 
 5. LLVM-15+.
 
@@ -82,4 +82,4 @@ In the future:
 These are our highly experimental features that will be continuously worked on alongside more tangential improvements.
 While being built they will only be enabled by experimental feature flags.
 
-Please see [our examples](https://github.com/oqc-community/munchkin/blob/develop/examples.md) for the sorts of code you could send to Munchkin as well as what it returns.
+Please see [our examples](https://github.com/oqc-community/rasqal/blob/develop/examples.md) for the sorts of code you could send to Munchkin as well as what it returns.

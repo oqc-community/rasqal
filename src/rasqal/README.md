@@ -13,7 +13,7 @@ as well as providing a platform for dynamic optimization/lowering algorithms.
 
 1. Install Rasqal in your favourite Python venv by running `pip install rasqal`. Our current testing is done with `v3.9` of Python.
 2. Read the [examples](https://github.com/oqc-community/rasqal/blob/develop/examples.md).
-3. (Optional) Read the [draft paper](https://github.com/oqc-community/rasqal/blob/develop/docs/Rasqal%20Draft%20v2.pdf) for a deep-dive into Rasqals concepts and data structures.
+3. (Optional) Read the [draft paper](https://github.com/oqc-community/rasqal/blob/develop/docs/Rasqal%20Draft%20v2.pdf) for a deep-dive into Munchkins concepts and data structures.
 
 ### Key Features
 

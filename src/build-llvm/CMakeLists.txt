@@ -8,24 +8,24 @@ include(ExternalProject)
 
 # Environment variables
 # Download vars
-# - MK_DOWNLOAD_LLVM => If set, download pre-built LLVM binaries.
-# - MK_LLVM_BUILDS_URL => URL root where downloads are hosted.
-# - MK_LLVM_PKG_NAME => name of package to be downloaded/created
+# - RSQL_DOWNLOAD_LLVM => If set, download pre-built LLVM binaries.
+# - RSQL_LLVM_BUILDS_URL => URL root where downloads are hosted.
+# - RSQL_LLVM_PKG_NAME => name of package to be downloaded/created
 # - CPACK_PACKAGE_FILE_NAME
 # Build vars
-# - MK_LLVM_TAG
+# - RSQL_LLVM_TAG
 # Both
 # - CMAKE_INSTALL_PREFIX
 
-if ($ENV{MK_DOWNLOAD_LLVM} MATCHES "true")
+if ($ENV{RSQL_DOWNLOAD_LLVM} MATCHES "true")
   message (STATUS "Install LLVM to ${CMAKE_INSTALL_PREFIX}")
 
-  set(SHA256_NAME $ENV{MK_LLVM_PKG_NAME}.sha256)
-  message (STATUS "Download file: $ENV{MK_LLVM_BUILDS_URL}/$ENV{MK_LLVM_PKG_NAME}")
-  message (STATUS "Download sha:$ENV{MK_LLVM_BUILDS_URL}/${SHA256_NAME}")
+  set(SHA256_NAME $ENV{RSQL_LLVM_PKG_NAME}.sha256)
+  message (STATUS "Download file: $ENV{RSQL_LLVM_BUILDS_URL}/$ENV{RSQL_LLVM_PKG_NAME}")
+  message (STATUS "Download sha:$ENV{RSQL_LLVM_BUILDS_URL}/${SHA256_NAME}")
 
   # download the expected archive hash
-  file(DOWNLOAD "$ENV{MK_LLVM_BUILDS_URL}/${SHA256_NAME}" ${CMAKE_BINARY_DIR}/${SHA256_NAME} STATUS SHA256_DOWNLOAD_STATUS)
+  file(DOWNLOAD "$ENV{RSQL_LLVM_BUILDS_URL}/${SHA256_NAME}" ${CMAKE_BINARY_DIR}/${SHA256_NAME} STATUS SHA256_DOWNLOAD_STATUS)
   list(GET SHA256_DOWNLOAD_STATUS 0 SHA256_DOWNLOAD_STATUS)
   if (NOT (${SHA256_DOWNLOAD_STATUS} EQUAL 0))
     list(GET SHA256_DOWNLOAD_STATUS 1 ERROR_MESSAGE)
@@ -37,7 +37,7 @@ if ($ENV{MK_DOWNLOAD_LLVM} MATCHES "true")
   string(STRIP ${LLVM_SHA256_SUM} LLVM_SHA256_SUM)
 
   ExternalProject_Add(llvm
-    URL $ENV{MK_LLVM_BUILDS_URL}/$ENV{MK_LLVM_PKG_NAME}
+    URL $ENV{RSQL_LLVM_BUILDS_URL}/$ENV{RSQL_LLVM_PKG_NAME}
     URL_HASH SHA256=${LLVM_SHA256_SUM}
     CONFIGURE_COMMAND ""
     SOURCE_DIR ${CMAKE_INSTALL_PREFIX}
@@ -61,7 +61,7 @@ else()
 
   ExternalProject_Add(llvm
     GIT_REPOSITORY    https://github.com/llvm/llvm-project.git
-    GIT_TAG           $ENV{MK_LLVM_TAG}
+    GIT_TAG           $ENV{RSQL_LLVM_TAG}
     GIT_SHALLOW       TRUE
     GIT_PROGRESS      TRUE
     SOURCE_SUBDIR     llvm

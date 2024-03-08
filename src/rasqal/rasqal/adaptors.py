@@ -7,7 +7,7 @@ from typing import Dict
 
 class BuilderAdaptor:
     """
-    Python APIs which Munchkins internal features demand exist.
+    Python APIs which Rasqals internal features demand exist.
 
     This builder will be called when it has a quantum blob it wants to execute.
     Each method will be called when that gate/instruction needs to be executed, with the assumption that it will
@@ -45,7 +45,7 @@ class BuilderAdaptor:
 
 class RuntimeAdaptor:
     """
-    Python API which Munchkin expects to be in place and holds central calls for extracting feature
+    Python API which Rasqal expects to be in place and holds central calls for extracting feature
     capabilities and running built-up builders.
 
     It can model a single QPU/simulator or a collection of them.
