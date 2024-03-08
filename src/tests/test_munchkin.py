@@ -3,16 +3,11 @@ import pathlib
 import unittest
 from os.path import abspath, dirname, join
 
-from rasqal.utils import initialize_logger
-
 from rasqal.routing import apply_routing, build_ring_architecture
 from .file_utils import get_qir_path
 from rasqal.simulators import fetch_qasm_runner
 from rasqal.adaptors import (BuilderAdaptor, RuntimeAdaptor)
 from rasqal.runtime import RasqalRunner
-
-
-initialize_logger(os.path.join(pathlib.Path(__file__).parent.resolve(), "logs", "rasqal_output.txt"))
 
 
 def fetch_project_ll(proj_name: str):

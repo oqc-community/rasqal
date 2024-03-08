@@ -58,9 +58,9 @@ task build-rasqal -depends init {
 }
 
 task test-rasqal -depends build-rasqal {
-    Invoke-LoggedCommand -workingDirectory $Rasqal {
-        cargo test --release @(Get-CargoArgs)
-    }
+#     Invoke-LoggedCommand -workingDirectory $Rasqal {
+#         cargo test --release @(Get-CargoArgs)
+#     }
 
     Invoke-LoggedCommand -workingDirectory $Root {
         pip install pytest

@@ -1332,8 +1332,7 @@ impl QIREvaluator {
         graph.Assign(ref_id, Value::Array(Vec::new()));
       }
 
-      "llvm.powi.f64.i32" |
-      "llvm.powi.f64.i64" => {
+      "llvm.powi.f64.i32" | "llvm.powi.f64.i64" => {
         let ref_id = get_ref_id_from_instruction(inst.borrow());
         let value = parse_as_value(inst, 0).expect("Can't resolve string value.");
         let power_multiplier = parse_as_value(inst, 1).expect("Can't resolve string value.");
