@@ -968,32 +968,31 @@ impl AnalysisResult {
 
   pub fn empty() -> AnalysisResult { AnalysisResult::default() }
 
-  /// Count the values in a bitstring for every result.
-  /// If it is overwhelmingly 1, then that bitstring is considered 'one'.
-  /// If there are more bitstrings that are overwhelmingly 1 then the result is considered one.
+  /// Check if this distribution can be considered true/false.
   ///
-  /// If the values are equal then it
+  /// This is done by counting the instances of 0/1 in a particular bitstring, and if one
+  /// is more than the other adding its count to a rolling 1/2 total. If the bitstring has equal
+  /// numbers, such as 0011, it is discarded as neither.
   ///
-  /// Example:
-  /// "00": 50
-  /// "01": 10
-  /// "10": 20
-  /// "11": 70
-  ///
-  /// This will equal 0 because 01 and 10 don't overwhelmingly have a 1, so are considered zero.
-  /// So 50+10+20 > 70
+  /// If the counts of both at the end are equal it will default to false.
   pub fn is_one(&self) -> bool {
     let mut zeros = 0;
     let mut ones = 0;
     for (key, val) in self.distribution.iter() {
-      if key.matches("0").count() >= (key.len() / 2) {
+      let length = key.len();
+      let boundary = length / 2;
+      let zero_count = key.matches("0").count();
+      let one_count = length - zero_count;
+
+      // If there are more zeros, add to zero count, if equal, ignore, otherwise one.
+      if zero_count > boundary {
         zeros += val;
-      } else {
+      } else if one_count > boundary {
         ones += val;
       }
     }
 
-    // We imply that if both are the same it isn't one.
+    // Default to zero if equals.
     ones > zeros
   }
 

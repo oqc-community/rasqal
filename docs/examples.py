@@ -43,17 +43,16 @@ def execute_full_bell():
         "00": random.randint(1, 50),
         "01": random.randint(1, 50),
         "10": random.randint(1, 50),
-        "11": random.randint(1, 150)
+        "11": random.randint(1, 50)
     }
 
     # Wrap our mock runtime with a routing runtime. It's not needed here but acts as a good example.
-    mock = apply_routing(build_ring_architecture(8), mock)
-    runtime = RasqalRuntime(mock)
+    runtime = RasqalRuntime(apply_routing(build_ring_architecture(8), mock))
 
-    # We calculate that trying to ask 'is one' on a multi-qubit result is whether a bitstring is overwhelmingly 1.
-    # In this case the only one which we can answer that with a definitive answer is 11.
+    # Doing an equality on a non-single-qubit result becomes a question of
+    # how many bitstrings are overwhelmingly 1 or 0.
     results = runtime.run_ll(bell_unrestricted)
-    is_one = (static_results["01"] + static_results["10"] + static_results["00"]) < static_results["11"]
+    is_one = static_results["00"] < static_results["11"]
 
     assert results == is_one
 
