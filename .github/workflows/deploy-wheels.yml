@@ -1,0 +1,85 @@
+name: deploy-wheels
+
+on:
+  release:
+
+jobs:
+  deploy:
+    runs-on: ${{ matrix.config.os }}
+    env: ${{ matrix.config.env }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+            os: "ubuntu-20.04",
+            arch: "amd64",
+            target: "pypi-build",
+            env: { },
+          }
+          - {
+            os: "windows-2019",
+            arch: "amd64",
+            target: "pypi-build",
+            env: { },
+          }
+          - {
+            os: "macos-14",
+            arch: "arm64",
+            target: "pypi-build",
+            env: { },
+          }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup rust toolchain
+        uses: ./.github/actions/rust-toolchain
+        with:
+          toolchain: 1.75.0
+          components: rustfmt clippy
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.9
+        if: ${{ matrix.config.os != 'macos-14' }}
+      - name: Install LLVM
+        uses: ./.github/actions/install-llvm
+        with:
+          version: "14"
+          os: ${{ matrix.config.os }}
+          directory: ${{ github.workspace }}/target/llvm
+          target: ${{ matrix.config.target }}
+      - name: "Build ${{ matrix.config.target }}"
+        run: |
+          pwd
+          ./build.ps1 -t ${{ matrix.config.target }}
+        shell: pwsh
+      - name: Artifacts - manylinux
+        uses: actions/upload-artifact@v4
+        with:
+          name: rasqal-manylinux-artifacts
+          path: src/target/wheels/*manylinux_2_*.whl
+        if: ${{ matrix.config.os == 'ubuntu-20.04' }}
+      - name: Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rasqal-${{ matrix.config.os }}-artifacts
+          path: src/target/wheels/*
+        if: ${{ matrix.config.os != 'ubuntu-20.04' }}
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [ deploy ]
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rasqal-*
+          merge-multiple: true
+          path: dist/
+
+      - name: Publish to PyPi
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://pypi.org/p/rasqal
+          packages-dir: dist/

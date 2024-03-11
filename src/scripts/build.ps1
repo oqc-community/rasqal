@@ -12,19 +12,17 @@ param(
     [Parameter(Position = 0, Mandatory = 0)]
     [string[]]$taskList = @(),
     [Parameter(Position = 1, Mandatory = 0)]
-    [switch]$docs = $false,
+    [switch]$manyLinux = $false,
     [Parameter(Position = 2, Mandatory = 0)]
-    [System.Collections.Hashtable]$parameters = @{},
-    [Parameter(Position = 3, Mandatory = 0)]
-    [System.Collections.Hashtable]$properties = @{},
-    [Parameter(Position = 4, Mandatory = $false)]
-    [switch]$detailedDocs = $false,
-    [Parameter(Position = 5, Mandatory = $false)]
+    [switch]$docs = $false,
+    [Parameter(Position = 3, Mandatory = $false)]
     [switch]$buildFromSource = $false
 )
 
 if ($buildFromSource -eq $false) {
     $env:RSQL_DOWNLOAD_LLVM = $true
+} else {
+    $env:RSQL_DOWNLOAD_LLVM = $false
 }
 
 # PS 7.3 introduced exec alias which breaks the build.

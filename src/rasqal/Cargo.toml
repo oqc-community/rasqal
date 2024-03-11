@@ -18,7 +18,7 @@ features = ["llvm14-0"]
 either = "1.8"
 libc = "0.2"
 const-str = "0.5"
-pyo3 = { version = "0.17", features = ["abi3-py37", "extension-module", "auto-initialize", "num-complex"] }
+pyo3 = { version = "0.17", features = ["abi3-py37", "extension-module", "num-complex"] }
 llvm-sys = "140"
 regex = "1.7.1"
 log = "0.4.17"
