@@ -1,4 +1,4 @@
-![build status](https://github.com/oqc-community/rasqal/actions/workflows/build.yaml/badge.svg)
+![build status](https://github.com/oqc-community/rasqal/actions/workflows/build.yaml/badge.svg?branch=main)
 
 Rasqal is a quantum-classical hybrid runtime which runs QIR in a fully dynamic fashion, building up quantum circuits on the fly and executing them against a provided quantum backend.
 It uses symbolic execution and heavily deferred execution to perform code transformations, optimizations and lowering to power the circuit synthesis.

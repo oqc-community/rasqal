@@ -5,7 +5,8 @@
 Include utils.ps1
 
 Properties {
-    $Root = Resolve-Path (Split-Path -Parent $PSScriptRoot)
+    $ProjectRoot = Resolve-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+    $Root = Join-Path $ProjectRoot src
     $BuildLlvm = Join-Path $Root build-llvm
     $Rasqal = Join-Path $Root rasqal
     $Target = Join-Path $Root target
@@ -39,6 +40,15 @@ task build-llvm -depends init {
 }
 
 task build-rasqal -depends init {
+    # Copy over readme and license to embed in Python project.
+    Copy-Item -Path (Join-Path $ProjectRoot README.md) -Destination $Rasqal -force
+    Copy-Item -Path (Join-Path $ProjectRoot LICENSE) -Destination $Rasqal -force
+
+    $cargoArgs = (Get-CargoArgs)
+    if ($env:RSQL_MANYLINUX -eq $true) {
+        $cargoArgs += "--manylinux"
+    }
+
     $env:MATURIN_PEP517_ARGS = (Get-CargoArgs) -Join " "
     Get-Wheels rasqal | Remove-Item -Verbose
     Invoke-LoggedCommand { pip --verbose wheel --no-deps --wheel-dir $Wheels $Rasqal }
