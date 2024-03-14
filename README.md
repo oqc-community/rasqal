@@ -9,7 +9,7 @@ Some of the key things this approach enables:
 2. Enabling hybrid algorithms to be run on machines and tools with only a gate-level API available. This includes QASM API's if you use its simulation framework.
 3. Lots of optimization potential when passed large amounts of classical context that a quantum algorithm uses to accentuate its own execution.
 
-We also have a [full feature list and quick intro to its concepts](https://github.com/oqc-community/Rasqal/blob/develop/docs/features_and_concepts.py) as well as a [draft paper](https://github.com/oqc-community/rasqal/blob/develop/docs/Rasqal%20Draft%20v2.pdf) that covers its internals in excruciating detail.
+We also have a [full feature list and quick intro to its concepts](https://github.com/oqc-community/Rasqal/blob/develop/docs/features_and_concepts.md) as well as a [draft paper](https://github.com/oqc-community/rasqal/blob/develop/docs/Rasqal%20Draft%20v2.pdf) that covers its internals in excruciating detail.
 
 If you have any features or ideas you'd like to see implemented feel free to raise a [feature request](https://github.com/oqc-community/Rasqal/issues/new?assignees=&labels=enhancement&projects=&template=feature_request.md&title=)!
 
