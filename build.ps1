@@ -5,5 +5,5 @@
 
 #Requires -PSEdition Core
 
-pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& '$(Join-Path $pwd scripts build.ps1)' $args"
+pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& '$(Join-Path $pwd src scripts build.ps1)' $args"
 exit $LASTEXITCODE
