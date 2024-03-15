@@ -14,6 +14,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyFloat, PyInt, PyList, PyString};
 use std::borrow::Borrow;
+use crate::config::RasqalConfig;
 
 #[pymodule]
 fn _native(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -135,7 +136,7 @@ fn activate_fallback_logger() {
 
 #[pyclass]
 pub(crate) struct Executor {
-  tracing: ActiveTracers
+  config: Ptr<RasqalConfig>
 }
 
 /// Python binding for allowing consumes to call into the Rust code.
@@ -146,15 +147,19 @@ impl Executor {
     // Activate fallback logging if we don't have any.
     activate_fallback_logger();
     Executor {
-      tracing: ActiveTracers::empty()
+      config: Ptr::from(RasqalConfig::default())
     }
   }
 
-  fn trace_runtime(&mut self) { self.tracing.insert(ActiveTracers::Runtime); }
+  fn trace_runtime(&mut self) { self.config.trace_runtime(); }
 
-  fn trace_projections(&mut self) { self.tracing.insert(ActiveTracers::Projections); }
+  fn trace_projections(&mut self) { self.config.trace_projections(); }
 
-  fn trace_graphs(&mut self) { self.tracing.insert(ActiveTracers::Graphs); }
+  fn trace_graphs(&mut self) { self.config.trace_graphs(); }
+
+  fn step_count_limit(&mut self, limit: i64) {
+    self.config.step_count_limit(limit);
+  }
 
   #[allow(clippy::unused_self)]
   fn parse_file(&self, file: &str, entry_point: Option<&str>) -> PyResult<Py<Graph>> {
@@ -193,7 +198,7 @@ impl Executor {
         graph.wrapped.borrow(),
         args.as_ref(),
         collection.borrow(),
-        self.tracing.clone()
+        &self.config
       )
       .map_err(PyValueError::new_err)
       .map(|value| value.map_or(py.None(), |val| val.to_object(py)))
@@ -221,7 +226,7 @@ impl Executor {
       }
 
       let args: Vec<Value> = arguments.extract()?;
-      run_file(file, &args, collection.borrow(), None, self.tracing.clone())
+      run_file(file, &args, collection.borrow(), None, &self.config)
         .map_err(PyValueError::new_err)
         .map(|value| value.map_or(py.None(), |val| val.to_object(py)))
     })

@@ -16,7 +16,8 @@ use log::{log, Level};
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{Display, Formatter};
-use std::ops::{Deref, DerefMut};
+use std::ops::{Add, AddAssign, Deref, DerefMut};
+use crate::config::RasqalConfig;
 
 /// Assign an order to nodes so we're able to tell trivially when one is further in the graph
 /// or not.
@@ -325,18 +326,31 @@ impl TracingModule {
   pub fn has(&self, check_against: ActiveTracers) -> bool { self.tracers.contains(check_against) }
 }
 
+#[derive(Clone, Default)]
+struct RuntimeConstraints {
+  step_limit: Option<i64>
+}
+
+impl RuntimeConstraints {
+  pub fn new(step_limit: Option<i64>) -> RuntimeConstraints {
+    RuntimeConstraints { step_limit }
+  }
+}
+
 /// A runtime monitors, executes and maintains a cluster of graphs against the backend instances it
 /// currently has available.
 pub struct QuantumRuntime {
   engines: Ptr<RuntimeCollection>,
-  trace_module: Ptr<TracingModule>
+  trace_module: Ptr<TracingModule>,
+  constraints: RuntimeConstraints
 }
 
 impl QuantumRuntime {
-  pub fn new(engines: &Ptr<RuntimeCollection>, tracer: ActiveTracers) -> QuantumRuntime {
+  pub fn new(engines: &Ptr<RuntimeCollection>, config: &Ptr<RasqalConfig>) -> QuantumRuntime {
     QuantumRuntime {
       engines: engines.clone(),
-      trace_module: Ptr::from(TracingModule::with(tracer))
+      constraints: RuntimeConstraints::new(config.step_count_limit),
+      trace_module: Ptr::from(TracingModule::with(config.debug_tracers.clone()))
     }
   }
 
@@ -407,6 +421,11 @@ impl QuantumRuntime {
         val.as_ref()?;
         let val = follow_reference(&val.unwrap(), &context);
 
+        if self.is_tracing() {
+          log!(Level::Info, "Total steps taken: {}", context.step_count)
+        }
+
+        // TODO: Centralize resolution, think we already have this elsewhere.
         Some(match val.deref() {
           Value::QuantumPromise(qbs, proj) => Ptr::from(Value::AnalysisResult(Ptr::from(
             with_mutable!(proj.results_for(qbs))
@@ -453,6 +472,14 @@ impl QuantumRuntime {
     let mut available_scopes = with_mutable!(context.scopes.get_mut(&graph.identity));
     let mut seen_nodes = HashSet::new();
     loop {
+      context.step_count.add_assign(1);
+      if let Some(limit) = &self.constraints.step_limit {
+        let stuff = context.step_count.deref().clone();
+        if context.step_count.deref() > limit {
+          return Err(String::from("Execution step count limitation of {limit} exceeded."));
+        }
+      }
+
       if self.is_tracing() {
         let mut changed_variables = Vec::new();
         let mut updated_variables = HashMap::new();
@@ -931,6 +958,7 @@ pub struct RuntimeContext {
   pub method_graphs: Ptr<HashMap<String, Ptr<AnalysisGraph>>>,
   pub active_qubits: Ptr<HashMap<i64, Ptr<Qubit>>>,
   pub is_base_profile: bool,
+  pub step_count: Ptr<i64>,
 
   // TODO: Don't like this being everywhere, but it is a core object.
   //  Potentially change this back to POD object.
@@ -956,7 +984,8 @@ impl Default for RuntimeContext {
       scopes: Ptr::from(HashMap::new()),
       method_graphs: Ptr::from(HashMap::new()),
       associated_runtime: Ptr::default(),
-      is_base_profile: false
+      is_base_profile: false,
+      step_count: Ptr::from(0)
     }
   }
 }
@@ -973,7 +1002,8 @@ impl RuntimeContext {
       scopes: Ptr::from(HashMap::new()),
       method_graphs: context.method_graphs.clone(),
       associated_runtime: Ptr::default(),
-      is_base_profile: *context.is_base_profile.deref()
+      is_base_profile: *context.is_base_profile.deref(),
+      step_count: Ptr::from(0)
     }
   }
 
@@ -986,7 +1016,8 @@ impl RuntimeContext {
       scopes: self.scopes.clone(),
       method_graphs: self.method_graphs.clone(),
       associated_runtime: self.associated_runtime.clone(),
-      is_base_profile: self.is_base_profile
+      is_base_profile: self.is_base_profile,
+      step_count: self.step_count.clone()
     }
   }
 

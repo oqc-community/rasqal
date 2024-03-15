@@ -3,7 +3,7 @@
 
 from typing import Optional
 
-from ._native import initialize_file_logger, initialize_commandline_logger
+from ._native import initialize_file_logger, initialize_commandline_logger, DEFAULT_LOG_FILE
 
 
 def initialize_logger(file_path: Optional[str] = None):

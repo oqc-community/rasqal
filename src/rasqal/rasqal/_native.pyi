@@ -29,6 +29,9 @@ class Executor:
     def trace_projections(self):
         ...
 
+    def step_count_limit(self, limit: int):
+        ...
+
     def run(
         self,
         file_path: str,

@@ -23,13 +23,14 @@ use inkwell::{
 };
 
 use std::{ffi::OsStr, path::Path};
+use crate::config::RasqalConfig;
 
 /// Executes the file.
 pub fn run_file(
   path: impl AsRef<Path>, args: &Vec<Value>, runtimes: &Ptr<RuntimeCollection>,
-  entry_point: Option<&str>, tracer: ActiveTracers
+  entry_point: Option<&str>, config: &Ptr<RasqalConfig>
 ) -> Result<Option<Ptr<Value>>, String> {
-  run_graph(&parse_file(path, entry_point)?, args, runtimes, tracer)
+  run_graph(&parse_file(path, entry_point)?, args, runtimes, config)
 }
 
 /// `entry_point`
@@ -85,9 +86,9 @@ pub fn build_graph_from_module(
 /// Executes a graph with the current runtimes and context.
 pub fn run_graph(
   graph: &Ptr<ExecutableAnalysisGraph>, arguments: &Vec<Value>, runtimes: &Ptr<RuntimeCollection>,
-  tracer: ActiveTracers
+  config: &Ptr<RasqalConfig>
 ) -> Result<Option<Ptr<Value>>, String> {
-  let mut runtime = QuantumRuntime::new(runtimes, tracer);
+  let mut runtime = QuantumRuntime::new(runtimes, config);
   runtime.execute(graph, arguments)
 }
 
@@ -192,6 +193,7 @@ mod tests {
   use crate::smart_pointers::Ptr;
   use std::borrow::Borrow;
   use std::fs::canonicalize;
+  use crate::config::RasqalConfig;
 
   #[test]
   fn execute_qaoa() {
@@ -207,7 +209,7 @@ mod tests {
       &Vec::new(),
       runtimes.borrow(),
       None,
-      ActiveTracers::empty()
+      &Ptr::from(RasqalConfig::default())
     );
   }
 
@@ -227,7 +229,7 @@ mod tests {
       &Vec::new(),
       runtimes.borrow(),
       None,
-      ActiveTracers::empty()
+      &Ptr::from(RasqalConfig::default())
     );
   }
 
@@ -245,7 +247,7 @@ mod tests {
       &Vec::new(),
       runtimes.borrow(),
       None,
-      ActiveTracers::empty()
+      &Ptr::from(RasqalConfig::default())
     );
   }
 
@@ -264,11 +266,10 @@ mod tests {
       &vec![Value::Bool(true)],
       runtimes.borrow(),
       None,
-      ActiveTracers::empty()
+      &Ptr::from(RasqalConfig::default())
     );
   }
 
-  // TODO: Add dummy builder/runtime to deal with this.
   #[test]
   fn execute_unrestricted_bell() {
     let relative_path = canonicalize("../tests/files/qir/unrestricted_bell.ll").unwrap();
@@ -282,11 +283,33 @@ mod tests {
       &Vec::new(),
       runtimes.borrow(),
       None,
-      ActiveTracers::empty()
+      &Ptr::from(RasqalConfig::default())
     );
   }
 
-  // TODO: Fails, work out why.
+  #[test]
+  fn test_step_count() {
+    let relative_path = canonicalize("../tests/files/qir/unrestricted_bell.ll").unwrap();
+    let path = relative_path.to_str().unwrap();
+
+    let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
+      IntegrationRuntime::default()
+    )));
+
+    let mut config = RasqalConfig::default();
+    config.step_count_limit(2);
+
+    let results = run_file(
+      path,
+      &Vec::new(),
+      runtimes.borrow(),
+      None,
+      &Ptr::from(config)
+    );
+
+    assert!(results.is_err())
+  }
+
   #[test]
   fn execute_bell_int_return() {
     let relative_path = canonicalize("../tests/files/qir/bell_int_return.ll").unwrap();
@@ -300,7 +323,7 @@ mod tests {
       &Vec::new(),
       runtimes.borrow(),
       None,
-      ActiveTracers::all()
+      &Ptr::from(RasqalConfig::default())
     );
   }
 }
