@@ -2,7 +2,7 @@ from typing import Dict, Tuple, List, Union
 
 from .runtime import RasqalRunner
 from pytket.architecture import Architecture
-from pytket import Circuit, OpType
+from pytket import Circuit, OpType, Qubit, Bit
 from pytket.passes import SequencePass, DefaultMappingPass
 
 from .adaptors import BuilderAdaptor, RuntimeAdaptor
@@ -26,37 +26,51 @@ def apply_routing(couplings: Union[Architecture, List[Tuple[int, int]]], runtime
 
 
 class TketBuilder(BuilderAdaptor):
-    def __init__(self, qubit_count):
-        self.circuit = Circuit(qubit_count, qubit_count)
+    def __init__(self):
+        self.circuit = Circuit()
 
     def cx(self, controls, target, radii):
+        self.circuit.add_qubit(Qubit(target), False)
+        self.circuit.add_qubit(Qubit(controls[0]), False)
         self.circuit.CRx(radii, controls[0], target)
 
     def cz(self, controls, target, radii):
+        self.circuit.add_qubit(Qubit(target), False)
+        self.circuit.add_qubit(Qubit(controls[0]), False)
         self.circuit.CRz(radii, controls[0], target)
 
     def cy(self, controls, target, radii):
+        self.circuit.add_qubit(Qubit(target), False)
+        self.circuit.add_qubit(Qubit(controls[0]), False)
         self.circuit.CRy(radii, controls[0], target)
 
     def x(self, qubit, radii):
+        self.circuit.add_qubit(Qubit(qubit), False)
         self.circuit.Rx(radii, qubit)
 
     def y(self, qubit, radii):
+        self.circuit.add_qubit(Qubit(qubit), False)
         self.circuit.Ry(radii, qubit)
 
     def z(self, qubit, radii):
+        self.circuit.add_qubit(Qubit(qubit), False)
         self.circuit.Rz(radii, qubit)
 
     def swap(self, qubit1, qubit2):
+        self.circuit.add_qubit(Qubit(qubit1), False)
+        self.circuit.add_qubit(Qubit(qubit2), False)
         self.circuit.SWAP(qubit1, qubit2)
 
     def reset(self, qubit):
         # We're just using a barrier as a tag for reset for now.
         # Also useful so that things don't move past it.
+        self.circuit.add_qubit(Qubit(qubit), False)
         self.circuit.add_barrier([qubit])
 
     def measure(self, qubit):
         # We don't measure into anything, so just imply qubit index == classical bit index.
+        self.circuit.add_qubit(Qubit(qubit), False)
+        self.circuit.add_bit(Bit(qubit), False)
         self.circuit.Measure(qubit, qubit)
 
 
@@ -80,7 +94,6 @@ class TketRuntime(RuntimeAdaptor):
         builder: TketBuilder
 
         SequencePass([DefaultMappingPass(self.arch)]).apply(builder.circuit)
-
         return self.forwarded.execute(self._forward_circuit(builder))
 
     def _forward_circuit(self, builder) -> BuilderAdaptor:
@@ -109,4 +122,4 @@ class TketRuntime(RuntimeAdaptor):
         return fbuilder
 
     def create_builder(self) -> BuilderAdaptor:
-        return TketBuilder(len(self.arch.nodes))
+        return TketBuilder()
