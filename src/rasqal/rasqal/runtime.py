@@ -65,6 +65,20 @@ class RasqalRunner:
             finally:
                 remove(fp.name)
 
+    def step_count_limit(self, step_count: int) -> "RasqalRunner":
+        """
+        Sets a limit for the steps the symbolic executor can take.
+
+        If the environment this is running in is resource-constrained or heavily utilized you can set
+        a limit on how many steps it can take. It'll mean more complicated code will error out, but will bound
+        how long a run can take.
+
+        Smaller number == shorter path it's allowed to walk. Does not take into account time it takes for backend to
+        process and run quantum circuits though.
+        """
+        self.executor.step_count_limit(step_count)
+        return self
+
     def run_bitcode(self, bitcode: bytes, args: List[Any] = None):
         """Runs LLVM bitcode when passed as bytes. Creates temporary file and writes to it."""
         with NamedTemporaryFile(suffix=".bc", delete=False) as fp:

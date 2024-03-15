@@ -107,7 +107,7 @@ def fetch_mock_runner():
     return runtime, RasqalRunner(runtime)
 
 
-class TestRasqal:
+class TestRasqal(unittest.TestCase):
     def test_simulated_qaoa(self):
         qir = fetch_project_ll("qaoa")
         runtime = fetch_qasm_runner(20)
@@ -183,7 +183,6 @@ class TestRasqal:
         runtime, runner = fetch_mock_runner()
         runner.run(qir)
 
-    # TODO: Results aren't entirely correct, find out what's up.
     def test_bell_int_return(self):
         runtime, runner = fetch_mock_runner()
         results = runner.run(get_qir_path("bell_int_return.ll"))
@@ -261,3 +260,11 @@ class TestRasqal:
             "measure 0",
             "measure 1",
         ]
+
+    def test_step_count_limit(self):
+        runtime, runner = fetch_mock_runner()
+        runner.step_count_limit(2)
+        with self.assertRaises(ValueError) as ception:
+            runner.run(get_qir_path("bell_theta_minus.ll"))
+
+        assert "step count" in str(ception.exception)
