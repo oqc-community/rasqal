@@ -3,7 +3,7 @@
 
 cmake_minimum_required(VERSION 3.10.0)
 
-project(qirlib_external)
+project(llvm_build_external)
 include(ExternalProject)
 
 # Environment variables

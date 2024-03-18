@@ -42,7 +42,7 @@ no-llvm-linking = []
 
 # let us do the llvm linking
 # internal-llvm-linking is marker used in the cfg checks
-llvm14-0-qirlib-llvm-linking = ["llvm14-0", "internal-llvm-linking", "llvm-sys-140/disable-alltargets-init", "llvm-sys-140/no-llvm-linking"]
+llvm14-0-rsql-llvm-linking = ["llvm14-0", "internal-llvm-linking", "llvm-sys-140/disable-alltargets-init", "llvm-sys-140/no-llvm-linking"]
 
 internal-llvm-linking = []
 download-llvm = []

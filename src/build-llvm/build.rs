@@ -53,28 +53,28 @@ compile_error!(
 
 // Make sure one of the linking features is used
 #[cfg(all(
-  not(any(feature = "qirlib-llvm-linking")),
+  not(any(feature = "rsql-llvm-linking")),
   not(any(feature = "external-llvm-linking")),
   not(any(feature = "no-llvm-linking")),
 ))]
-compile_error!("One of the features `qirlib/qirlib-llvm-linking`, `qirlib/external-llvm-linking`, and `qirlib/no-llvm-linking` must be used exclusive.");
+compile_error!("One of the features `rsql/rsql-llvm-linking`, `rsql/external-llvm-linking`, and `rsql/no-llvm-linking` must be used exclusive.");
 
 // Make sure only one linking option is used.
 #[cfg(any(
   all(
-    feature = "qirlib-llvm-linking",
+    feature = "rsql-llvm-linking",
     any(feature = "external-llvm-linking", feature = "no-llvm-linking")
   ),
   all(
     feature = "external-llvm-linking",
-    any(feature = "qirlib-llvm-linking", feature = "no-llvm-linking")
+    any(feature = "rsql-llvm-linking", feature = "no-llvm-linking")
   ),
   all(
     feature = "no-llvm-linking",
-    any(feature = "qirlib-llvm-linking", feature = "external-llvm-linking")
+    any(feature = "rsql-llvm-linking", feature = "external-llvm-linking")
   ),
 ))]
-compile_error!("Features `qirlib/qirlib-llvm-linking`, `qirlib/external-llvm-linking`, and `qirlib/no-llvm-linking` are mutually exclusive.");
+compile_error!("Features `rsql/rsql-llvm-linking`, `rsql/external-llvm-linking`, and `rsql/no-llvm-linking` are mutually exclusive.");
 
 // if we are building or downloading, we cannot be externally linking
 #[cfg(any(
@@ -87,7 +87,7 @@ compile_error!("Features `qirlib/qirlib-llvm-linking`, `qirlib/external-llvm-lin
     any(feature = "build-llvm", feature = "external-llvm-linking")
   ),
 ))]
-compile_error!("Features `qirlib/build-llvm` and `qirlib/download-llvm` are mutually exclusive.");
+compile_error!("Features `rsql/build-llvm` and `rsql/download-llvm` are mutually exclusive.");
 
 fn main() -> Result<(), Box<dyn Error>> {
   println!("cargo:rerun-if-changed=build.rs");
@@ -124,7 +124,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Building llvm");
     compile_llvm()?;
   }
-  if cfg!(feature = "qirlib-llvm-linking") {
+  if cfg!(feature = "rsql-llvm-linking") {
     println!("Linking llvm");
     link_llvm();
     let build_dir = get_build_dir()?;
