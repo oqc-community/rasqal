@@ -154,6 +154,8 @@ pub enum FlexiPtr<T: ?Sized> {
 //  the trait in situations when threading will never come up.
 unsafe impl<T: ?Sized> Send for FlexiPtr<T> {}
 
+unsafe impl<T: ?Sized> Sync for FlexiPtr<T> {}
+
 impl<T: ?Sized + Display> Display for FlexiPtr<T> {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     if !FlexiPtr::is_null(self) {
