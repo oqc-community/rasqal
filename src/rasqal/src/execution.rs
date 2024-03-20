@@ -8,7 +8,7 @@ use crate::evaluator::QIREvaluator;
 use crate::features::QuantumFeatures;
 use crate::graphs::ExecutableAnalysisGraph;
 use crate::instructions::Value;
-use crate::runtime::{QuantumRuntime};
+use crate::runtime::QuantumRuntime;
 use crate::smart_pointers::Ptr;
 use crate::with_mutable;
 use inkwell::attributes::AttributeLoc;
@@ -22,19 +22,17 @@ use inkwell::{
   OptimizationLevel
 };
 
-use std::{ffi::OsStr, path::Path};
-use std::ops::Deref;
 use crate::config::RasqalConfig;
 use crate::exceptions::catch_panics;
+use std::ops::Deref;
+use std::{ffi::OsStr, path::Path};
 
 /// Executes the file.
 pub fn run_file(
   path: impl AsRef<Path>, args: &Vec<Value>, runtimes: &Ptr<RuntimeCollection>,
   entry_point: Option<&str>, config: &Ptr<RasqalConfig>
 ) -> Result<Option<Ptr<Value>>, String> {
-  catch_panics(|| {
-    run_graph(&parse_file(path, entry_point)?, args, runtimes, config)
-  })
+  catch_panics(|| run_graph(&parse_file(path, entry_point)?, args, runtimes, config))
 }
 
 pub fn parse_file(
@@ -42,9 +40,7 @@ pub fn parse_file(
 ) -> Result<Ptr<ExecutableAnalysisGraph>, String> {
   let context = Context::create();
   let module = file_to_module(path, &context)?;
-  catch_panics(|| {
-    build_graph_from_module(&module, entry_point)
-  })
+  catch_panics(|| build_graph_from_module(&module, entry_point))
 }
 
 /// Transforms an LLVM file into an LLVM module.
@@ -96,9 +92,7 @@ pub fn run_graph(
   config: &Ptr<RasqalConfig>
 ) -> Result<Option<Ptr<Value>>, String> {
   let mut runtime = QuantumRuntime::new(runtimes, config);
-  catch_panics(|| {
-    runtime.execute(graph, arguments)
-  })
+  catch_panics(|| runtime.execute(graph, arguments))
 }
 
 /// Top-level collection item that holds information about target runtimes and engines for graphs.
@@ -196,12 +190,12 @@ pub fn choose_entry_point<'ctx>(
 #[cfg(test)]
 mod tests {
   use crate::builders::IntegrationRuntime;
+  use crate::config::RasqalConfig;
   use crate::execution::{run_file, RuntimeCollection};
   use crate::instructions::Value;
   use crate::smart_pointers::Ptr;
   use std::borrow::Borrow;
   use std::fs::canonicalize;
-  use crate::config::RasqalConfig;
 
   #[test]
   fn execute_qaoa() {
