@@ -25,7 +25,9 @@ use std::path::Path;
 
 mod analysis;
 mod builders;
+mod config;
 mod evaluator;
+mod exceptions;
 mod execution;
 mod features;
 mod graphs;
@@ -34,8 +36,6 @@ mod instructions;
 mod python;
 mod runtime;
 mod smart_pointers;
-mod config;
-mod exceptions;
 
 const DEFAULT_LOG_FILE: &str = "rasqal_logs.txt";
 

@@ -2,6 +2,7 @@
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
 use crate::analysis::{QuantumOperations, QuantumProjection};
+use crate::config::RasqalConfig;
 use crate::evaluator::EvaluationContext;
 use crate::execution::RuntimeCollection;
 use crate::graphs::{walk_logical_paths, AnalysisGraph, ExecutableAnalysisGraph, Node};
@@ -17,7 +18,6 @@ use std::borrow::{Borrow, BorrowMut};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, AddAssign, Deref, DerefMut};
-use crate::config::RasqalConfig;
 
 /// Assign an order to nodes so we're able to tell trivially when one is further in the graph
 /// or not.
@@ -332,9 +332,7 @@ struct RuntimeConstraints {
 }
 
 impl RuntimeConstraints {
-  pub fn new(step_limit: Option<i64>) -> RuntimeConstraints {
-    RuntimeConstraints { step_limit }
-  }
+  pub fn new(step_limit: Option<i64>) -> RuntimeConstraints { RuntimeConstraints { step_limit } }
 }
 
 /// A runtime monitors, executes and maintains a cluster of graphs against the backend instances it
@@ -476,7 +474,9 @@ impl QuantumRuntime {
       if let Some(limit) = &self.constraints.step_limit {
         let stuff = context.step_count.deref().clone();
         if context.step_count.deref() > limit {
-          return Err(String::from("Execution step count limitation of {limit} exceeded."));
+          return Err(String::from(
+            "Execution step count limitation of {limit} exceeded."
+          ));
         }
       }
 
@@ -633,15 +633,14 @@ impl QuantumRuntime {
           let left = follow_reference(left, context);
           let right = follow_reference(right, context);
 
-          // TODO: Make smart-pointers forward operators.
           let result = Ptr::from(match op {
-            Operator::Multiply => left.deref() * right.deref(),
-            Operator::Divide => left.deref() / right.deref(),
-            Operator::Add => left.deref() + right.deref(),
-            Operator::Subtract => left.deref() - right.deref(),
-            Operator::Or => left.deref() | right.deref(),
-            Operator::And => left.deref() & right.deref(),
-            Operator::Xor => left.deref() ^ right.deref(),
+            Operator::Multiply => left * right,
+            Operator::Divide => left / right,
+            Operator::Add => left + right,
+            Operator::Subtract => left - right,
+            Operator::Or => left | right,
+            Operator::And => left & right,
+            Operator::Xor => left ^ right,
             Operator::PowerOf => Value::from(left.as_int().pow(right.as_int() as u32))
           });
 
