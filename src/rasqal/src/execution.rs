@@ -8,7 +8,7 @@ use crate::evaluator::QIREvaluator;
 use crate::features::QuantumFeatures;
 use crate::graphs::ExecutableAnalysisGraph;
 use crate::instructions::Value;
-use crate::runtime::{ActiveTracers, QuantumRuntime};
+use crate::runtime::{QuantumRuntime};
 use crate::smart_pointers::Ptr;
 use crate::with_mutable;
 use inkwell::attributes::AttributeLoc;
@@ -23,23 +23,28 @@ use inkwell::{
 };
 
 use std::{ffi::OsStr, path::Path};
+use std::ops::Deref;
 use crate::config::RasqalConfig;
+use crate::exceptions::catch_panics;
 
 /// Executes the file.
 pub fn run_file(
   path: impl AsRef<Path>, args: &Vec<Value>, runtimes: &Ptr<RuntimeCollection>,
   entry_point: Option<&str>, config: &Ptr<RasqalConfig>
 ) -> Result<Option<Ptr<Value>>, String> {
-  run_graph(&parse_file(path, entry_point)?, args, runtimes, config)
+  catch_panics(|| {
+    run_graph(&parse_file(path, entry_point)?, args, runtimes, config)
+  })
 }
 
-/// `entry_point`
 pub fn parse_file(
   path: impl AsRef<Path>, entry_point: Option<&str>
 ) -> Result<Ptr<ExecutableAnalysisGraph>, String> {
   let context = Context::create();
   let module = file_to_module(path, &context)?;
-  build_graph_from_module(&module, entry_point)
+  catch_panics(|| {
+    build_graph_from_module(&module, entry_point)
+  })
 }
 
 /// Transforms an LLVM file into an LLVM module.
@@ -60,27 +65,29 @@ pub fn file_to_module(path: impl AsRef<Path>, context: &Context) -> Result<Modul
 pub fn build_graph_from_module(
   module: &Module, entry_point: Option<&str>
 ) -> Result<Ptr<ExecutableAnalysisGraph>, String> {
-  module
-    .verify()
-    .map_err(|e| format!("Failed to verify module: {}", e.to_string()))?;
+  catch_panics(|| {
+    module
+      .verify()
+      .map_err(|e| format!("Failed to verify module: {}", e.to_string()))?;
 
-  let pass_manager_builder = PassManagerBuilder::create();
-  pass_manager_builder.set_optimization_level(OptimizationLevel::None);
+    let pass_manager_builder = PassManagerBuilder::create();
+    pass_manager_builder.set_optimization_level(OptimizationLevel::None);
 
-  let fpm = PassManager::create(());
-  fpm.add_global_dce_pass();
-  fpm.add_strip_dead_prototypes_pass();
-  pass_manager_builder.populate_module_pass_manager(&fpm);
-  fpm.run_on(module);
+    let fpm = PassManager::create(());
+    fpm.add_global_dce_pass();
+    fpm.add_strip_dead_prototypes_pass();
+    pass_manager_builder.populate_module_pass_manager(&fpm);
+    fpm.run_on(module);
 
-  Target::initialize_native(&InitializationConfig::default())?;
-  inkwell::support::load_library_permanently(Path::new(""));
+    Target::initialize_native(&InitializationConfig::default())?;
+    inkwell::support::load_library_permanently(Path::new(""));
 
-  let evaluator = QIREvaluator::new();
-  evaluator.evaluate(
-    &choose_entry_point(module_functions(module), entry_point)?,
-    &Ptr::from(module)
-  )
+    let evaluator = QIREvaluator::new();
+    evaluator.evaluate(
+      &choose_entry_point(module_functions(module), entry_point)?,
+      &Ptr::from(module)
+    )
+  })
 }
 
 /// Executes a graph with the current runtimes and context.
@@ -89,7 +96,9 @@ pub fn run_graph(
   config: &Ptr<RasqalConfig>
 ) -> Result<Option<Ptr<Value>>, String> {
   let mut runtime = QuantumRuntime::new(runtimes, config);
-  runtime.execute(graph, arguments)
+  catch_panics(|| {
+    runtime.execute(graph, arguments)
+  })
 }
 
 /// Top-level collection item that holds information about target runtimes and engines for graphs.
@@ -189,7 +198,6 @@ mod tests {
   use crate::builders::IntegrationRuntime;
   use crate::execution::{run_file, RuntimeCollection};
   use crate::instructions::Value;
-  use crate::runtime::ActiveTracers;
   use crate::smart_pointers::Ptr;
   use std::borrow::Borrow;
   use std::fs::canonicalize;

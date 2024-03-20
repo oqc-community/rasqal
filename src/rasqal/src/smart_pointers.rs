@@ -5,6 +5,7 @@ use std::cell::Cell;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
+use std::panic::UnwindSafe;
 
 pub type Ptr<T> = FlexiPtr<T>;
 
@@ -150,9 +151,11 @@ pub enum FlexiPtr<T: ?Sized> {
   Borrow(*mut T)
 }
 
-// TODO: Apply appropriate thread-safety later when it's actually needed. Certain things need
-//  the trait in situations when threading will never come up.
+// The flexi-pointer expects the writer to know what they're doing so sinkhole various
+// annotations which are unsafe only when you don't use it properly.
 unsafe impl<T: ?Sized> Send for FlexiPtr<T> {}
+unsafe impl<T: ?Sized> Sync for FlexiPtr<T> {}
+impl<T> UnwindSafe for FlexiPtr<T> {}
 
 impl<T: ?Sized + Display> Display for FlexiPtr<T> {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
