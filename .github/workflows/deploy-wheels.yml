@@ -2,6 +2,7 @@ name: deploy-wheels
 
 on:
   release:
+    types: [released]
 
 jobs:
   deploy:
