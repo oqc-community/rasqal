@@ -35,6 +35,7 @@ mod python;
 mod runtime;
 mod smart_pointers;
 mod config;
+mod exceptions;
 
 const DEFAULT_LOG_FILE: &str = "rasqal_logs.txt";
 
