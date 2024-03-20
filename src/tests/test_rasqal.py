@@ -102,6 +102,11 @@ class RuntimeMock(RuntimeAdaptor):
         return builder.gates if builder is not None else None
 
 
+class RuntimeErrorMock(RuntimeMock):
+    def execute(self, builder: BuilderMock):
+        raise ValueError("Unable to execute.")
+
+
 def fetch_mock_runner():
     runtime = RuntimeMock()
     return runtime, RasqalRunner(runtime)
@@ -264,7 +269,14 @@ class TestRasqal(unittest.TestCase):
     def test_step_count_limit(self):
         runtime, runner = fetch_mock_runner()
         runner.step_count_limit(2)
-        with self.assertRaises(ValueError) as ception:
+        with self.assertRaises(ValueError) as thrown:
             runner.run(get_qir_path("bell_theta_minus.ll"))
 
-        assert "step count" in str(ception.exception)
+        assert "step count" in str(thrown.exception)
+
+    def test_python_exception_propagation(self):
+        runner = RasqalRunner(RuntimeErrorMock())
+        with self.assertRaises(ValueError) as thrown:
+            runner.run(get_qir_path("bell_theta_minus.ll"))
+
+        assert "Unable to execute." in str(thrown.exception)

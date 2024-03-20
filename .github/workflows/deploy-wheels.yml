@@ -81,5 +81,4 @@ jobs:
       - name: Publish to PyPi
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: https://pypi.org/p/rasqal
           packages-dir: dist/

@@ -2,6 +2,7 @@
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
 use crate::builders::{IntegrationRuntime, PythonRuntime};
+use crate::config::RasqalConfig;
 use crate::execution::{parse_file, run_file, run_graph, RuntimeCollection};
 use crate::features::QuantumFeatures;
 use crate::graphs::ExecutableAnalysisGraph;
@@ -14,7 +15,6 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyFloat, PyInt, PyList, PyString};
 use std::borrow::Borrow;
-use crate::config::RasqalConfig;
 
 #[pymodule]
 fn _native(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -157,9 +157,7 @@ impl Executor {
 
   fn trace_graphs(&mut self) { self.config.trace_graphs(); }
 
-  fn step_count_limit(&mut self, limit: i64) {
-    self.config.step_count_limit(limit);
-  }
+  fn step_count_limit(&mut self, limit: i64) { self.config.step_count_limit(limit); }
 
   #[allow(clippy::unused_self)]
   fn parse_file(&self, file: &str, entry_point: Option<&str>) -> PyResult<Py<Graph>> {

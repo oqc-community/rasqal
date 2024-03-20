@@ -217,30 +217,26 @@ impl IntegrationBuilder {
 }
 
 macro_rules! python_methods {
-    (self.$wrapped_obj:ident.$python_gate:ident()) => {
-        pub fn $python_gate(&self) -> Option<PyResult<&PyAny>> {
-            if Ptr::is_not_null(&self.$wrapped_obj) {
-                let pyobj: &PyAny = self.$wrapped_obj.borrow();
-                let has_gate = pyobj.hasattr(stringify!($python_gate)).unwrap_or(false);
-                if has_gate {
-                    let func = pyobj.getattr(stringify!($python_gate)).unwrap();
-                    Some(func.call0())
-                } else { None }
-            } else { None }
-        }
-    };
-    (self.$wrapped_obj:ident.$python_gate:ident($($var:ident: $ty:ty),*)) => {
-        pub fn $python_gate(&self, $($var: $ty),*) -> Option<PyResult<&PyAny>> {
-            if Ptr::is_not_null(&self.$wrapped_obj) {
-                let pyobj: &PyAny = self.$wrapped_obj.borrow();
-                let has_gate = pyobj.hasattr(stringify!($python_gate)).unwrap_or(false);
-                if has_gate {
-                    let func = pyobj.getattr(stringify!($python_gate)).unwrap();
-                    Some(func.call1(($($var),*,)))
-                } else { None }
-            } else { None }
-        }
+  (self.$wrapped_obj:ident.$python_gate:ident()) => {
+      pub fn $python_gate(&self) -> Result<&PyAny, String> {
+        Python::with_gil(|py| {
+          let target = self.$wrapped_obj.getattr(stringify!($python_gate))
+            .map_err(|err| err.value(py).to_string())
+            .expect(format!("'{}' can't be found on {}", stringify!($python_gate), stringify!($wrapped_obj)).as_str());
+          target.call0().map_err(|err| err.value(py).to_string())
+        })
+      }
+  };
+  (self.$wrapped_obj:ident.$python_gate:ident($($var:ident: $ty:ty),*)) => {
+    pub fn $python_gate(&self, $($var: $ty),*) -> Result<&PyAny, String> {
+      Python::with_gil(|py| {
+        let target = self.$wrapped_obj.getattr(stringify!($python_gate))
+          .map_err(|err| err.value(py).to_string())
+          .expect(format!("'{}' can't be found {}", stringify!($python_gate), stringify!($wrapped_obj)).as_str());
+        target.call1(($($var),*,)).map_err(|err| err.value(py).to_string())
+      })
     }
+  }
 }
 
 /// Rust wrapper for our Python builders.
@@ -257,6 +253,13 @@ impl PyBuilderAdaptor {
 
   pub fn is_adaptor_empty(&self) -> bool {
     return Ptr::is_null(self.builder.borrow()) || self.builder.is_none();
+  }
+
+  pub fn ab(&self) -> Result<&PyAny, String> {
+    let target = self.builder.getattr("ab").expect("'ab' doesn't exist on builder");
+    Python::with_gil(|py| {
+      target.call0().map_err(|err| err.value(py).to_string())
+    })
   }
 
   python_methods!(self.builder.x(qubit: i64, radians: f64));
@@ -352,8 +355,7 @@ impl PythonRuntime {
     let result = self
       .wrapped
       .execute(builder.wrapped.deref())
-      .expect("Engine doesn't have an execute method.")
-      .expect("QPU didn't return a result.");
+      .expect("QPU didn't return a result");
 
     AnalysisResult::new(
       result
@@ -367,8 +369,7 @@ impl PythonRuntime {
       self
         .wrapped
         .create_builder()
-        .expect("Runtime doesn't have a 'create_builder' method.")
-        .expect("Couldn't create a builder from runtime.")
+        .expect("Couldn't create a builder from runtime")
     );
     Ptr::from(IntegrationBuilder::Python(pybuilder))
   }
@@ -382,7 +383,6 @@ impl PythonRuntime {
     self
       .wrapped
       .has_features(pyfeature)
-      .expect("Runtime doesn't have a 'has_features' method.")
       .map_or(false, |obj| obj.extract().expect("Unable to extract type."))
   }
 }
@@ -428,7 +428,6 @@ impl PythonBuilder {
   }
 }
 
-// TODO: Make sure we propagate Python exceptions for easy debugging.
 impl InstructionBuilder for PythonBuilder {
   fn measure(&self, qb: &Qubit) -> &Self {
     self.wrapped.measure(qb.index);
