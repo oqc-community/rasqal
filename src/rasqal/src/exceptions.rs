@@ -17,11 +17,14 @@ pub fn catch_panics<R, F: FnOnce() -> Result<R, String>>(wrapped: F) -> Result<R
         Err(thread_result.err().unwrap())
       }
     }
-    Err(panic_value) => Err(if let Some(message) = panic_value.downcast_ref::<&str>() {
-      message.to_string()
-    } else {
-      "Unavailable error message.".to_string()
-    })
+    Err(panic_value) => Err(
+      if let Some(message) = panic_value.downcast_ref::<String>() {
+        message.clone()
+      } else if let Some(message) = panic_value.downcast_ref::<&str>() {
+        message.to_string()
+      } else {
+        "Unavailable error message.".to_string()
+      })
   }
 }
 
