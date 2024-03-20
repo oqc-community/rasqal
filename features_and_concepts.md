@@ -82,4 +82,4 @@ These will be available only if you enable them explicitly:
 1. Quantum state analysis structures for performing indepth static analysis as we go. This powers many other features.
 2. Quantum fragment simulation. Finding points in a circuit that if simulated/predicted allow for better optimization or distributed processing.
 3. Using our analysis tools and splice/weaving techniques to split up and run large quantum circuits across multiple smaller machines.
-community/rasqal/blob/develop/examples.md) for the sorts of code you could send to Munchkin as well as what it returns.
+community/rasqal/blob/develop/examples.md) for the sorts of code you could send to Rasqal as well as what it returns.
