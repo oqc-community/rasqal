@@ -7,6 +7,7 @@ Include utils.ps1
 Properties {
     $ProjectRoot = Resolve-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
     $Root = Join-Path $ProjectRoot src
+    $Docs = Join-Path $ProjectRoot docs
     $BuildLlvm = Join-Path $Root build-llvm
     $Rasqal = Join-Path $Root rasqal
     $Target = Join-Path $Root target
@@ -68,9 +69,15 @@ task test-rasqal {
         pip install --force-reinstall --no-deps $packages
     }
 
+    # Run Python tests
     Invoke-LoggedCommand -workingDirectory $Root {
         pip install pytest
         pytest .
+    }
+
+    # Run our examples Python file.
+    Invoke-LoggedCommand -workingDirectory $Docs {
+        python examples.py
     }
 }
 
