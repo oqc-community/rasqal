@@ -30,5 +30,8 @@ bitflags = "2.4.0"
 [lib]
 crate-type = ["cdylib"]
 
+[tool.maturin]
+features = ["pyo3/extension-module"]
+
 [package.metadata.maturin]
 name = "rasqal._native"

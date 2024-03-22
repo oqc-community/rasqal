@@ -57,10 +57,10 @@ task audit-rasqal -depends build-rasqal {
     }
 }
 
-task test-rasqal {
-#     Invoke-LoggedCommand -workingDirectory $Rasqal {
-#         cargo test --release @(Get-CargoArgs)
-#     }
+task test-rasqal -depends build-rasqal {
+    Invoke-LoggedCommand -workingDirectory $Rasqal {
+        cargo test --release @(Get-CargoArgs)
+    }
 
     # Force reinstall the package if it exists, but not its dependencies.
     $packages = Get-Wheels rasqal
