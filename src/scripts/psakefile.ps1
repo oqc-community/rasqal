@@ -57,10 +57,11 @@ task audit-rasqal -depends build-rasqal {
     }
 }
 
-task test-rasqal {
-#     Invoke-LoggedCommand -workingDirectory $Rasqal {
-#         cargo test --release @(Get-CargoArgs)
-#     }
+task test-rasqal -depends build-rasqal {
+    # pyo3 has troubles with cargo test without excluding extension-module, so we do that here.
+    Invoke-LoggedCommand -workingDirectory $Rasqal {
+        cargo test --release @(Get-CargoArgs) --no-default-features
+    }
 
     # Force reinstall the package if it exists, but not its dependencies.
     $packages = Get-Wheels rasqal
