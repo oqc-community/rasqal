@@ -12,7 +12,7 @@ repository = ""
 git = "https://github.com/TheDan64/inkwell"
 branch = "master"
 default-features = false
-features = ["llvm14-0"]
+features = ["llvm15-0"]
 
 [dependencies.pyo3]
 version = "0.17"
@@ -25,7 +25,7 @@ default = ["abi3-py37", "extension-module"]
 either = "1.8"
 libc = "0.2"
 const-str = "0.5"
-llvm-sys = "140"
+llvm-sys = "150"
 regex = "1.7.1"
 log = "0.4.17"
 env_logger = "0.9.3"

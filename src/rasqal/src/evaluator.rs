@@ -13,11 +13,8 @@ use crate::smart_pointers::Ptr;
 use crate::with_mutable;
 use inkwell::basic_block::BasicBlock;
 use inkwell::module::Module;
-use inkwell::types::AnyTypeEnum;
-use inkwell::values::{
-  AggregateValue, AnyValue, AnyValueEnum, AsValueRef, BasicValue, FunctionValue, InstructionOpcode,
-  InstructionValue
-};
+use inkwell::types::{AnyType, AnyTypeEnum};
+use inkwell::values::{AggregateValue, AnyValue, AnyValueEnum, ArrayValue, AsValueRef, BasicValue, BasicValueEnum, FunctionValue, InstructionOpcode, InstructionValue, StructValue};
 use inkwell::{FloatPredicate, IntPredicate};
 use llvm_sys::core::{
   LLVMConstIntGetSExtValue, LLVMGetElementType, LLVMGetNumOperands, LLVMGetOperand,
@@ -31,6 +28,7 @@ use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::ffi::{c_uint, CStr};
 use std::ops::Deref;
+use llvm_sys::prelude::LLVMValueRef;
 
 macro_rules! operand_to_value {
   ($target:ident, $index:expr) => {
@@ -89,33 +87,31 @@ pub fn parse_ref_id_from_instruction(inst: &InstructionValue) -> Option<String> 
   parse_ref_id_from_instruction_str(&inst_str)
 }
 
-pub fn parse_ref_id_from_instruction_str(inst_str: &String) -> Option<String> {
+pub fn parse_ref_id_from_instruction_str(inst_str: &str) -> Option<String> {
   let llvm_var_finder = Regex::new("([%@][^ ]*) =").unwrap();
-  llvm_var_finder.captures(inst_str.as_str()).map_or_else(
-    || parse_ref_id_from_value(inst_str.clone()).or(None),
+  llvm_var_finder.captures(inst_str).map_or_else(
+    || parse_ref_id_from_value(inst_str).or(None),
     |capture_groups| Some(capture_groups.get(1).unwrap().as_str().to_string())
   )
 }
 
-/// `var_name`
-pub fn get_ref_id_from_value(ptr_string: String) -> String {
+pub fn get_ref_id_from_value(ptr_string: &str) -> String {
   parse_ref_id_from_value(ptr_string).expect("Can't parse ref-id from value.")
 }
 
-/// `var_name`
 /// TODO: Need a proper way to get the variables from a general state, while this works it's not
 ///     entirely bulletproof and needs tweaking as issues come up. And issues caused from it are not
 ///     immediately obvious.
-pub fn parse_ref_id_from_value(ptr_string: String) -> Option<String> {
+pub fn parse_ref_id_from_value(ptr_string: &str) -> Option<String> {
   let ptr_string = ptr_string.trim_matches('"').trim();
-  let pointer_variable_finder = Regex::new("^.*\\s(%[\\w0-9\\-]+)$").unwrap();
-  let capture_groups = pointer_variable_finder.captures(ptr_string);
+  let local_variable_finder: Regex = Regex::new("^.*\\s(%[\\w0-9\\-]+)$").unwrap();
+  let capture_groups = local_variable_finder.captures(ptr_string);
   let mut ref_id = capture_groups.map(|val| val.get(1).unwrap().as_str().to_string());
 
   // If we can't find a local variable, look globally.
   ref_id = ref_id.or_else(|| {
-    let pointer_variable_finder = Regex::new("^.*\\s(@[\\w0-9\\-]+)$").unwrap();
-    let capture_groups = pointer_variable_finder.captures(ptr_string);
+    let global_variable_finder: Regex = Regex::new("^.*\\s(@[\\w0-9\\-]+)$").unwrap();
+    let capture_groups = global_variable_finder.captures(ptr_string);
     capture_groups.and_then(|val| {
       let val = val.get(1).unwrap().as_str().to_string();
       if val.trim().is_empty() {
@@ -128,8 +124,8 @@ pub fn parse_ref_id_from_value(ptr_string: String) -> Option<String> {
 
   // Finally check if we're a global instruction target.
   ref_id.or_else(|| {
-    let pointer_variable_finder = Regex::new("^@[^\\s*]+(\\s|$)").unwrap();
-    let capture_groups = pointer_variable_finder.captures(ptr_string);
+    let global_instruction_finder: Regex = Regex::new("^@[^\\s*]+(\\s|$)").unwrap();
+    let capture_groups = global_instruction_finder.captures(ptr_string);
     capture_groups.and_then(|value| {
       let mut value = value.get(0).unwrap().as_str();
       value = value.trim();
@@ -237,7 +233,7 @@ impl QIREvaluator {
     // Create a callable graph with its arguments, but the values set as empty (validly).
     let mut callable = Ptr::from(CallableAnalysisGraph::new(&builder.graph));
     for param in entry_point.get_params().iter() {
-      let param_ref_id = get_ref_id_from_value(param.to_string());
+      let param_ref_id = get_ref_id_from_value(&param.to_string());
       callable
         .argument_mappings
         .insert(param_ref_id, Ptr::from(Value::Empty));
@@ -375,13 +371,27 @@ impl QIREvaluator {
     }
   }
 
+  /// Fixed up const_extract_value from Inkwell.
+  pub fn const_extract_value(&self, array: LLVMValueRef, index: u32) -> BasicValueEnum {
+    use llvm_sys::core::LLVMGetAggregateElement;
+
+    unsafe {
+      BasicValueEnum::new(LLVMGetAggregateElement(
+        array,
+        index as c_uint,
+      ))
+    }
+  }
+
   /// `as_value`
   /// almost never want to use this directly. Use [`as_value`] instead.
   fn _as_value_recursive(
     &self, graph: &Ptr<AnalysisGraphBuilder>, type_enum: &AnyTypeEnum, val_enum: &AnyValueEnum,
     context: &Ptr<EvaluationContext>
   ) -> Option<Value> {
-    let ref_id = parse_ref_id_from_value(val_enum.to_string());
+    let ephemeral = val_enum.to_string();
+    let stringified_value = ephemeral.trim_matches('"').trim();
+    let ref_id = parse_ref_id_from_value(&stringified_value);
     if let Some(ref_id_value) = ref_id {
       return Some(Value::Ref(ref_id_value, None));
     }
@@ -406,7 +416,7 @@ impl QIREvaluator {
             result.push(
               self
                 .as_value_ptr(
-                  &vec.const_extract_value(&mut [int]).as_any_value_enum(),
+                  &self.const_extract_value(vec.as_value_ref(), int).as_any_value_enum(),
                   graph,
                   context
                 )
@@ -470,22 +480,40 @@ impl QIREvaluator {
       AnyTypeEnum::PointerType(t) => {
         // TODO: GEP analysis and fixing should be cleaned up as soon as Inkwell
         //  supports it.
-        let full_value_str = val_enum.to_string();
-        if full_value_str.contains("getelementptr") {
+        if stringified_value.contains("getelementptr") {
           self.extract_gep(val_enum, graph, context)
         } else {
-          let pval = val_enum.into_pointer_value();
-          let is_struct = t.get_element_type().is_struct_type();
+          let pointer_val = val_enum.into_pointer_value();
+
+          // This is purely for base profile support since its syntax is invalid.
+          let base_profile_finder: Regex = Regex::new("^%(Qubit|Result)\\* ((inttoptr \\(i64 ([0-9]+))|(null))").unwrap();
+          let capture_groups = base_profile_finder.captures(&stringified_value);
+          if let Some(groupings) = capture_groups {
+            let name  = groupings.get(1).unwrap().as_str();
+            let mut value = if let Some(matched) = groupings.get(4) {
+              matched.as_str()
+            } else {
+              groupings.get(5).expect(format!("Unable to find base profile value. Instruction: {}", stringified_value.clone()).as_str()).as_str()
+            };
+
+            if value == "null" {
+              value = "0";
+            }
+
+            return match name {
+              "Qubit" => Some(Value::Qubit(Qubit::new(value.parse().unwrap()))),
+              "Result" => Some(Value::Int(value.parse().unwrap())),
+              _ => panic!("Attempted specific match on non-base-profile pointer. Instruction: {}, name: {}, value: {}", stringified_value.clone(), name.clone(), value.clone())
+            }
+          }
 
           // Structs, especially opaque ones, have their own rules and even if they're
           // null it may mean something very different.
-          if (pval.is_null() || pval.is_undef()) && !is_struct {
+          if pointer_val.is_null() || pointer_val.is_undef() {
             return Some(Value::Empty);
           }
 
-          // At this point all actual pointers should have been dealt with, so
-          // we simply need to roll through the pointer to its actual type.
-          self._as_value_recursive(graph, t.get_element_type().borrow(), val_enum, context)
+          panic!("Unable to resolve pointer value.");
         }
       }
       AnyTypeEnum::StructType(t) => {
@@ -507,6 +535,8 @@ impl QIREvaluator {
           };
 
           // TODO: Make custom results object, probably re-use projection results.
+          // TODO: With LLVM version upgrade this likely isn't needed, this is all pointer-based
+          //  anyway.
           match struct_name {
             "Qubit" => Some(Value::Qubit(Qubit::new(index))),
             "Result" => Some(Value::Int(index)),
@@ -532,9 +562,7 @@ impl QIREvaluator {
             result.push(
               self
                 .as_value_ptr(
-                  &struct_val
-                    .const_extract_value(&mut [int])
-                    .as_any_value_enum(),
+                  &self.const_extract_value(struct_val.as_value_ref(), int).as_any_value_enum(),
                   graph,
                   context
                 )
@@ -1396,7 +1424,7 @@ impl QIREvaluator {
       let loops = inst.get_num_operands() - 1;
       while index < loops {
         let param = func.get_nth_param(index).unwrap().to_string();
-        let param_ref_id = get_ref_id_from_value(param.clone());
+        let param_ref_id = get_ref_id_from_value(&param);
         let value = self
           .as_value_ptr(operand_to_value!(inst, index), graph, context)
           .expect("Unable to resolve value.");

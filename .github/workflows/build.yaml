@@ -15,21 +15,28 @@ run-name: Build from ${{ github.ref }}
 jobs:
   unit-tests:
     name: Unit Tests
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - name: Setup rust toolchain
+        uses: ./.github/actions/rust-toolchain
+        with:
+          toolchain: 1.75.0
+          components: rustfmt clippy
 
       - name: Set up Python 3.9
         uses: actions/setup-python@v3
         with:
-          python-version: "3.9"
+          python-version: 3.9
+
+      - name: Install LLVM
+        uses: ./.github/actions/install-llvm
+        with:
+          os: "ubuntu-latest"
+          version: "15"
 
       - name: Build
         run: |
-          sudo apt update 
-          sudo apt install -y build-essential libffi-dev xz-utils powershell curl wget gnupg apt-transport-https
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          export PATH="/root/.cargo/bin:${PATH}"
-          export PATH="/root/.local/bin:$PATH"
           pwsh ./build.ps1
+        shell: pwsh
