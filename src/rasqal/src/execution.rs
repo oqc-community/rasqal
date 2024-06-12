@@ -197,9 +197,13 @@ mod tests {
   use std::borrow::Borrow;
   use std::fs::canonicalize;
 
-  #[test]
-  fn execute_qaoa() {
-    let relative_path = canonicalize("../tests/qsharp/qaoa/qir/qaoa.ll").unwrap();
+  /// Just run a QIR file to make sure it parses and returns the value.
+  fn run(path: &str) -> Option<Ptr<Value>> {
+    run_with_config(path, RasqalConfig::default()).expect("Execution failed.")
+  }
+
+  fn run_with_args(path: &str, args: &Vec<Value>) -> Result<Option<Ptr<Value>>, String> {
+    let relative_path = canonicalize(path).unwrap();
     let path = relative_path.to_str().unwrap();
 
     let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
@@ -212,120 +216,83 @@ mod tests {
       runtimes.borrow(),
       None,
       &Ptr::from(RasqalConfig::default())
-    );
-  }
-
-  #[test]
-  fn execute_simplified_oracle_generator() {
-    let relative_path = canonicalize(
-      "../tests/qsharp/simplified-oracle-generator/qir/simplified-oracle-generator.ll"
     )
-    .unwrap();
-    let path = relative_path.to_str().unwrap();
-
-    let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
-      IntegrationRuntime::default()
-    )));
-    run_file(
-      path,
-      &Vec::new(),
-      runtimes.borrow(),
-      None,
-      &Ptr::from(RasqalConfig::default())
-    );
   }
 
-  #[test]
-  fn execute_oracle_generator() {
-    let relative_path =
-      canonicalize("../tests/qsharp/oracle-generator/qir/oracle-generator.ll").unwrap();
+  fn run_with_config(path: &str, config: RasqalConfig) -> Result<Option<Ptr<Value>>, String> {
+    let relative_path = canonicalize(path).unwrap();
     let path = relative_path.to_str().unwrap();
 
     let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
       IntegrationRuntime::default()
     )));
+
     run_file(
-      path,
-      &Vec::new(),
-      runtimes.borrow(),
-      None,
-      &Ptr::from(RasqalConfig::default())
-    );
-  }
-
-  #[test]
-  fn execute_minified_oracle_generator() {
-    let relative_path =
-      canonicalize("../tests/qsharp/minified-oracle-generator/qir/minified-oracle-generator.ll")
-        .unwrap();
-    let path = relative_path.to_str().unwrap();
-
-    let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
-      IntegrationRuntime::default()
-    )));
-    run_file(
-      path,
-      &vec![Value::Bool(true)],
-      runtimes.borrow(),
-      None,
-      &Ptr::from(RasqalConfig::default())
-    );
-  }
-
-  #[test]
-  fn execute_unrestricted_bell() {
-    let relative_path = canonicalize("../tests/files/qir/unrestricted_bell.ll").unwrap();
-    let path = relative_path.to_str().unwrap();
-
-    let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
-      IntegrationRuntime::default()
-    )));
-    run_file(
-      path,
-      &Vec::new(),
-      runtimes.borrow(),
-      None,
-      &Ptr::from(RasqalConfig::default())
-    );
-  }
-
-  #[test]
-  fn test_step_count() {
-    let relative_path = canonicalize("../tests/files/qir/unrestricted_bell.ll").unwrap();
-    let path = relative_path.to_str().unwrap();
-
-    let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
-      IntegrationRuntime::default()
-    )));
-
-    let mut config = RasqalConfig::default();
-    config.step_count_limit(2);
-
-    let results = run_file(
       path,
       &Vec::new(),
       runtimes.borrow(),
       None,
       &Ptr::from(config)
-    );
+    )
+  }
 
+  #[test]
+  fn execute_qaoa() {
+    run("../tests/qsharp/qaoa/qir/qaoa.ll");
+  }
+
+  #[test]
+  fn execute_simplified_oracle_generator() {
+    run("../tests/qsharp/simplified-oracle-generator/qir/simplified-oracle-generator.ll");
+  }
+
+  #[test]
+  fn execute_oracle_generator() {
+    run("../tests/qsharp/oracle-generator/qir/oracle-generator.ll");
+  }
+
+  #[test]
+  fn execute_minified_oracle_generator() {
+    run_with_args("../tests/qsharp/minified-oracle-generator/qir/minified-oracle-generator.ll",
+    &vec![Value::from(true)]);
+  }
+
+  #[test]
+  fn execute_unrestricted_bell() {
+    run("../tests/files/qir/unrestricted_bell.ll");
+  }
+
+  #[test]
+  fn test_step_count() {
+    let mut config = RasqalConfig::default();
+    config.step_count_limit(2);
+    let results =
+        run_with_config("../tests/files/qir/unrestricted_bell.ll", config);
     assert!(results.is_err())
   }
 
   #[test]
   fn execute_bell_int_return() {
-    let relative_path = canonicalize("../tests/files/qir/bell_int_return.ll").unwrap();
-    let path = relative_path.to_str().unwrap();
+    run(&"../tests/files/qir/bell_int_return.ll");
+  }
 
-    let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
-      IntegrationRuntime::default()
-    )));
-    run_file(
-      path,
-      &Vec::new(),
-      runtimes.borrow(),
-      None,
-      &Ptr::from(RasqalConfig::default())
-    );
+  #[test]
+  fn execute_bell_psi_minus() {
+    run(&"../tests/files/qir/bell_psi_minus.ll");
+  }
+
+  #[test]
+  fn execute_bell_psi_plus() {
+    run(&"../tests/files/qir/bell_psi_plus.ll");
+  }
+
+  #[test]
+  fn execute_bell_theta_plus() {
+    run(&"../tests/files/qir/bell_theta_plus.ll");
+  }
+
+  #[test]
+  fn execute_bell_theta_minus() {
+    run(&"../tests/files/qir/bell_theta_minus.ll");
   }
 }

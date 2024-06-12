@@ -13,7 +13,6 @@ Properties {
     $Target = Join-Path $Root target
     $Wheels = Join-Path $Target wheels
     $CargoConfigToml = Join-Path $Root .cargo config.toml
-    $RustVersion = "1.64.0"
     $AuditWheelTag = "manylinux_2_31_x86_64"
     $Python = Resolve-Python
 }
@@ -31,6 +30,7 @@ task format-rust {
 }
 
 task build-llvm -depends init {
+    $env:LLVM_SYS_150_PREFIX = Resolve-InstallationDirectory
     Invoke-LoggedCommand -workingDirectory $BuildLlvm { cargo test --release @(Get-CargoArgs) }
     Invoke-LoggedCommand -workingDirectory $BuildLlvm { cargo build --release @(Get-CargoArgs) }
 }
@@ -145,18 +145,17 @@ task init -depends check-environment {
     }
 }
 
-task install-llvm-from-archive {
-    install-llvm $BuildLlvm download (Get-LLVMFeatureVersion)
-    $installationDirectory = Resolve-InstallationDirectory
-    Assert (Test-LlvmConfig $installationDirectory) "install-llvm-from-archive failed to install a usable LLVM installation"
-}
-
 task install-llvm-from-source {
     if ($IsWindows) {
         Include vcvars.ps1
     }
-    install-llvm $BuildLlvm build (Get-LLVMFeatureVersion)
+
+    # TODO: Need to make prefix dynamic and also fix to not use env variables.
     $installationDirectory = Resolve-InstallationDirectory
+    $env:LLVM_SYS_150_PREFIX = $installationDirectory
+    $env:RSQL_CACHE_DIR = $installationDirectory
+
+    install-llvm $BuildLlvm build (Get-LLVMFeatureVersion)
     Assert (Test-LlvmConfig $installationDirectory) "install-llvm-from-source failed to install a usable LLVM installation"
 }
 
@@ -186,21 +185,3 @@ task check-licenses {
         Public domain"
     }
 }
-
-# task update-noticefiles {
-#     # use cargo-about to generate a notice files
-#     # notice files are only for wheel distributions
-#     # as no bundled sources are in the sdist.
-#
-#     # llvm special license is already in the template
-#     # as it is a hidden transitive dependency.
-#     # https://github.com/EmbarkStudios/cargo-about
-#     $config = Join-Path $Root notice.toml
-#     $template = Join-Path $Root notice.hbs
-#     $notice = Join-Path $Rasqal NOTICE-WHEEL.txt
-#     Invoke-LoggedCommand -workingDirectory $Rasqal {
-#         cargo about generate --config $config --all-features --output-file $notice $template
-#         $contents = Get-Content -Raw $notice
-#         [System.Web.HttpUtility]::HtmlDecode($contents) | Out-File $notice
-#     }
-# }
