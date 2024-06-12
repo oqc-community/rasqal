@@ -1,0 +1,36 @@
+name: Cache refresh
+
+on:
+  schedule:
+    - cron: "0 0 1,6,11,16,21,26,31 * *" # Every 5 days, give or take.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  refresh:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ "ubuntu-20.04", "windows-2019", "macos-14", "macos-latest" ]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup rust toolchain
+        uses: ./.github/actions/rust-toolchain
+        with:
+          toolchain: 1.75.0
+          components: rustfmt clippy
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.9
+        if: ${{ matrix.os != 'macos-14' && matrix.os != 'macos-latest' }}
+      - name: Install LLVM
+        uses: ./.github/actions/install-llvm
+        with:
+          version: "15"
+          os: ${{ matrix.os }}
