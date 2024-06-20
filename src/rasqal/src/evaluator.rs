@@ -496,6 +496,7 @@ impl QIREvaluator {
               groupings.get(5).expect(format!("Unable to find base profile value. Instruction: {}", stringified_value.clone()).as_str()).as_str()
             };
 
+            // nulls get coerced into 0 if processed correctly, but we have to do it manually here.
             if value == "null" {
               value = "0";
             }
@@ -535,8 +536,6 @@ impl QIREvaluator {
           };
 
           // TODO: Make custom results object, probably re-use projection results.
-          // TODO: With LLVM version upgrade this likely isn't needed, this is all pointer-based
-          //  anyway.
           match struct_name {
             "Qubit" => Some(Value::Qubit(Qubit::new(index))),
             "Result" => Some(Value::Int(index)),
