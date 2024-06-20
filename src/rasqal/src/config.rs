@@ -2,7 +2,6 @@ use crate::runtime::ActiveTracers;
 
 pub struct RasqalConfig {
   /// How many steps the symbolic executor is allowed to make before failing.
-  ///
   pub step_count_limit: Option<i64>,
   pub debug_tracers: ActiveTracers
 }
