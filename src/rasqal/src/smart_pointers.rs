@@ -139,7 +139,7 @@ impl<T: Display> Display for FlexiRef<T> {
 /// on pointers of differing types due to the structure of the internal data.
 ///
 /// Since its internals are raw pointers Rusts lifetime rules have no clue about them, and since
-/// raw pointers are also treated specially in regards to the mutation you can take out
+/// raw pointers are also treated specially regarding mutation you can take out
 /// infinite mutable aliases if performed through the raw pointer itself.
 ///
 /// Due to this constraint around mutation, we use macros that perform the operations on

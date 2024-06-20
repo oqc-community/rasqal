@@ -25,7 +25,7 @@ pub fn walk_logical_paths(graph: &Ptr<AnalysisGraph>) -> LogicalPathwayIterator 
   LogicalPathwayIterator::new(graph)
 }
 
-/// Walks the graph top-down taking all branches as it goes. Not a flat walk, as it flip=flops
+/// Walks the graph top-down taking all branches as it goes. Not a flat walk, as it flip-flops
 /// between branches it means any pathways that are heavily weighted on one side will be completed
 /// later, sometimes exceptionally so.
 pub struct LogicalPathwayIterator {
@@ -266,13 +266,8 @@ impl AnalysisGraph {
     self.edges.get(&node_id).unwrap()
   }
 
-  /// Adds this node to the graph, assigning it as the next auto-attach target. If you want
-  /// `add_orphan`
-  ///
-  /// While this node always gets attached as the next aa-target, you can cohose whether to add
-  /// `add_attached_edge`
-  /// You may not want to use this value in situations where you're dealing with the edge
-  /// attachment via another means.
+  /// Adds this node to the graph, assigning it as the next auto-attach target. If you don't want
+  /// it to auto-attach just set `add_attached_edge` as false.
   pub fn add_node_with_edge(&mut self, node: &Ptr<Node>, add_attached_edge: bool) {
     self.add_loose_node(node);
 

@@ -338,11 +338,6 @@ impl Display for Pauli {
   }
 }
 
-// TODO: Remove pointers from objects who own the value - like qubit, analysis result, etc.
-//  A value should _be_ the representation of the value, and are always themselves wrapped in
-//  pointers, so the inner value also being a pointer increases complexity and adds potential for
-//  errors.
-
 /// A value that can flow around the graph.
 pub enum Value {
   Empty,
