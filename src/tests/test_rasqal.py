@@ -341,7 +341,7 @@ class TestRasqal(unittest.TestCase):
 
     def test_step_count_limit(self):
         runtime, runner = fetch_mock_runner()
-        runner.step_count_limit(2)
+        runner.config.step_count_limit(2)
         with self.assertRaises(ValueError) as thrown:
             runner.run(get_qir_path("bell_theta_minus.ll"))
 

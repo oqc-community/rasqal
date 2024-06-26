@@ -19,6 +19,7 @@ def apply_routing(
     couplings: Union[Architecture, List[Tuple[int, int]]],
     runtime: Union[RasqalRunner, RuntimeAdaptor],
 ):
+    """Activates QPU routing for this algorithm with the passed-in architecture."""
     if isinstance(runtime, RasqalRunner):
         runtime.runtimes = [TketRuntime(couplings, rt) for rt in runtime.runtimes]
         return runtime
@@ -80,7 +81,6 @@ class TketBuilder(BuilderAdaptor):
 class TketRuntime(RuntimeAdaptor):
     """
     Uses Tket to apply basic routing to synthesized circuits.
-    Can be
     """
 
     def __init__(

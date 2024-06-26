@@ -17,7 +17,7 @@ use log::{log, Level};
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{Display, Formatter};
-use std::ops::{Add, AddAssign, Deref, DerefMut};
+use std::ops::{AddAssign, Deref, DerefMut};
 use std::time::Instant;
 
 /// Assign an order to nodes so we're able to tell trivially when one is further in the graph
@@ -290,14 +290,15 @@ impl Expression {
 }
 
 bitflags! {
-    /// Flags enabling various runtime tracing operations. Turning these on will drastically
-    /// affect performance and should only be done to debug output and issues.
-    #[derive(Clone)]
-    pub struct ActiveTracers: u8 {
-        const Runtime = 1;
-        const Projections = 1 << 1;
-        const Graphs = 1 << 2;
-    }
+  /// Flags enabling various runtime tracing operations. Turning these on will drastically
+  /// affect performance and should only be done to debug output and issues.
+  #[derive(Clone)]
+  pub struct ActiveTracers: u8 {
+    const Runtime = 1;
+    const Projections = 1 << 1;
+    const Graphs = 1 << 2;
+    const Solver = 1 << 4;
+  }
 }
 
 /// Tracing module for runtime for in-depth detailed logging of how our runtime functions.
@@ -341,14 +342,14 @@ impl RuntimeConstraints {
 pub struct QuantumRuntime {
   engines: Ptr<RuntimeCollection>,
   trace_module: Ptr<TracingModule>,
-  constraints: RuntimeConstraints
+  config: Ptr<RasqalConfig>
 }
 
 impl QuantumRuntime {
   pub fn new(engines: &Ptr<RuntimeCollection>, config: &Ptr<RasqalConfig>) -> QuantumRuntime {
     QuantumRuntime {
       engines: engines.clone(),
-      constraints: RuntimeConstraints::new(config.step_count_limit),
+      config: config.clone(),
       trace_module: Ptr::from(TracingModule::with(config.debug_tracers.clone()))
     }
   }
@@ -489,7 +490,7 @@ impl QuantumRuntime {
     let mut seen_nodes = HashSet::new();
     loop {
       context.step_count.add_assign(1);
-      if let Some(limit) = &self.constraints.step_limit {
+      if let Some(limit) = &self.config.step_count_limit {
         if context.step_count.deref() > limit {
           return Err(String::from(format!(
             "Execution step count limitation of {limit} exceeded."
@@ -713,7 +714,7 @@ impl QuantumRuntime {
             Gate::I(qb) => {
               let followed = follow_qubit(qb, context);
               let mut projection = context.activate_projection(&followed);
-              projection.add(&Ptr::from(QuantumOperations::I(followed.clone())));
+              projection.add(&Ptr::from(QuantumOperations::Id(followed.clone())));
             }
             Gate::U(qb, theta, phi, lambda) => {
               let followed = follow_qubit(qb, context);
@@ -733,7 +734,7 @@ impl QuantumRuntime {
 
               match follow_reference(pauli, context).as_pauli() {
                 Pauli::I => {
-                  projection.add(&Ptr::from(QuantumOperations::I(followed)));
+                  projection.add(&Ptr::from(QuantumOperations::Id(followed)));
                 }
                 Pauli::X => {
                   projection.add(&Ptr::from(QuantumOperations::X(followed, radii)));

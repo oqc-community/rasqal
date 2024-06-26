@@ -25,7 +25,6 @@ use inkwell::{
 use crate::config::RasqalConfig;
 use crate::exceptions::catch_panics;
 use log::{log, Level};
-use std::ops::Deref;
 use std::{ffi::OsStr, path::Path};
 
 /// Executes the file.
@@ -222,7 +221,7 @@ mod tests {
 
     run_file(
       path,
-      &Vec::new(),
+      args,
       runtimes.borrow(),
       None,
       &Ptr::from(RasqalConfig::default())

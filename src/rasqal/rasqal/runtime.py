@@ -9,6 +9,51 @@ from .adaptors import RuntimeAdaptor
 from ._native import Executor
 
 
+class RasqalConfig:
+    def __init__(self, parent: "RasqalRunner"):
+        self._ref: RasqalRunner = parent
+        self.step_count = None
+
+    def step_count_limit(self, step_count: [int, None]) -> "RasqalRunner":
+        """
+        Sets a limit for the steps the symbolic executor can take.
+
+        If the environment this is running in is resource-constrained or heavily utilized you can set
+        a limit on how many steps it can take. It'll mean more complicated code will error out, but will bound
+        how long a run can take.
+
+        Smaller number == shorter path it's allowed to walk. Does not take into account time it takes for backend to
+        process and run quantum circuits though.
+        """
+        self.step_count = step_count
+        self._ref.executor.step_count_limit(step_count)
+        return self._ref
+
+
+class RasqalExperimentalConfig:
+    """
+    Config holding all experimental features. There is no garantee any of these will work reliably and
+    are considered still in-progress. Use at your own risk.
+    """
+
+    def __init__(self, parent: "RasqalRunner"):
+        self._ref = parent
+        self.solver_active = False
+
+    def solver_active(self, is_active: bool) -> "RasqalRunner":
+        """
+        Activates circuit solver. All circuits will attempt to be solved classically before being sent to a QPU.
+        This can potentially result in much reduced circuits being generated, in some cases drastically, but trades
+        this off for increased runtime. Difficulty of circuit being solved reflects increased runtime, but after a
+        set boundary it will stop attempting so.
+
+        Solver paths, boundaries and aggressiveness can be tweaked by other settings.
+        """
+        self.solver_active = is_active
+        self._ref.executor.solver_active(is_active)
+        return self._ref
+
+
 class RasqalRunner:
     """
     Provides a wrapper around the Rust implementation details, allowing more natural extension
@@ -21,6 +66,8 @@ class RasqalRunner:
 
         self.runtimes: List[RuntimeAdaptor] = runtime
         self.executor = Executor()
+        self.config = RasqalConfig(self)
+        self.experimental = RasqalExperimentalConfig(self)
 
     def trace_graphs(self) -> "RasqalRunner":
         """
@@ -56,20 +103,6 @@ class RasqalRunner:
                 return self.run(fp.name, args)
             finally:
                 remove(fp.name)
-
-    def step_count_limit(self, step_count: int) -> "RasqalRunner":
-        """
-        Sets a limit for the steps the symbolic executor can take.
-
-        If the environment this is running in is resource-constrained or heavily utilized you can set
-        a limit on how many steps it can take. It'll mean more complicated code will error out, but will bound
-        how long a run can take.
-
-        Smaller number == shorter path it's allowed to walk. Does not take into account time it takes for backend to
-        process and run quantum circuits though.
-        """
-        self.executor.step_count_limit(step_count)
-        return self
 
     def run_bitcode(self, bitcode: bytes, args: List[Any] = None):
         """Runs LLVM bitcode when passed as bytes. Creates temporary file and writes to it."""
