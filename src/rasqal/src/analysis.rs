@@ -14,500 +14,245 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::iter::zip;
-use std::ops::Deref;
+use std::ops::{AddAssign, Deref, MulAssign};
+use ndarray::{Array, array, Array2, Array4, Array6, ArrayBase, Ix2, Ix3};
+
+/// A tangle is a mini-matrix that represents a fragment of the overall state, usually only
+/// representing the connections between two qubits. All entanglement operations are done through
+/// the tangle that links qubits, as they have a fuller view of the state than a single isolated
+/// qubit.
+///
+/// It only records separate states because you can't have a cluster state on either side.
+#[derive(Clone)]
+pub struct Tangle {
+  left: Ptr<StateFragment>,
+  matrix: StateFragment,
+  right: Ptr<StateFragment>
+}
+
+impl Tangle {
+  pub fn new(left: &Ptr<StateFragment>, right: &Ptr<StateFragment>) -> Tangle {
+    Tangle {left: left.clone(), matrix: StateFragment::Empty4x4(), right: right.clone()}
+  }
+
+  pub fn CX(&mut self, radians: &f64) {
+    // TODO
+  }
+
+  pub fn CZ(&mut self, radians: &f64) {
+    // TODO
+  }
+
+  pub fn SWAP(&mut self) {
+    // TODO
+  }
+}
 
 #[derive(Clone)]
-pub struct StateHistory {
+pub struct TangledQubit {
   index: i64,
-  metadata: Ptr<Metadata>,
-
-  // TODO: Pointer to avoid mutability.
-  timeline: Ptr<HashMap<i64, StateElement>>
+  qubit: Ptr<StateFragment>,
+  tangles: HashMap<i64, Ptr<Tangle>>
 }
 
-macro_rules! cluster_or_state {
-  ($self:ident, $axis:ident, $arg:ident) => {
-    match $self.state_of() {
-      StateElement::Single(qstate) => {
-        let counter = &with_mutable_self!($self.metadata.next_counter());
-        let mut next_state = qstate.clone_with_counter(counter);
-        next_state.$axis($arg);
-        with_mutable_self!($self
-          .timeline
-          .insert(counter.clone(), StateElement::Single(next_state)));
-      }
-      StateElement::Cluster(qcluster) => {
-        qcluster.$axis($arg, &$self.index);
-      }
-    }
-  };
-  ($self:ident, $method:ident) => {
-    match $self.state_of() {
-      StateElement::Single(qstate) => {
-        let counter = &with_mutable_self!($self.metadata.next_counter());
-        let mut next_state = qstate.clone_with_counter(counter);
-        next_state.$method();
-        with_mutable_self!($self
-          .timeline
-          .insert(counter.clone(), StateElement::Single(next_state)));
-      }
-      StateElement::Cluster(qcluster) => {
-        qcluster.$method(&$self.index);
-      }
-    }
-  };
-}
-
-impl StateHistory {
-  pub fn new(meta: &Ptr<Metadata>, index: &i64) -> StateHistory {
-    StateHistory {
-      timeline: Ptr::from(HashMap::new()),
-      metadata: meta.clone(),
-      index: *index
-    }
+impl TangledQubit {
+  pub fn new(index: &i64, qubit: &Ptr<StateFragment>, tangles: &HashMap<i64, Ptr<Tangle>>) -> TangledQubit {
+    TangledQubit {index: *index, qubit: qubit.clone(), tangles: tangles.clone() }
   }
 
-  /// Direct manipulation to the timeline. Means all existing rotational history will be lost.
-  pub fn add(&self, counter: i64, element: StateElement) {
-    with_mutable_self!(self.timeline.insert(counter, element));
-  }
-
-  pub fn X(&self, radii: i64) {
-    cluster_or_state!(self, X, radii);
-  }
-
-  pub fn Y(&self, radii: i64) {
-    cluster_or_state!(self, Y, radii);
-  }
-
-  pub fn Z(&self, radii: i64) {
-    cluster_or_state!(self, Z, radii);
-  }
-
-  pub fn measure(&self) {
-    cluster_or_state!(self, measure);
-  }
-
-  pub fn reset(&self) {
-    self.measure();
-
-    // We measure first to collapse any state then just reset our timeline to 0.
-    let counter = with_mutable_self!(self.metadata.next_counter());
-    self.add(
-      counter,
-      StateElement::Single(SingleState::new(&counter, SpherePoint::new(), &self.index))
-    );
-  }
-
-  fn controlled_rotation(&self, sphere: SpherePoint, conditioned_on: &Vec<i64>, result: i8) {
-    let current_counter = with_mutable_self!(self.metadata.next_counter());
-    let cluster = self.form_cluster(current_counter.borrow(), conditioned_on);
-    with_mutable!(cluster.entangle(ClusterRelationship::new(
-      sphere,
-      current_counter,
-      self.index,
-      conditioned_on,
-      result
-    )));
-  }
-
-  pub fn CX(&self, radii: i64, conditioned_on: &Vec<i64>, result: i8) {
-    let mut sphere = SpherePoint::new();
-    sphere.X(radii);
-    self.controlled_rotation(sphere, conditioned_on, result);
-  }
-
-  pub fn CY(&self, radii: i64, conditioned_on: &Vec<i64>, result: i8) {
-    let mut sphere = SpherePoint::new();
-    sphere.X(radii);
-    self.controlled_rotation(sphere, conditioned_on, result);
-  }
-
-  pub fn CZ(&self, radii: i64, conditioned_on: &Vec<i64>, result: i8) {
-    let mut sphere = SpherePoint::new();
-    sphere.Z(radii);
-    self.controlled_rotation(sphere, conditioned_on, result);
-  }
-
-  /// Adds a cluster to this state, forming an entangled cluster.
-  fn add_cluster(&self, counter: &i64, cluster: &Ptr<ClusterState>) {
-    with_mutable_self!(self
-      .timeline
-      .insert(*counter, StateElement::Cluster(cluster.clone())));
-  }
-
-  /// Forms a cluster group with the states at the passed-in index.
-  fn form_cluster(&self, counter: &i64, targets: &Vec<i64>) -> Ptr<ClusterState> {
-    if let StateElement::Cluster(cluster) = self.state_of() {
-      if cluster.spans() == targets.iter().copied().collect::<HashSet<_>>() {
-        return cluster.clone();
-      }
-    }
-
-    // If any of our targets are already clusters then we expand over those clusters as well.
-    let mut target_indexes = targets.iter().map(|val| *val).collect::<HashSet<_>>();
-    for target in targets {
-      let state = with_mutable_self!(self.metadata.root.get_history(target));
-      if let StateElement::Cluster(cluster) = state.state_of() {
-        for id in cluster.spans() {
-          target_indexes.insert(id);
-        }
-      }
-    }
-
-    // Finally build a super-cluster that spans every qubit.
-    let cluster = Ptr::from(ClusterState::new(&self.metadata));
-    for target in target_indexes {
-      let state = with_mutable_self!(self.metadata.root.get_history(&target));
-      state.add_cluster(counter, &cluster);
-    }
-
-    self.add_cluster(counter, &cluster);
-    cluster.clone()
-  }
-
-  pub fn state_of(&self) -> &StateElement {
-    // To make things simpler, if we attempt to get a state on an empty collection, just
-    // insert a zero-rotation at the beginning.
-    //
-    // This also holds because when you entangle something it because something else, so
-    // seeing it as a continuation of an existing rotation isn't precisely true.
-    if self.timeline.is_empty() {
-      self.X(0);
-    }
-
-    self.timeline.values().last().unwrap()
+  pub fn with_index(index: &i64) -> TangledQubit {
+    TangledQubit {index: *index, qubit: Ptr::from(StateFragment::Empty2x2()), tangles: HashMap::default() }
   }
 }
 
-#[derive(Clone)]
-pub enum StateElement {
-  Single(SingleState),
-  Cluster(Ptr<ClusterState>)
-}
-
-#[derive(Clone)]
-pub struct SingleState {
-  counter: i64,
-  state: SpherePoint,
-
-  /// Has this state been collapsed into a classical value?
-  collapsed: bool,
-  index: i64
-}
-
-impl SingleState {
-  pub fn new(counter: &i64, state: SpherePoint, index: &i64) -> SingleState {
-    SingleState {
-      counter: *counter,
-      state,
-      collapsed: false,
-      index: *index
-    }
-  }
-
-  /// States are commonly cloned with a different counter to perform further rotations on.
-  pub fn clone_with_counter(&self, counter: &i64) -> SingleState {
-    SingleState::new(counter, self.state.clone(), &self.index)
-  }
-
-  pub fn X(&mut self, radii: i64) { self.state.X(radii) }
-
-  pub fn Y(&mut self, radii: i64) { self.state.Y(radii) }
-
-  pub fn Z(&mut self, radii: i64) { self.state.Z(radii) }
-
-  /// Sets that this is a measure point with no modifications.
-  pub fn measure(&mut self) { self.collapsed = true; }
-}
-
+/// A cluster of entangled states that should be treated as an individual cohesive state.
+///
+/// Note: Due to simplification we don't have the concept of an individual state as having a
+/// cluster with 1 state acts the same way.
 #[derive(Clone)]
 pub struct ClusterState {
-  clustered_state: QuantumState,
-  entanglement: Vec<ClusterRelationship>,
-
-  /// History of collapsed states. Key is counter, results are target qubit and its exact history.
-  // TODO: Pointer to avoid mutability.
-  collapse_history: Ptr<HashMap<i64, (i64, StateHistory)>>,
+  states: HashMap<i64, TangledQubit>,
   metadata: Ptr<Metadata>
 }
 
 impl ClusterState {
   pub fn new(meta: &Ptr<Metadata>) -> ClusterState {
     ClusterState {
-      clustered_state: QuantumState::new(meta),
-      entanglement: Vec::new(),
-      collapse_history: Ptr::from(HashMap::new()),
+      states: HashMap::default(),
       metadata: meta.clone()
     }
   }
 
-  pub fn measure(&self, target: &i64) {
-    let cstate = &self.clustered_state;
-    self.clustered_state.measure(target);
-
-    let graph = &cstate.state_graph;
-    let entry = with_mutable!(graph.remove(target).unwrap());
-    with_mutable_self!(self
-      .collapse_history
-      .insert(self.metadata.counter, (*target, entry)));
-  }
-
-  pub fn X(&self, radii: i64, index: &i64) { self.clustered_state.X(radii, index); }
-
-  pub fn Y(&self, radii: i64, index: &i64) { self.clustered_state.Y(radii, index); }
-
-  pub fn Z(&self, radii: i64, index: &i64) { self.clustered_state.Z(radii, index); }
-
-  pub fn entangle(&mut self, rel: ClusterRelationship) { self.entanglement.push(rel); }
-
-  pub fn spans(&self) -> HashSet<i64> {
-    self
-      .clustered_state
-      .state_graph
-      .keys()
-      .copied()
-      .collect::<HashSet<_>>()
-  }
-}
-
-/// TODO: Swap to more matrix-y representation now.
-#[derive(Clone)]
-pub struct SpherePoint {
-  amplitude: i64,
-  phase: i64
-}
-
-impl SpherePoint {
-  pub fn new() -> SpherePoint {
-    SpherePoint {
-      amplitude: 0,
-      phase: 0
-    }
-  }
-
-  pub fn with_X(radii: i64) -> SpherePoint {
-    let mut sp = SpherePoint::new();
-    sp.X(radii);
-    sp
-  }
-
-  pub fn with_Y(radii: i64) -> SpherePoint {
-    let mut sp = SpherePoint::new();
-    sp.Y(radii);
-    sp
-  }
-
-  pub fn with_Z(radii: i64) -> SpherePoint {
-    let mut sp = SpherePoint::new();
-    sp.Z(radii);
-    sp
-  }
-
-  pub fn X(&mut self, radii: i64) { self.amplitude = (self.amplitude + radii) % 360 }
-
-  pub fn Y(&mut self, radii: i64) { self.phase = (self.phase + radii) % 360 }
-
-  // TODO: wrong, fix later.
-  pub fn Z(&mut self, radii: i64) {
-    let ratio = radii % 360;
-
-    if radii == 0 {
-      return;
-    }
-
-    // Shortcircuit on rotation poles.
-    if (self.amplitude == 90 || self.amplitude == 270) && (self.phase == 0 || self.phase == 180) {
-      return;
-    }
-
-    let phase = self.phase;
-    let amp = self.amplitude;
-
-    if radii == 90 {
-      self.phase = amp;
-      self.amplitude = phase;
-    } else if radii == 180 {
-      self.phase = -amp % 360;
-      self.amplitude = -phase % 360;
-    } else if radii == 270 {
-      self.phase = -phase % 360;
-      self.amplitude = -amp % 360;
+  fn get(&mut self, index: &i64) -> &mut TangledQubit {
+    if let Some(qb) = self.states.get_mut(index) {
+      qb
     } else {
-      panic!("Irregular Y rotation added to prediction algorithm. Unsupported right now.")
+      self.states.insert(*index, TangledQubit::with_index(index));
+      self.states.get_mut(index).unwrap()
     }
   }
-}
 
-impl Default for SpherePoint {
-  fn default() -> Self { SpherePoint::new() }
-}
-
-#[derive(Clone)]
-pub struct ClusterRelationship {
-  rotation: SpherePoint,
-  at_counter: i64,
-  target: i64,
-  conditioned_on: Vec<i64>,
-  on_value: i8
-}
-
-impl ClusterRelationship {
-  pub fn new(
-    rotation: SpherePoint, at_counter: i64, target: i64, conditioned_on: &Vec<i64>, on_value: i8
-  ) -> ClusterRelationship {
-    ClusterRelationship {
-      rotation,
-      at_counter,
-      target,
-      conditioned_on: conditioned_on.clone(),
-      on_value
-    }
-  }
-}
-
-/// Collection representing a quantum state with qubits identified by index.
-#[derive(Clone)]
-pub struct QuantumState {
-  metadata: Ptr<Metadata>,
-
-  /// Key = index, Value = state history.
-  state_graph: Ptr<HashMap<i64, StateHistory>>
-}
-
-impl QuantumState {
-  pub fn new(meta: &Ptr<Metadata>) -> QuantumState {
-    let collection = QuantumState {
-      state_graph: Ptr::from(HashMap::default()),
-      metadata: meta.clone()
-    };
-
-    // If we're the root collection in the hierarchy just mark us as such.
-    if Ptr::is_null(&meta.root) {
-      with_mutable!(meta.root = Ptr::from(collection.borrow()));
-    }
-    collection
+  fn get_qubit(&mut self, index: &i64) -> &Ptr<StateFragment> {
+    &self.get(index).qubit
   }
 
-  pub fn get_history(&self, index: &i64) -> &mut StateHistory {
-    if let Some(qt) = with_mutable_self!(self.state_graph.get_mut(index)) {
-      qt
+  /// Applies a tangle between these two qubits to record minimal entangling information
+  /// between them.
+  fn tangle(&mut self, left: &i64, right: &i64) -> &Ptr<Tangle> {
+    let left_qubit = self.get(left);
+    if let Some(tangle) = left_qubit.tangles.get(right) {
+      tangle
     } else {
-      let timeline = StateHistory::new(&self.metadata, index);
-      with_mutable_self!(self.state_graph.insert(*index, timeline));
-      with_mutable_self!(self.state_graph.get_mut(index).unwrap())
+      let right_qubit = self.get(right);
+      let tangle = Ptr::from(Tangle::new(&left_qubit.qubit, &right_qubit.qubit));
+      right_qubit.tangles.insert(*left, tangle.clone());
+      left_qubit.tangles.insert(*right, tangle.clone());
+      &tangle
     }
   }
 
-  pub fn X(&self, radii: i64, target: &i64) {
-    let qt = self.get_history(target);
-    qt.X(radii);
+  pub fn X(&mut self, radians: &f64, index: &i64) {
+    self.get_qubit(index).X(radians)
   }
 
-  pub fn Y(&self, radii: i64, target: &i64) {
-    let qt = self.get_history(target);
-    qt.Y(radii);
+  pub fn Y(&mut self, radians: &f64, index: &i64) {
+    self.get_qubit(index).Y(radians)
   }
 
-  pub fn Z(&self, radii: i64, target: &i64) {
-    let qt = self.get_history(target);
-    qt.Z(radii);
+  pub fn Z(&mut self, radians: &f64, index: &i64) {
+    self.get_qubit(index).Z(radians)
   }
 
-  pub fn CX(&self, radii: i64, target: &i64, conditioned_on: &Vec<i64>, result: i8) {
-    let qt = self.get_history(target);
-    qt.CX(radii, conditioned_on, result);
+  pub fn CX(&mut self, control: &i64, target: &i64, radians: &f64) {
+    self.tangle(control, target).CX(radians);
   }
 
-  pub fn CY(&self, radii: i64, target: &i64, conditioned_on: &Vec<i64>, result: i8) {
-    let qt = self.get_history(target);
-    qt.CY(radii, conditioned_on, result);
+  pub fn CZ(&mut self, control: &i64, target: &i64, radians: &f64) {
+    self.tangle(control, target).CZ(radians);
   }
 
-  pub fn CZ(&self, radii: i64, target: &i64, conditioned_on: &Vec<i64>, result: i8) {
-    let qt = self.get_history(target);
-    qt.CZ(radii, conditioned_on, result);
+  pub fn SWAP(&mut self, left: &i64, right: &i64) {
+    self.tangle(left, right).SWAP();
+  }
+}
+
+/// Composite enum for matrix operations to be able to automatically expand when used against
+/// smaller ones.
+#[derive(Clone)]
+pub struct StateFragment {
+  matrix: Array2<f64>
+}
+
+impl StateFragment {
+  pub fn Empty2x2() -> StateFragment {
+    StateFragment { matrix: array![
+      [1.0, 0.0],
+      [0.0, 0.0]
+    ]}
   }
 
-  pub fn swap(&self, first: &i64, second: &i64) {
-    let left_history = self.get_history(first);
-    let right_history = self.get_history(second);
-
-    let left_state = left_history.state_of();
-    let right_state = right_history.state_of();
-
-    let op_counter = with_mutable_self!(self.metadata.next_counter());
-    match left_state {
-      StateElement::Single(single) => {
-        right_history.add(
-          op_counter,
-          StateElement::Single(single.clone_with_counter(&op_counter))
-        );
-      }
-      StateElement::Cluster(cluster) => {
-        right_history.add(op_counter, StateElement::Cluster(cluster.clone()));
-      }
-    }
-
-    match right_state {
-      StateElement::Single(single) => {
-        left_history.add(
-          op_counter,
-          StateElement::Single(single.clone_with_counter(&op_counter))
-        );
-      }
-      StateElement::Cluster(cluster) => {
-        left_history.add(op_counter, StateElement::Cluster(cluster.clone()));
-      }
-    }
+  pub fn Empty4x4() -> StateFragment {
+    StateFragment { matrix: array![
+      [1.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0]
+    ]}
   }
 
-  pub fn measure(&self, target: &i64) {
-    let state = self.get_history(target);
-    state.measure();
+  pub fn X(&mut self, radians: &f64) {
+      self.matrix.mul_assign(array![
+        [0, 1],
+        [1, 0]
+      ])
   }
 
-  pub fn reset(&self, target: &i64) {
-    let state = self.get_history(target);
-    state.reset();
+  pub fn Y(&mut self, radians: &f64) {
+    self.matrix.mul_assign(array![
+      [0.0, -1.0_f64.sqrt()],
+      [1.0_f64.sqrt(), 0.0]
+    ])
   }
+
+  pub fn Z(&mut self, radians: &f64) {
+    self.matrix.mul_assign(array![
+      [1.0, 0.0],
+      [0.0, -1.0]
+    ])
+  }
+
+  pub fn CX(&mut self, radians: &f64) {
+    self.matrix.mul_assign(array![
+      [1.0, 0.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 1.0],
+      [0.0, 0.0, 1.0, 0.0]
+    ])
+  }
+
+  pub fn CZ(&mut self, radians: &f64) {
+    self.matrix.mul_assign(array![
+      [1.0, 0.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 0.0, 1.0, 0.0],
+      [0.0, 0.0, 0.0, -1.0]
+    ])
+  }
+
+  pub fn SWAP(&mut self) {
+    self.matrix.mul_assign(array![
+      [1.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 1.0, 0.0],
+      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 1.0]
+    ])
+  }
+
+  pub fn measure(&mut self) {
+    // TODO
+  }
+}
+
+impl Default for StateFragment {
+  fn default() -> Self { StateFragment::new() }
 }
 
 pub struct Metadata {
-  /// Current program-counter we're on.
-  counter: i64,
-
   /// Root collection in our hierarchy. Can be used for top-level searches and queries.
-  root: Ptr<QuantumState>
+  root: Ptr<CompositeState>
 }
 
 impl Metadata {
   pub fn new() -> Metadata {
     Metadata {
-      counter: 0,
       root: Ptr::default()
     }
   }
+}
 
-  pub fn next_counter(&mut self) -> i64 {
-    self.counter += 1;
-    self.counter
+pub struct CompositeState {
+  meta: Ptr<CompositeState>,
+  qubits: HashMap<i64, Ptr<ClusterState>>
+}
+
+impl CompositeState {
+  pub fn new() -> CompositeState {
+    CompositeState {
+      qubits: HashMap::new(),
+      meta: Ptr::default()
+    }
   }
 }
 
-/// Transform radians into degrees for easy debugging for now.
-/// TODO: Likely change form later.
-fn conv(radians: &f64) -> i64 { (radians * 180.0 / f64::PI()) as i64 }
-
-pub struct QuantumStatePredictor {
-  state: QuantumState
+pub struct QuantumSolver {
+  state: Ptr<CompositeState>
 }
 
-impl QuantumStatePredictor {
-  pub fn new() -> QuantumStatePredictor {
-    QuantumStatePredictor {
-      state: QuantumState::new(&Ptr::from(Metadata::new()))
-    }
+impl QuantumSolver {
+  pub fn new() -> QuantumSolver {
+    let state = Ptr::from(CompositeState::new());
+    state.meta = state.clone();
+    QuantumSolver { state }
   }
 
   pub fn add(&self, op: Ptr<QuantumOperations>) {
@@ -518,18 +263,18 @@ impl QuantumStatePredictor {
         }
       }
       QuantumOperations::U(qb, theta, phi, lambda) => {
-        self.state.Z(qb.index, &conv(lambda));
-        self.state.Y(qb.index, &conv(theta));
-        self.state.Z(qb.index, &conv(phi));
+        self.state.Z(qb.index, lambda);
+        self.state.Y(qb.index, theta);
+        self.state.Z(qb.index, phi);
       }
       QuantumOperations::X(qb, radians) => {
-        self.state.X(qb.index, &conv(radians));
+        self.state.X(qb.index, radians);
       }
       QuantumOperations::Y(qb, radians) => {
-        self.state.Y(qb.index, &conv(radians));
+        self.state.Y(qb.index, radians);
       }
       QuantumOperations::Z(qb, radians) => {
-        self.state.Z(qb.index, &conv(radians));
+        self.state.Z(qb.index, radians);
       }
       QuantumOperations::CX(controls, targets, radians) => self.state.CX(
         180,
