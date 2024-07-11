@@ -255,14 +255,6 @@ impl PyBuilderAdaptor {
     return Ptr::is_null(self.builder.borrow()) || self.builder.is_none();
   }
 
-  pub fn ab(&self) -> Result<&PyAny, String> {
-    let target = self
-      .builder
-      .getattr("ab")
-      .expect("'ab' doesn't exist on builder");
-    Python::with_gil(|py| target.call0().map_err(|err| err.value(py).to_string()))
-  }
-
   python_methods!(self.builder.x(qubit: i64, radians: f64));
   python_methods!(self.builder.y(qubit: i64, radians: f64));
   python_methods!(self.builder.z(qubit: i64, radians: f64));
