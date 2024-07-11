@@ -14,12 +14,16 @@ use crate::with_mutable;
 use inkwell::basic_block::BasicBlock;
 use inkwell::module::Module;
 use inkwell::types::{AnyType, AnyTypeEnum};
-use inkwell::values::{AggregateValue, AnyValue, AnyValueEnum, ArrayValue, AsValueRef, BasicValue, BasicValueEnum, FunctionValue, InstructionOpcode, InstructionValue, StructValue};
+use inkwell::values::{
+  AggregateValue, AnyValue, AnyValueEnum, ArrayValue, AsValueRef, BasicValue, BasicValueEnum,
+  FunctionValue, InstructionOpcode, InstructionValue, StructValue
+};
 use inkwell::{FloatPredicate, IntPredicate};
 use llvm_sys::core::{
   LLVMConstIntGetSExtValue, LLVMGetElementType, LLVMGetNumOperands, LLVMGetOperand,
   LLVMGetTypeKind, LLVMPrintTypeToString, LLVMPrintValueToString, LLVMTypeOf
 };
+use llvm_sys::prelude::LLVMValueRef;
 use llvm_sys::LLVMTypeKind;
 use log::warn;
 use regex::Regex;
@@ -28,7 +32,6 @@ use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::ffi::{c_uint, CStr};
 use std::ops::Deref;
-use llvm_sys::prelude::LLVMValueRef;
 
 macro_rules! operand_to_value {
   ($target:ident, $index:expr) => {
@@ -375,12 +378,7 @@ impl QIREvaluator {
   pub fn const_extract_value(&self, array: LLVMValueRef, index: u32) -> BasicValueEnum {
     use llvm_sys::core::LLVMGetAggregateElement;
 
-    unsafe {
-      BasicValueEnum::new(LLVMGetAggregateElement(
-        array,
-        index as c_uint,
-      ))
-    }
+    unsafe { BasicValueEnum::new(LLVMGetAggregateElement(array, index as c_uint)) }
   }
 
   /// `as_value`
@@ -416,7 +414,9 @@ impl QIREvaluator {
             result.push(
               self
                 .as_value_ptr(
-                  &self.const_extract_value(vec.as_value_ref(), int).as_any_value_enum(),
+                  &self
+                    .const_extract_value(vec.as_value_ref(), int)
+                    .as_any_value_enum(),
                   graph,
                   context
                 )
@@ -486,14 +486,24 @@ impl QIREvaluator {
           let pointer_val = val_enum.into_pointer_value();
 
           // This is purely for base profile support since its syntax is invalid.
-          let base_profile_finder: Regex = Regex::new("^%(Qubit|Result)\\* ((inttoptr \\(i64 ([0-9]+))|(null))").unwrap();
+          let base_profile_finder: Regex =
+            Regex::new("^%(Qubit|Result)\\* ((inttoptr \\(i64 ([0-9]+))|(null))").unwrap();
           let capture_groups = base_profile_finder.captures(&stringified_value);
           if let Some(groupings) = capture_groups {
-            let name  = groupings.get(1).unwrap().as_str();
+            let name = groupings.get(1).unwrap().as_str();
             let mut value = if let Some(matched) = groupings.get(4) {
               matched.as_str()
             } else {
-              groupings.get(5).expect(format!("Unable to find base profile value. Instruction: {}", stringified_value.clone()).as_str()).as_str()
+              groupings
+                .get(5)
+                .expect(
+                  format!(
+                    "Unable to find base profile value. Instruction: {}",
+                    stringified_value.clone()
+                  )
+                  .as_str()
+                )
+                .as_str()
             };
 
             if value == "null" {
@@ -504,7 +514,7 @@ impl QIREvaluator {
               "Qubit" => Some(Value::Qubit(Qubit::new(value.parse().unwrap()))),
               "Result" => Some(Value::Int(value.parse().unwrap())),
               _ => panic!("Attempted specific match on non-base-profile pointer. Instruction: {}, name: {}, value: {}", stringified_value.clone(), name.clone(), value.clone())
-            }
+            };
           }
 
           // Structs, especially opaque ones, have their own rules and even if they're
@@ -562,7 +572,9 @@ impl QIREvaluator {
             result.push(
               self
                 .as_value_ptr(
-                  &self.const_extract_value(struct_val.as_value_ref(), int).as_any_value_enum(),
+                  &self
+                    .const_extract_value(struct_val.as_value_ref(), int)
+                    .as_any_value_enum(),
                   graph,
                   context
                 )

@@ -237,9 +237,7 @@ mod tests {
   }
 
   #[test]
-  fn execute_qaoa() {
-    run("../tests/qsharp/qaoa/qir/qaoa.ll");
-  }
+  fn execute_qaoa() { run("../tests/qsharp/qaoa/qir/qaoa.ll"); }
 
   #[test]
   fn execute_simplified_oracle_generator() {
@@ -247,52 +245,39 @@ mod tests {
   }
 
   #[test]
-  fn execute_oracle_generator() {
-    run("../tests/qsharp/oracle-generator/qir/oracle-generator.ll");
-  }
+  fn execute_oracle_generator() { run("../tests/qsharp/oracle-generator/qir/oracle-generator.ll"); }
 
   #[test]
   fn execute_minified_oracle_generator() {
-    run_with_args("../tests/qsharp/minified-oracle-generator/qir/minified-oracle-generator.ll",
-    &vec![Value::from(true)]);
+    run_with_args(
+      "../tests/qsharp/minified-oracle-generator/qir/minified-oracle-generator.ll",
+      &vec![Value::from(true)]
+    );
   }
 
   #[test]
-  fn execute_unrestricted_bell() {
-    run("../tests/files/qir/unrestricted_bell.ll");
-  }
+  fn execute_unrestricted_bell() { run("../tests/files/qir/unrestricted_bell.ll"); }
 
   #[test]
   fn test_step_count() {
     let mut config = RasqalConfig::default();
     config.step_count_limit(2);
-    let results =
-        run_with_config("../tests/files/qir/unrestricted_bell.ll", config);
+    let results = run_with_config("../tests/files/qir/unrestricted_bell.ll", config);
     assert!(results.is_err())
   }
 
   #[test]
-  fn execute_bell_int_return() {
-    run(&"../tests/files/qir/bell_int_return.ll");
-  }
+  fn execute_bell_int_return() { run(&"../tests/files/qir/bell_int_return.ll"); }
 
   #[test]
-  fn execute_bell_psi_minus() {
-    run(&"../tests/files/qir/bell_psi_minus.ll");
-  }
+  fn execute_bell_psi_minus() { run(&"../tests/files/qir/bell_psi_minus.ll"); }
 
   #[test]
-  fn execute_bell_psi_plus() {
-    run(&"../tests/files/qir/bell_psi_plus.ll");
-  }
+  fn execute_bell_psi_plus() { run(&"../tests/files/qir/bell_psi_plus.ll"); }
 
   #[test]
-  fn execute_bell_theta_plus() {
-    run(&"../tests/files/qir/bell_theta_plus.ll");
-  }
+  fn execute_bell_theta_plus() { run(&"../tests/files/qir/bell_theta_plus.ll"); }
 
   #[test]
-  fn execute_bell_theta_minus() {
-    run(&"../tests/files/qir/bell_theta_minus.ll");
-  }
+  fn execute_bell_theta_minus() { run(&"../tests/files/qir/bell_theta_minus.ll"); }
 }

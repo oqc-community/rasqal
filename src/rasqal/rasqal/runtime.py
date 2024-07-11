@@ -94,7 +94,5 @@ class RasqalRunner:
         Runs an .ll or .bc file with the passed-in arguments.
         Arguments can only be Python primitives or otherwise easily transformable to Rust objects.
         """
-        results = self.executor.run_with_args(
-            file_path, args or [], self.runtimes
-        )
+        results = self.executor.run_with_args(file_path, args or [], self.runtimes)
         return results
