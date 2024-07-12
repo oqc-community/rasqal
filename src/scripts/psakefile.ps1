@@ -18,10 +18,18 @@ Properties {
 }
 
 task default -depends build
-task build -depends build-llvm, build-rasqal, test-rasqal
+task build -depends build-llvm, build-rasqal, test-rasqal, format
 task check -depends check-licenses
-task format -depends format-rust
+task format -depends format-rust, format-python
 task pypi-build -depends build, audit-rasqal, check
+
+task format-python {
+    Invoke-LoggedCommand -workingDirectory $Root {
+        pip install ruff
+        ruff format
+        ruff check --fix --exit-zero
+    }
+}
 
 task format-rust {
     Invoke-LoggedCommand -workingDirectory $Root {

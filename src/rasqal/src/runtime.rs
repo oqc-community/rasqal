@@ -474,9 +474,9 @@ impl QuantumRuntime {
       if let Some(limit) = &self.constraints.step_limit {
         let stuff = context.step_count.deref().clone();
         if context.step_count.deref() > limit {
-          return Err(String::from(
-            format!("Execution step count limitation of {limit} exceeded.")
-          ));
+          return Err(String::from(format!(
+            "Execution step count limitation of {limit} exceeded."
+          )));
         }
       }
 

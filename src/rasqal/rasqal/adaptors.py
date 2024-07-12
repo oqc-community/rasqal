@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
-import abc
 from typing import Dict
 
 
@@ -15,32 +14,24 @@ class BuilderAdaptor:
 
     This builder will then be passed to the provided runtime for execution.
     """
-    def cx(self, controls, target, radii):
-        ...
 
-    def cz(self, controls, target, radii):
-        ...
+    def cx(self, controls, target, radii): ...
 
-    def cy(self, controls, target, radii):
-        ...
+    def cz(self, controls, target, radii): ...
 
-    def x(self, qubit, radii):
-        ...
+    def cy(self, controls, target, radii): ...
 
-    def y(self, qubit, radii):
-        ...
+    def x(self, qubit, radii): ...
 
-    def z(self, qubit, radii):
-        ...
+    def y(self, qubit, radii): ...
 
-    def swap(self, qubit1, qubit2):
-        ...
+    def z(self, qubit, radii): ...
 
-    def reset(self, qubit):
-        ...
+    def swap(self, qubit1, qubit2): ...
 
-    def measure(self, qubit):
-        ...
+    def reset(self, qubit): ...
+
+    def measure(self, qubit): ...
 
 
 class RuntimeAdaptor:
@@ -53,6 +44,7 @@ class RuntimeAdaptor:
     Every time a quantum blob needs to be executed it will query whether a particular runtime is able to support
     it and then use that builder/runtime combination to execute it, if applicable.
     """
+
     def execute(self, builder) -> Dict[str, int]:
         """
         Executes the passed-in builder against the backend and returns a result distribution.
@@ -62,7 +54,7 @@ class RuntimeAdaptor:
         return dict()
 
     def create_builder(self) -> BuilderAdaptor:
-        """ Creates a builder to be used with this runtime. """
+        """Creates a builder to be used with this runtime."""
         return BuilderAdaptor()
 
     def has_features(self, required_features: "RequiredFeatures"):

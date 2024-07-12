@@ -23,6 +23,7 @@ class QASMBuilder(BuilderAdaptor):
     """
     Builder which builds Qiskit quantum circuits.
     """
+
     def __init__(self, qubit_count: int):
         super().__init__()
         self.circuit = QuantumCircuit(qubit_count, qubit_count)
@@ -65,11 +66,14 @@ class QASMRuntime(RuntimeAdaptor):
     Qiskit-backed runtime.
     Builds and runs a pure QASM simulation as a backend.
     """
+
     def __init__(self, qubit_count=30):
         self.qubit_count = qubit_count
 
     def execute(self, builder: QASMBuilder) -> Dict[str, int]:
-        aer_config = QasmBackendConfiguration.from_dict(AerSimulator._DEFAULT_CONFIGURATION)
+        aer_config = QasmBackendConfiguration.from_dict(
+            AerSimulator._DEFAULT_CONFIGURATION
+        )
         aer_config.n_qubits = builder.circuit.num_qubits
         qasm_sim = AerSimulator(aer_config)
 
