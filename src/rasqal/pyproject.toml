@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 authors = [
-    { name = "John Dumbell", email = "euphoricEulogy@gmail.com" }
+    { name = "John Dumbell", email = "john.dumbell42@gmail.com" }
 ]
 
 dependencies = [
