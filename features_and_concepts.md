@@ -36,7 +36,7 @@ In fact the less the execution run looks like the incoming QIR the better, becau
 
 
 
-If you are interested in a more thorough breakdown of its internals and concepts it has [a paper](https://github.com/oqc-community/rasqal/blob/develop/docs/Rasqal%20Draft%20v2.pdf) which goes into them in detail.
+If you are interested in a more thorough breakdown of its internals and concepts it has [a paper](https://github.com/oqc-community/rasqal/blob/develop/docs/papers/Rasqal%20Draft%20v2.pdf) which goes into them in detail.
 
 ### Features
 
