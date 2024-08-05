@@ -2,7 +2,7 @@
 
 Prerequisites:
 
-1. [Python 3.9](https://www.python.org/downloads/).
+1. [Python 3.10](https://www.python.org/downloads/).
 2. [Rust](https://www.rust-lang.org/tools/install).
 
 With these installed then run:

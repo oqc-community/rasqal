@@ -1,7 +1,7 @@
 [project]
 name = "rasqal"
-version = "0.1.4"
-requires-python = ">=3.9"
+version = "0.1.5"
+requires-python = ">=3.10"
 description = "A dynamically executed quantum-classical hybrid optimizing runtime."
 license = { file = "LICENSE" }
 readme = "README.md"
@@ -9,7 +9,7 @@ classifiers = [
     "License :: OSI Approved :: BSD License",
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python",
     "Programming Language :: Rust",
     "Operating System :: MacOS",
@@ -26,7 +26,7 @@ dependencies = [
     "qiskit-optimization>=0.4.0",
     "qiskit-ignis>=0.7.0",
     "qiskit-aer>=0.13.0",
-    "pytket>=1.23.0"
+    "pytket>=1.31.0"
 ]
 
 [project.urls]
