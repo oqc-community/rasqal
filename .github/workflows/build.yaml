@@ -17,6 +17,11 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        py_version: [ "3.10", "3.11", "3.12" ]
+
     steps:
       - uses: actions/checkout@v4
       - name: Setup rust toolchain
@@ -25,10 +30,10 @@ jobs:
           toolchain: 1.75.0
           components: rustfmt clippy
 
-      - name: Set up Python 3.9
+      - name: Set up Python ${{ matrix.py_version }}
         uses: actions/setup-python@v3
         with:
-          python-version: 3.9
+          python-version: ${{ matrix.py_version }}
 
       - name: Install LLVM
         uses: ./.github/actions/install-llvm
