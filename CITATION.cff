@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: Rasqal
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: John
+    family-names: Dumbell
+    email: john.dumbell42@gmail.com
+    affiliation: Oxford Quantum Circuits (OQC)
+repository-code: "https://github.com/oqc-community/rasqal"
+url: "https://github.com/oqc-community/rasqal"
+abstract: >-
+  Rasqal is a quantum-classical hybrid runtime that leans on
+  dynamic execution of hybrid IRs to optimize and synthesize
+  the circuits it sends to the QPU while executing the
+  classical parts itself. This approach means all
+  non-quantum variables are known at runtime, including
+  results from embedded quantum executions. Such information
+  is then used to enhance classical execution paths and
+  optimize circuit synthesis.
+license: BSD-3-Clause
+license-url: "https://github.com/oqc-community/rasqal/blob/develop/LICENSE"

@@ -372,93 +372,103 @@ impl<T: ?Sized> From<&mut T> for FlexiPtr<T> {
   fn from(value: &mut T) -> Self { FlexiPtr::Borrow(value) }
 }
 
-impl<T: Add> Add for FlexiPtr<T> where for<'a> &'a T: Add<&'a T, Output = T> {
+impl<T: Add> Add for FlexiPtr<T>
+where
+  for<'a> &'a T: Add<&'a T, Output = T>
+{
   type Output = T;
 
-  fn add(self, rhs: Self) -> Self::Output {
-    self.deref() + rhs.deref()
-  }
+  fn add(self, rhs: Self) -> Self::Output { self.deref() + rhs.deref() }
 }
 
-
-impl<T: Sub> Sub for FlexiPtr<T> where for<'a> &'a T: Sub<&'a T, Output = T> {
+impl<T: Sub> Sub for FlexiPtr<T>
+where
+  for<'a> &'a T: Sub<&'a T, Output = T>
+{
   type Output = T;
 
-  fn sub(self, rhs: Self) -> Self::Output {
-    self.deref() - rhs.deref()
-  }
+  fn sub(self, rhs: Self) -> Self::Output { self.deref() - rhs.deref() }
 }
 
-impl<T: Mul> Mul for FlexiPtr<T> where for<'a> &'a T: Mul<&'a T, Output = T> {
+impl<T: Mul> Mul for FlexiPtr<T>
+where
+  for<'a> &'a T: Mul<&'a T, Output = T>
+{
   type Output = T;
 
-  fn mul(self, rhs: Self) -> Self::Output {
-    self.deref() * rhs.deref()
-  }
+  fn mul(self, rhs: Self) -> Self::Output { self.deref() * rhs.deref() }
 }
 
-impl<T: Div> Div for FlexiPtr<T> where for<'a> &'a T: Div<&'a T, Output = T> {
+impl<T: Div> Div for FlexiPtr<T>
+where
+  for<'a> &'a T: Div<&'a T, Output = T>
+{
   type Output = T;
 
-  fn div(self, rhs: Self) -> Self::Output {
-    self.deref() / rhs.deref()
-  }
+  fn div(self, rhs: Self) -> Self::Output { self.deref() / rhs.deref() }
 }
 
-impl<T: BitOr> BitOr for FlexiPtr<T> where for<'a> &'a T: BitOr<&'a T, Output = T> {
+impl<T: BitOr> BitOr for FlexiPtr<T>
+where
+  for<'a> &'a T: BitOr<&'a T, Output = T>
+{
   type Output = T;
 
-  fn bitor(self, rhs: Self) -> Self::Output {
-    self.deref() | rhs.deref()
-  }
+  fn bitor(self, rhs: Self) -> Self::Output { self.deref() | rhs.deref() }
 }
 
-impl<T: BitAnd> BitAnd for FlexiPtr<T> where for<'a> &'a T: BitAnd<&'a T, Output = T> {
+impl<T: BitAnd> BitAnd for FlexiPtr<T>
+where
+  for<'a> &'a T: BitAnd<&'a T, Output = T>
+{
   type Output = T;
 
-  fn bitand(self, rhs: Self) -> Self::Output {
-    self.deref() & rhs.deref()
-  }
+  fn bitand(self, rhs: Self) -> Self::Output { self.deref() & rhs.deref() }
 }
 
-impl<T: BitXor> BitXor for FlexiPtr<T> where for<'a> &'a T: BitXor<&'a T, Output = T> {
+impl<T: BitXor> BitXor for FlexiPtr<T>
+where
+  for<'a> &'a T: BitXor<&'a T, Output = T>
+{
   type Output = T;
 
-  fn bitxor(self, rhs: Self) -> Self::Output {
-    self.deref() ^ rhs.deref()
-  }
+  fn bitxor(self, rhs: Self) -> Self::Output { self.deref() ^ rhs.deref() }
 }
 
-impl <T: Shl> Shl for FlexiPtr<T> where for<'a> &'a T: Shl<&'a T, Output = T> {
+impl<T: Shl> Shl for FlexiPtr<T>
+where
+  for<'a> &'a T: Shl<&'a T, Output = T>
+{
   type Output = T;
 
-  fn shl(self, rhs: Self) -> Self::Output {
-    self.deref() << rhs.deref()
-  }
+  fn shl(self, rhs: Self) -> Self::Output { self.deref() << rhs.deref() }
 }
 
-impl<T: Shr> Shr for FlexiPtr<T> where for<'a> &'a T: Shr<&'a T, Output = T> {
+impl<T: Shr> Shr for FlexiPtr<T>
+where
+  for<'a> &'a T: Shr<&'a T, Output = T>
+{
   type Output = T;
 
-  fn shr(self, rhs: Self) -> Self::Output {
-    self.deref() >> rhs.deref()
-  }
+  fn shr(self, rhs: Self) -> Self::Output { self.deref() >> rhs.deref() }
 }
 
-impl<T: Rem> Rem for FlexiPtr<T> where for<'a> &'a T: Rem<&'a T, Output = T> {
+impl<T: Rem> Rem for FlexiPtr<T>
+where
+  for<'a> &'a T: Rem<&'a T, Output = T>
+{
   type Output = T;
 
-  fn rem(self, rhs: Self) -> Self::Output {
-    self.deref() % rhs.deref()
-  }
+  fn rem(self, rhs: Self) -> Self::Output { self.deref() % rhs.deref() }
 }
 
-impl<T, A: Index<A>> Index<A> for FlexiPtr<T> where T: Index<A> {
+impl<T, A: Index<A>> Index<A> for FlexiPtr<T>
+where
+  T: Index<A>
+{
   type Output = <T as Index<A>>::Output;
 
-  fn index(&self, index: A) -> &Self::Output {
-    &self.deref()[index]
-  }
+  fn index(&self, index: A) -> &Self::Output { &self.deref()[index] }
 }
 
 #[cfg(test)]
