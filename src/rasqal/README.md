@@ -17,7 +17,7 @@ If you have any features or ideas you'd like to see implemented feel free to rai
 
 ### Getting Started
 
-1. Install Rasqal in your favourite Python venv by running `pip install rasqal`. Our current testing is done with `v3.9` of Python.
+1. Install Rasqal in your favourite Python venv by running `pip install rasqal`. Our current testing is done with `v3.10` of Python.
 2. Read the [quick start](https://github.com/oqc-community/rasqal/blob/develop/examples.md) and look at our [Python example](https://github.com/oqc-community/Rasqal/blob/develop/docs/examples.py).
 3. (Optional) Read the [paper](https://github.com/oqc-community/rasqal/blob/develop/docs/Rasqal%20Draft%20v2.pdf) for a deep-dive into Rasqals concepts and data structures.
 
