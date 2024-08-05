@@ -1,12 +1,10 @@
-import os.path
-import pathlib
 import unittest
 from os.path import abspath, dirname, join
 
 from rasqal.routing import apply_routing, build_ring_architecture
 from .file_utils import get_qir_path
 from rasqal.simulators import fetch_qasm_runner
-from rasqal.adaptors import (BuilderAdaptor, RuntimeAdaptor)
+from rasqal.adaptors import BuilderAdaptor, RuntimeAdaptor
 from rasqal.runtime import RasqalRunner
 
 
@@ -50,7 +48,7 @@ class BuilderMock(BuilderAdaptor):
         self.gates.append(f"cz {controls} {target} {radii}")
 
     def cy(self, controls, target, radii):
-        self.metrics.cy_count +=  1
+        self.metrics.cy_count += 1
         self.gates.append(f"cy {controls} {target} {radii}")
 
     def x(self, qubit, radii):
@@ -143,44 +141,119 @@ class TestRasqal(unittest.TestCase):
         runtime, runner = fetch_mock_runner()
         runner.run(qir)
 
-        assert runtime.executed[0].gates == ['measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[1].gates == ['x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[2].gates == ['x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[3].gates == ['x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[4].gates == ['x 0 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[5].gates == ['x 0 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[6].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[7].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[0].gates == ["measure 0", "measure 1", "measure 2"]
+        assert runtime.executed[1].gates == [
+            "x 2 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[2].gates == [
+            "x 1 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[3].gates == [
+            "x 1 3.141592653589793",
+            "x 2 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[4].gates == [
+            "x 0 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[5].gates == [
+            "x 0 3.141592653589793",
+            "x 2 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[6].gates == [
+            "x 0 3.141592653589793",
+            "x 1 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[7].gates == [
+            "x 0 3.141592653589793",
+            "x 1 3.141592653589793",
+            "x 2 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
 
     def test_minified_generator(self):
         qir = fetch_project_ll("minified-oracle-generator")
 
         runtime, runner = fetch_mock_runner()
         runner.run(qir, [True])
-        assert runtime.builder_instructions == [
-            'x 0 3.141592653589793',
-            'measure 0'
-        ]
+        assert runtime.builder_instructions == ["x 0 3.141592653589793", "measure 0"]
 
         runtime, runner = fetch_mock_runner()
         runner.run(qir, [False])
-        assert runtime.builder_instructions == [
-            'measure 0'
-        ]
+        assert runtime.builder_instructions == ["measure 0"]
 
     def test_simplified_generator(self):
         qir = fetch_project_ll("simplified-oracle-generator")
         runtime, runner = fetch_mock_runner()
         runner.run(qir)
 
-        assert runtime.executed[0].gates == ['measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[1].gates == ['x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[2].gates == ['x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[3].gates == ['x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[4].gates == ['x 0 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[5].gates == ['x 0 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[6].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
-        assert runtime.executed[7].gates == ['x 0 3.141592653589793', 'x 1 3.141592653589793', 'x 2 3.141592653589793', 'measure 0', 'measure 1', 'measure 2']
+        assert runtime.executed[0].gates == ["measure 0", "measure 1", "measure 2"]
+        assert runtime.executed[1].gates == [
+            "x 2 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[2].gates == [
+            "x 1 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[3].gates == [
+            "x 1 3.141592653589793",
+            "x 2 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[4].gates == [
+            "x 0 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[5].gates == [
+            "x 0 3.141592653589793",
+            "x 2 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[6].gates == [
+            "x 0 3.141592653589793",
+            "x 1 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
+        assert runtime.executed[7].gates == [
+            "x 0 3.141592653589793",
+            "x 1 3.141592653589793",
+            "x 2 3.141592653589793",
+            "measure 0",
+            "measure 1",
+            "measure 2",
+        ]
 
     @unittest.skip("Need to defer measure into classical results.")
     def test_deferred_classical_expression(self):

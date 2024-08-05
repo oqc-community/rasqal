@@ -15,7 +15,10 @@ def build_ring_architecture(num_qubits):
     return [(i % num_qubits, (i + 1) % num_qubits) for i in range(num_qubits)]
 
 
-def apply_routing(couplings: Union[Architecture, List[Tuple[int, int]]], runtime: Union[RasqalRunner, RuntimeAdaptor]):
+def apply_routing(
+    couplings: Union[Architecture, List[Tuple[int, int]]],
+    runtime: Union[RasqalRunner, RuntimeAdaptor],
+):
     if isinstance(runtime, RasqalRunner):
         runtime.runtimes = [TketRuntime(couplings, rt) for rt in runtime.runtimes]
         return runtime
@@ -80,15 +83,20 @@ class TketRuntime(RuntimeAdaptor):
     Can be
     """
 
-    def __init__(self, couplings: Union[Architecture, List[Tuple[int, int]]],
-                 forwarded_runtime: RuntimeAdaptor):
+    def __init__(
+        self,
+        couplings: Union[Architecture, List[Tuple[int, int]]],
+        forwarded_runtime: RuntimeAdaptor,
+    ):
         self.forwarded = forwarded_runtime
         if isinstance(couplings, list):
             self.arch = Architecture(couplings)
         elif isinstance(couplings, Architecture):
             self.arch = couplings
         else:
-            raise ValueError(f"Invalid architecture or coupling mappings: {str(couplings)}")
+            raise ValueError(
+                f"Invalid architecture or coupling mappings: {str(couplings)}"
+            )
 
     def execute(self, builder) -> Dict[str, int]:
         builder: TketBuilder
@@ -97,7 +105,7 @@ class TketRuntime(RuntimeAdaptor):
         return self.forwarded.execute(self._forward_circuit(builder))
 
     def _forward_circuit(self, builder) -> BuilderAdaptor:
-        """ Forwards the Tket circuit on to the new builder to be run in the forwarding runtime. """
+        """Forwards the Tket circuit on to the new builder to be run in the forwarding runtime."""
         fbuilder = self.forwarded.create_builder()
         for gate in builder.circuit:
             if gate.op.type == OpType.Rz:
@@ -107,11 +115,23 @@ class TketRuntime(RuntimeAdaptor):
             elif gate.op.type == OpType.Ry:
                 fbuilder.y(gate.qubits[0].index[0], gate.op.params[0])
             elif gate.op.type == OpType.CRx:
-                fbuilder.cx([gate.qubits[0].index[0]], gate.qubits[1].index[0], gate.op.params[0])
+                fbuilder.cx(
+                    [gate.qubits[0].index[0]],
+                    gate.qubits[1].index[0],
+                    gate.op.params[0],
+                )
             elif gate.op.type == OpType.CRy:
-                fbuilder.cy([gate.qubits[0].index[0]], gate.qubits[1].index[0], gate.op.params[0])
+                fbuilder.cy(
+                    [gate.qubits[0].index[0]],
+                    gate.qubits[1].index[0],
+                    gate.op.params[0],
+                )
             elif gate.op.type == OpType.CRz:
-                fbuilder.cz([gate.qubits[0].index[0]], gate.qubits[1].index[0], gate.op.params[0])
+                fbuilder.cz(
+                    [gate.qubits[0].index[0]],
+                    gate.qubits[1].index[0],
+                    gate.op.params[0],
+                )
             elif gate.op.type == OpType.SWAP:
                 fbuilder.swap(gate.qubits[0].index[0], gate.qubits[1].index[0])
             elif gate.op.type == OpType.Measure:

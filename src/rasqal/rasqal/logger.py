@@ -209,7 +209,13 @@ class CompositeLogger(BasicLogger):
 
         # Set the root to the lowest non-custom log level activated.
         root.setLevel(
-            min([val.level for val in self.loggers if (float(val.level / 10)).is_integer()])
+            min(
+                [
+                    val.level
+                    for val in self.loggers
+                    if (float(val.level / 10)).is_integer()
+                ]
+            )
         )
 
     def add_loggers(self, loggers_or_names: List[Union[str, logging.Logger]] = ()):
@@ -579,7 +585,8 @@ def get_default_logger():
 
             stack = traceback.extract_stack()
             is_test_env = any(
-                val.filename is not None and val.filename.endswith(f"unittest\\loader.py")
+                val.filename is not None
+                and val.filename.endswith("unittest\\loader.py")
                 for val in stack
             )
             if is_test_env:

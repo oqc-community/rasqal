@@ -6,8 +6,9 @@ Properties {
     $llvm_releases_url = "https://github.com/llvm/llvm-project/releases"
     $feature2releaseprefix = @{ "llvm11-0" = "/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz";
                                 "llvm12-0" = "/download/llvmorg-12.0.0/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz";
+                                "llvm14-0" = "/download/llvmorg-14.0.0/clang+llvm-14.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz";
                                 "llvm13-0" = "/download/llvmorg-13.0.0/clang+llvm-13.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz";
-                                "llvm14-0" = "/download/llvmorg-14.0.0/clang+llvm-14.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz"
+                                "llvm15-0" = "/download/llvmorg-15.0.0/clang+llvm-15.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz";
     }
 }
 
@@ -109,12 +110,7 @@ function Resolve-InstallationDirectory {
 }
 
 function Get-DefaultInstallDirectory {
-    if (Test-Path env:\RSQL_CACHE_DIR) {
-        $env:RSQL_CACHE_DIR
-    }
-    else {
-        Join-Path $Target (Get-LLVMFeatureVersion)
-    }
+    Join-Path $Target (Get-LLVMFeatureVersion)
 }
 
 # Executes the supplied script block using psake's exec
@@ -174,13 +170,8 @@ function Test-InVirtualEnvironment {
 }
 
 function Get-LLVMFeatureVersion {
-    if (Test-Path env:\RSQL_LLVM_FEATURE_VERSION) {
-        $env:RSQL_LLVM_FEATURE_VERSION
-    }
-    else {
-        # "llvm11-0", "llvm12-0", "llvm13-0", "llvm14-0"
-        "llvm14-0"
-    }
+    "llvm15-0"
+
 }
 
 function Get-CargoArgs {
@@ -220,7 +211,6 @@ function install-llvm {
         [ValidateSet("download", "build")]
         [string]$operation,
         [Parameter(Mandatory)]
-        [ValidateSet("llvm11-0", "llvm12-0", "llvm13-0", "llvm14-0")]
         [string]$feature
     )
 

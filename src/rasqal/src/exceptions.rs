@@ -24,7 +24,8 @@ pub fn catch_panics<R, F: FnOnce() -> Result<R, String>>(wrapped: F) -> Result<R
         message.to_string()
       } else {
         "Unavailable error message.".to_string()
-      })
+      }
+    )
   }
 }
 

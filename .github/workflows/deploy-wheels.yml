@@ -26,15 +26,14 @@ jobs:
       - name: Install LLVM
         uses: ./.github/actions/install-llvm
         with:
-          version: "14"
+          version: "15"
           os: ${{ matrix.os }}
-          directory: ${{ github.workspace }}/target/llvm
-          target: "pypi-build"
-      - name: "Run build script"
+      - name: Build
         run: |
           pwd
           ./build.ps1 -t "pypi-build"
         shell: pwsh
+
       - name: Artifacts - manylinux
         uses: actions/upload-artifact@v4
         with:

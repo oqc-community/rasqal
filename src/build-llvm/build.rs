@@ -17,78 +17,6 @@ extern crate cc;
 #[macro_use]
 extern crate lazy_static;
 
-// Make sure one version of llvm features is used
-#[cfg(all(
-  not(any(feature = "llvm11-0")),
-  not(any(feature = "llvm12-0")),
-  not(any(feature = "llvm13-0")),
-  not(any(feature = "llvm14-0")),
-))]
-compile_error!(
-  "One of the features `llvm11-0`, `llvm12-0`, `llvm13-0`, and `llvm14-0` must be used exclusive."
-);
-
-// Make sure only one llvm option is used.
-#[cfg(any(
-  all(
-    feature = "llvm11-0",
-    any(feature = "llvm12-0", feature = "llvm13-0", feature = "llvm14-0")
-  ),
-  all(
-    feature = "llvm12-0",
-    any(feature = "llvm11-0", feature = "llvm13-0", feature = "llvm14-0")
-  ),
-  all(
-    feature = "llvm13-0",
-    any(feature = "llvm11-0", feature = "llvm12-0", feature = "llvm14-0")
-  ),
-  all(
-    feature = "llvm14-0",
-    any(feature = "llvm11-0", feature = "llvm12-0", feature = "llvm13-0")
-  ),
-))]
-compile_error!(
-  "Features `llvm11-0`, `llvm12-0`, `llvm13-0`, and `llvm14-0` must be used exclusive."
-);
-
-// Make sure one of the linking features is used
-#[cfg(all(
-  not(any(feature = "rsql-llvm-linking")),
-  not(any(feature = "external-llvm-linking")),
-  not(any(feature = "no-llvm-linking")),
-))]
-compile_error!("One of the features `rsql/rsql-llvm-linking`, `rsql/external-llvm-linking`, and `rsql/no-llvm-linking` must be used exclusive.");
-
-// Make sure only one linking option is used.
-#[cfg(any(
-  all(
-    feature = "rsql-llvm-linking",
-    any(feature = "external-llvm-linking", feature = "no-llvm-linking")
-  ),
-  all(
-    feature = "external-llvm-linking",
-    any(feature = "rsql-llvm-linking", feature = "no-llvm-linking")
-  ),
-  all(
-    feature = "no-llvm-linking",
-    any(feature = "rsql-llvm-linking", feature = "external-llvm-linking")
-  ),
-))]
-compile_error!("Features `rsql/rsql-llvm-linking`, `rsql/external-llvm-linking`, and `rsql/no-llvm-linking` are mutually exclusive.");
-
-// if we are building or downloading, we cannot be externally linking
-#[cfg(any(
-  all(
-    feature = "build-llvm",
-    any(feature = "download-llvm", feature = "external-llvm-linking")
-  ),
-  all(
-    feature = "download-llvm",
-    any(feature = "build-llvm", feature = "external-llvm-linking")
-  ),
-))]
-compile_error!("Features `rsql/build-llvm` and `rsql/download-llvm` are mutually exclusive.");
-
 fn main() -> Result<(), Box<dyn Error>> {
   println!("cargo:rerun-if-changed=build.rs");
   println!("cargo:rerun-if-changed=config.cmake");
@@ -278,6 +206,8 @@ fn get_llvm_tag() -> String {
     "llvmorg-13.0.1".to_owned() // 75e33f7
   } else if cfg!(feature = "llvm14-0") {
     "llvmorg-14.0.6".to_owned() // 28c006
+  } else if cfg!(feature = "llvm15-0") {
+    "llvmorg-15.0.7".to_owned()
   } else {
     panic!("Unsupported LLVM version. The LLVM feature flags or RSQL_LLVM_TAG must be set.")
   }
@@ -325,6 +255,8 @@ fn locate_llvm_config() -> Option<PathBuf> {
     "13"
   } else if cfg!(feature = "llvm14-0") {
     "14"
+  } else if cfg!(feature = "llvm15-0") {
+    "15"
   } else {
     "unknown"
   };
