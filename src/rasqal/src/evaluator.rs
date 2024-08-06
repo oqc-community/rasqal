@@ -235,7 +235,7 @@ impl QIREvaluator {
     let start = Instant::now();
     let builder = self.walk_function(entry_point, context.borrow());
     let took = start.elapsed();
-    log!(Level::Info, "Evaluation took {:?}ms", took.as_millis());
+    log!(Level::Info, "Evaluation took {}ms.", took.as_millis());
 
     // Create a callable graph with its arguments, but the values set as empty (validly).
     let mut callable = Ptr::from(CallableAnalysisGraph::new(&builder.graph));

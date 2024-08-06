@@ -2,19 +2,11 @@
 # Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
 from os import remove
-from os.path import dirname, exists, join
 from tempfile import NamedTemporaryFile
 from typing import Any, List, Union
 
-from .utils import initialize_logger
 from .adaptors import RuntimeAdaptor
-from ._native import DEFAULT_LOG_FILE, Executor
-
-dev_directory = join(dirname(__file__), "..", "..", "..", "rasqalkin")
-
-# Enable file logging if we're in a development environment.
-if exists(dev_directory):
-    initialize_logger(join(f"{dev_directory}", f"{DEFAULT_LOG_FILE}"))
+from ._native import Executor
 
 
 class RasqalRunner:
