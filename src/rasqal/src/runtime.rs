@@ -18,6 +18,7 @@ use std::borrow::{Borrow, BorrowMut};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, AddAssign, Deref, DerefMut};
+use std::time::Instant;
 
 /// Assign an order to nodes so we're able to tell trivially when one is further in the graph
 /// or not.
@@ -410,7 +411,13 @@ impl QuantumRuntime {
       log!(Level::Info, "Currently executing graph:\n{}", exe_graph);
     }
 
-    self
+    log!(
+      Level::Info,
+      "Starting execution at {}.",
+      exe_graph.callable_graph.analysis_graph.identity
+    );
+    let start = Instant::now();
+    let results = self
       ._execute(
         exe_graph.callable_graph.analysis_graph.borrow(),
         &mut context
@@ -418,10 +425,6 @@ impl QuantumRuntime {
       .map(|val| {
         val.as_ref()?;
         let val = follow_reference(&val.unwrap(), &context);
-
-        if self.is_tracing() {
-          log!(Level::Info, "Total steps taken: {}", context.step_count)
-        }
 
         // TODO: Centralize resolution, think we already have this elsewhere.
         Some(match val.deref() {
@@ -442,7 +445,22 @@ impl QuantumRuntime {
           )),
           _ => val.clone()
         })
-      })
+      });
+
+    let took = start.elapsed();
+    log!(
+      Level::Info,
+      "Run {} after {:?}ms with {} steps taken.",
+      if results.is_ok() {
+        "succeeded"
+      } else {
+        "failed"
+      },
+      took.as_millis(),
+      context.step_count
+    );
+
+    results
   }
 
   fn _execute(
@@ -472,7 +490,6 @@ impl QuantumRuntime {
     loop {
       context.step_count.add_assign(1);
       if let Some(limit) = &self.constraints.step_limit {
-        let stuff = context.step_count.deref().clone();
         if context.step_count.deref() > limit {
           return Err(String::from(format!(
             "Execution step count limitation of {limit} exceeded."
@@ -584,7 +601,7 @@ impl QuantumRuntime {
           };
 
           // Trim since we're just logging per-line.
-          log!(Level::Info, "{}", message.trim());
+          log!(target: &graph.identity, Level::Info, "{}", message.trim());
         }
         Instruction::Subgraph(subgraph, var) => {
           let subgraph = follow_reference(subgraph, context).as_callable();

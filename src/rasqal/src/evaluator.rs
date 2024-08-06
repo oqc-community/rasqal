@@ -25,13 +25,14 @@ use llvm_sys::core::{
 };
 use llvm_sys::prelude::LLVMValueRef;
 use llvm_sys::LLVMTypeKind;
-use log::warn;
+use log::{log, warn, Level};
 use regex::Regex;
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::ffi::{c_uint, CStr};
 use std::ops::Deref;
+use std::time::Instant;
 
 macro_rules! operand_to_value {
   ($target:ident, $index:expr) => {
@@ -231,7 +232,10 @@ impl QIREvaluator {
       target_global = global.get_next_global();
     }
 
+    let start = Instant::now();
     let builder = self.walk_function(entry_point, context.borrow());
+    let took = start.elapsed();
+    log!(Level::Info, "Evaluation took {:?}ms", took.as_millis());
 
     // Create a callable graph with its arguments, but the values set as empty (validly).
     let mut callable = Ptr::from(CallableAnalysisGraph::new(&builder.graph));
