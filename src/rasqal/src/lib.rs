@@ -41,7 +41,6 @@ const DEFAULT_LOG_FILE: &str = "rasqal_logs.txt";
 
 /// Native initialization of the loggers. Defaults to executable position if deployed, if it
 /// detects it's in development mode it'll move log file back up the folder tree.
-#[ctor::ctor]
 fn native_logger_initialize() {
   let path = if let Ok(val) = current_exe() {
     // If we're embedded we need to be given a different file path to log too.
