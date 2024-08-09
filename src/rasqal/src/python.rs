@@ -7,7 +7,6 @@ use crate::execution::{parse_file, run_file, run_graph, RuntimeCollection};
 use crate::features::QuantumFeatures;
 use crate::graphs::ExecutableAnalysisGraph;
 use crate::instructions::Value;
-use crate::runtime::ActiveTracers;
 use crate::smart_pointers::Ptr;
 use crate::{initialize_loggers, DEFAULT_LOG_FILE};
 use log::{log, log_enabled, Level};
@@ -158,6 +157,8 @@ impl Executor {
   fn trace_graphs(&mut self) { self.config.trace_graphs(); }
 
   fn step_count_limit(&mut self, limit: i64) { self.config.step_count_limit(limit); }
+
+  fn solver_active(&mut self, is_active: bool) { self.config.solver_active = is_active }
 
   #[allow(clippy::unused_self)]
   fn parse_file(&self, file: &str, entry_point: Option<&str>) -> PyResult<Py<Graph>> {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
+use crate::config::RasqalConfig;
 use crate::execution::RuntimeCollection;
 use crate::features::QuantumFeatures;
 use crate::hardware::Qubit;
@@ -8,555 +9,762 @@ use crate::runtime::{ActiveTracers, TracingModule};
 use crate::smart_pointers::Ptr;
 use crate::{with_mutable, with_mutable_self};
 use log::{log, Level};
-use num::traits::FloatConst;
-use std::borrow::Borrow;
+use ndarray::{array, Array2};
+use num_complex::Complex;
 use std::cmp::Ordering;
+use std::collections::hash_map::Keys;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::iter::zip;
-use std::ops::Deref;
+use std::ops::{Deref, Mul, MulAssign};
+
+/// Construct which holds the entanglement information between two qubits, shared between both.
+///
+/// The lowest index qubit will always be on the left (top-left of the matrix) while the other will
+/// be on the right (bottom-right). This makes evaluation for operations predictable.
+#[derive(Clone)]
+pub struct Tangle {
+  upper_left: i64,
+  state: Ptr<EntangledFragment>,
+  bottom_right: i64
+}
+
+impl Tangle {
+  pub fn from_qubits(
+    left: (&i64, &Ptr<QubitFragment>), right: (&i64, &Ptr<QubitFragment>)
+  ) -> Tangle {
+    let fragment = Ptr::from(EntangledFragment::EntangledFromExisting(left.1, right.1));
+    Tangle {
+      upper_left: *left.0,
+      state: fragment,
+      bottom_right: *right.0
+    }
+  }
+}
+
+pub struct EntanglementStrength {}
+
+pub struct MeasureAnalysis {
+  min: i8,
+  max: i8,
+  result: f64,
+  entanglement_strength: Vec<EntanglementStrength>
+}
+
+impl MeasureAnalysis {
+  pub fn qubit(result: f64) -> MeasureAnalysis {
+    MeasureAnalysis {
+      min: 0,
+      max: 1,
+      result,
+      entanglement_strength: Vec::new()
+    }
+  }
+
+  pub fn entangled_qubit(
+    result: f64, entanglement_strength: Vec<EntanglementStrength>
+  ) -> MeasureAnalysis {
+    MeasureAnalysis {
+      min: 0,
+      max: 1,
+      result,
+      entanglement_strength
+    }
+  }
+}
 
 #[derive(Clone)]
-pub struct StateHistory {
+pub struct AnalysisQubit {
   index: i64,
-  metadata: Ptr<Metadata>,
 
-  // TODO: Pointer to avoid mutability.
-  timeline: Ptr<HashMap<i64, StateElement>>
+  /// Record of the raw qubit sans entanglement.
+  state: Ptr<QubitFragment>,
+
+  /// All the tangles between this qubit and others. Key is the index of the other qubit, along
+  /// with a 4x4 density matrix.
+  tangles: Ptr<HashMap<i64, Ptr<Tangle>>>
 }
 
-macro_rules! cluster_or_state {
-  ($self:ident, $axis:ident, $arg:ident) => {
-    match $self.state_of() {
-      StateElement::Single(qstate) => {
-        let counter = &with_mutable_self!($self.metadata.next_counter());
-        let mut next_state = qstate.clone_with_counter(counter);
-        next_state.$axis($arg);
-        with_mutable_self!($self
-          .timeline
-          .insert(counter.clone(), StateElement::Single(next_state)));
-      }
-      StateElement::Cluster(qcluster) => {
-        qcluster.$axis($arg, &$self.index);
-      }
+impl AnalysisQubit {
+  pub fn new(
+    index: &i64, qubit: &Ptr<QubitFragment>, tangles: &HashMap<i64, Ptr<Tangle>>
+  ) -> AnalysisQubit {
+    AnalysisQubit {
+      index: *index,
+      state: qubit.clone(),
+      tangles: Ptr::from(tangles.clone())
     }
-  };
-  ($self:ident, $method:ident) => {
-    match $self.state_of() {
-      StateElement::Single(qstate) => {
-        let counter = &with_mutable_self!($self.metadata.next_counter());
-        let mut next_state = qstate.clone_with_counter(counter);
-        next_state.$method();
-        with_mutable_self!($self
-          .timeline
-          .insert(counter.clone(), StateElement::Single(next_state)));
-      }
-      StateElement::Cluster(qcluster) => {
-        qcluster.$method(&$self.index);
-      }
+  }
+
+  pub fn with_index(index: &i64) -> AnalysisQubit {
+    AnalysisQubit {
+      index: *index,
+      state: Ptr::from(QubitFragment::EmptyQubit()),
+      tangles: Ptr::from(HashMap::default())
     }
-  };
+  }
+
+  pub fn with_fragment(index: &i64, qubit: &Ptr<QubitFragment>) -> AnalysisQubit {
+    AnalysisQubit {
+      index: *index,
+      state: qubit.clone(),
+      tangles: Ptr::from(HashMap::default())
+    }
+  }
+
+  pub fn entangled_with(&self) -> Keys<'_, i64, Ptr<Tangle>> { self.tangles.keys() }
+
+  pub fn is_entangled_with(&self, index: &i64) -> bool { self.tangles.contains_key(index) }
+
+  pub fn entangle(&self, other: &Ptr<AnalysisQubit>) {
+    if self.is_entangled_with(&other.index) {
+      return;
+    }
+
+    let tangle = Ptr::from(Tangle::from_qubits(
+      (&self.index, &self.state),
+      (&other.index, &other.state)
+    ));
+    with_mutable_self!(self.tangles.insert(other.index, tangle.clone()));
+    with_mutable_self!(other.tangles.insert(self.index, tangle));
+  }
+
+  /// Returns 0...x depending upon what this qubit would be measured as.
+  pub fn measure(&self) -> MeasureAnalysis {
+    // TODO: Add entanglement information for clusters.
+    MeasureAnalysis::qubit(self.state.matrix.get((1, 1)).unwrap().re)
+  }
+
+  /// Applies this gate to this qubit and all tangles.
+  pub fn apply(&self, gate: &GateFragment) {
+    with_mutable_self!(self.state.apply(gate));
+    for tangle in self.tangles.values() {
+      with_mutable!(tangle.state.apply(gate));
+    }
+  }
+
+  pub fn X(&self, radians: &f64) { self.apply(&GateFragment::X(radians)); }
+
+  pub fn Y(&self, radians: &f64) { self.apply(&GateFragment::Y(radians)); }
+
+  pub fn Z(&self, radians: &f64) { self.apply(&GateFragment::Z(radians)) }
+
+  pub fn CX(&self, control: &i64, radians: &f64) { self.apply(&GateFragment::CX(radians)) }
+
+  pub fn CZ(&mut self, control: &i64, radians: &f64) { self.apply(&GateFragment::CZ(radians)) }
+
+  pub fn CY(&mut self, control: &i64, radians: &f64) { self.apply(&GateFragment::CY(radians)) }
 }
 
-impl StateHistory {
-  pub fn new(meta: &Ptr<Metadata>, index: &i64) -> StateHistory {
-    StateHistory {
-      timeline: Ptr::from(HashMap::new()),
-      metadata: meta.clone(),
-      index: *index
+/// A cluster of entangled states that should be treated as an individual cohesive state.
+#[derive(Clone)]
+pub struct EntanglementCluster {
+  qubits: Ptr<HashMap<i64, Ptr<AnalysisQubit>>>
+}
+
+impl EntanglementCluster {
+  pub fn new() -> EntanglementCluster {
+    EntanglementCluster {
+      qubits: Ptr::from(HashMap::default())
     }
   }
 
-  /// Direct manipulation to the timeline. Means all existing rotational history will be lost.
-  pub fn add(&self, counter: i64, element: StateElement) {
-    with_mutable_self!(self.timeline.insert(counter, element));
+  pub fn spans(&self) -> Keys<'_, i64, Ptr<AnalysisQubit>> { self.qubits.keys() }
+
+  fn contains_qubit(&self, index: &i64) -> bool { self.qubits.contains_key(index) }
+
+  /// Gets the qubit at this index crom this cluster. Assumes existence.
+  pub fn qubit_for(&self, index: &i64) -> &Ptr<AnalysisQubit> { self.qubits.get(&index).unwrap() }
+
+  pub fn merge(&self, other: &Ptr<EntanglementCluster>) {
+    // No need to check for existence since if a qubit is related it will already be in a
+    // cluster together.
+    for (index, qubit) in other.qubits.iter() {
+      with_mutable_self!(self.qubits.insert(index.clone(), qubit.clone()));
+    }
   }
 
-  pub fn X(&self, radii: i64) {
-    cluster_or_state!(self, X, radii);
+  /// Adds these qubits to the cluster then entangles them.
+  pub fn add_then_entangle(&self, qubit_one: &Ptr<AnalysisQubit>, qubit_two: &Ptr<AnalysisQubit>) {
+    self.add(qubit_one);
+    self.add(qubit_two);
+    self.entangle(&qubit_one.index, &qubit_two.index);
   }
 
-  pub fn Y(&self, radii: i64) {
-    cluster_or_state!(self, Y, radii);
+  /// Adds this qubit to the cluster.
+  pub fn add(&self, qubit: &Ptr<AnalysisQubit>) {
+    if !self.qubits.contains_key(&qubit.index) {
+      with_mutable_self!(self.qubits.insert(qubit.index, qubit.clone()));
+    }
   }
 
-  pub fn Z(&self, radii: i64) {
-    cluster_or_state!(self, Z, radii);
-  }
-
-  pub fn measure(&self) {
-    cluster_or_state!(self, measure);
-  }
-
-  pub fn reset(&self) {
-    self.measure();
-
-    // We measure first to collapse any state then just reset our timeline to 0.
-    let counter = with_mutable_self!(self.metadata.next_counter());
-    self.add(
-      counter,
-      StateElement::Single(SingleState::new(&counter, SpherePoint::new(), &self.index))
-    );
-  }
-
-  fn controlled_rotation(&self, sphere: SpherePoint, conditioned_on: &Vec<i64>, result: i8) {
-    let current_counter = with_mutable_self!(self.metadata.next_counter());
-    let cluster = self.form_cluster(current_counter.borrow(), conditioned_on);
-    with_mutable!(cluster.entangle(ClusterRelationship::new(
-      sphere,
-      current_counter,
-      self.index,
-      conditioned_on,
-      result
-    )));
-  }
-
-  pub fn CX(&self, radii: i64, conditioned_on: &Vec<i64>, result: i8) {
-    let mut sphere = SpherePoint::new();
-    sphere.X(radii);
-    self.controlled_rotation(sphere, conditioned_on, result);
-  }
-
-  pub fn CY(&self, radii: i64, conditioned_on: &Vec<i64>, result: i8) {
-    let mut sphere = SpherePoint::new();
-    sphere.X(radii);
-    self.controlled_rotation(sphere, conditioned_on, result);
-  }
-
-  pub fn CZ(&self, radii: i64, conditioned_on: &Vec<i64>, result: i8) {
-    let mut sphere = SpherePoint::new();
-    sphere.Z(radii);
-    self.controlled_rotation(sphere, conditioned_on, result);
-  }
-
-  /// Adds a cluster to this state, forming an entangled cluster.
-  fn add_cluster(&self, counter: &i64, cluster: &Ptr<ClusterState>) {
-    with_mutable_self!(self
-      .timeline
-      .insert(*counter, StateElement::Cluster(cluster.clone())));
-  }
-
-  /// Forms a cluster group with the states at the passed-in index.
-  fn form_cluster(&self, counter: &i64, targets: &Vec<i64>) -> Ptr<ClusterState> {
-    if let StateElement::Cluster(cluster) = self.state_of() {
-      if cluster.spans() == targets.iter().copied().collect::<HashSet<_>>() {
-        return cluster.clone();
+  /// Entangles these two qubits if they exist. Does not entangle if not.
+  pub fn entangle(&self, left: &i64, right: &i64) {
+    if let Some(rtangle) = self.qubits.get(right) {
+      if let Some(ltangle) = self.qubits.get(left) {
+        rtangle.entangle(ltangle);
       }
     }
+  }
 
-    // If any of our targets are already clusters then we expand over those clusters as well.
-    let mut target_indexes = targets.iter().map(|val| *val).collect::<HashSet<_>>();
-    for target in targets {
-      let state = with_mutable_self!(self.metadata.root.get_history(target));
-      if let StateElement::Cluster(cluster) = state.state_of() {
-        for id in cluster.spans() {
-          target_indexes.insert(id);
+  pub fn X(&self, qubit: &Ptr<AnalysisQubit>, radians: &f64) {
+    self.add(qubit);
+    with_mutable!(qubit.X(radians))
+  }
+
+  pub fn Y(&self, qubit: &Ptr<AnalysisQubit>, radians: &f64) {
+    self.add(qubit);
+    with_mutable!(qubit.Y(radians))
+  }
+
+  pub fn Z(&self, qubit: &Ptr<AnalysisQubit>, radians: &f64) {
+    self.add(qubit);
+    with_mutable!(qubit.Z(radians))
+  }
+
+  pub fn CX(&self, control: &Ptr<AnalysisQubit>, target: &Ptr<AnalysisQubit>, radians: &f64) {
+    self.add_then_entangle(control, target);
+    with_mutable!(target.CX(&control.index, radians))
+  }
+
+  pub fn CZ(&self, control: &Ptr<AnalysisQubit>, target: &Ptr<AnalysisQubit>, radians: &f64) {
+    self.add_then_entangle(control, target);
+    with_mutable!(target.CZ(&control.index, radians))
+  }
+
+  pub fn CY(&self, control: &Ptr<AnalysisQubit>, target: &Ptr<AnalysisQubit>, radians: &f64) {
+    self.add_then_entangle(control, target);
+    with_mutable!(target.CY(&control.index, radians))
+  }
+
+  pub fn SWAP(&mut self, left: &i64, right: &i64) {
+    if self.qubits.contains_key(left) && self.qubits.contains_key(right) {
+      let mut qubit_one = self.qubits.remove(left).unwrap();
+      let mut qubit_two = self.qubits.remove(left).unwrap();
+      let first_index = qubit_one.index;
+      let second_index = qubit_two.index;
+
+      // Just merge indexes so we can deal with the point where entangled qubits reference both
+      // our swapped qubits.
+      let mut entanglements = qubit_one.entangled_with().collect::<HashSet<&i64>>();
+      for index in qubit_two.entangled_with() {
+        entanglements.insert(index);
+      }
+
+      // Go through each tangle and swap target indexes.
+      for index in entanglements {
+        let target_qubit = self.qubits.get(index).unwrap();
+        let first_tangle = with_mutable!(target_qubit.tangles.remove(&first_index));
+        let second_tangle = with_mutable!(target_qubit.tangles.remove(&second_index));
+
+        if let Some(mut tangle) = first_tangle {
+          if tangle.bottom_right == first_index {
+            tangle.bottom_right = second_index;
+          } else {
+            tangle.upper_left = second_index;
+          }
+
+          with_mutable!(target_qubit.tangles.insert(second_index, tangle));
+        }
+
+        if let Some(mut tangle) = second_tangle {
+          if tangle.bottom_right == second_index {
+            tangle.bottom_right = first_index;
+          } else {
+            tangle.upper_left = first_index;
+          }
+
+          with_mutable!(target_qubit.tangles.insert(first_index, tangle));
         }
       }
-    }
 
-    // Finally build a super-cluster that spans every qubit.
-    let cluster = Ptr::from(ClusterState::new(&self.metadata));
-    for target in target_indexes {
-      let state = with_mutable_self!(self.metadata.root.get_history(&target));
-      state.add_cluster(counter, &cluster);
+      // Then just swap the designation around.
+      qubit_one.index = second_index;
+      qubit_two.index = first_index;
+      self.qubits.insert(qubit_one.index, qubit_one);
+      self.qubits.insert(qubit_two.index, qubit_two);
     }
+  }
+}
 
-    self.add_cluster(counter, &cluster);
-    cluster.clone()
+type GateFragment = MatrixFragment;
+
+/// Matrix which can be applied to a state fragment.
+#[derive(Clone)]
+pub struct MatrixFragment {
+  matrix: Array2<Complex<f64>>,
+  affected_qubits: i32
+}
+
+impl MatrixFragment {
+  pub fn new(matrix: Array2<Complex<f64>>, affected_qubits: i32) -> MatrixFragment {
+    MatrixFragment {
+      matrix,
+      affected_qubits
+    }
   }
 
-  pub fn state_of(&self) -> &StateElement {
-    // To make things simpler, if we attempt to get a state on an empty collection, just
-    // insert a zero-rotation at the beginning.
-    //
-    // This also holds because when you entangle something it because something else, so
-    // seeing it as a continuation of an existing rotation isn't precisely true.
-    if self.timeline.is_empty() {
-      self.X(0);
+  pub fn id() -> MatrixFragment {
+    MatrixFragment {
+      matrix: array![[Complex::new(1.0, 0.), Complex::new(0.0, 0.)], [
+        Complex::new(0.0, 0.),
+        Complex::new(1.0, 0.)
+      ]],
+      affected_qubits: 1
+    }
+  }
+
+  /// Multiplies current matrix by ID, expanding it to fit more qubits.
+  pub fn expand(&self) -> MatrixFragment { return self * &MatrixFragment::id() }
+
+  pub fn X(radians: &f64) -> MatrixFragment {
+    MatrixFragment {
+      matrix: array![[Complex::new(0.0, 0.), Complex::new(1.0, 0.)], [
+        Complex::new(1.0, 0.),
+        Complex::new(0.0, 0.)
+      ]],
+      affected_qubits: 1
+    }
+  }
+
+  pub fn Y(radians: &f64) -> MatrixFragment {
+    MatrixFragment {
+      matrix: array![
+        [Complex::new(0.0, 0.), Complex::new(-1.0_f64.sqrt(), 0.)],
+        [Complex::new(1.0_f64.sqrt(), 0.), Complex::new(0.0, 0.)]
+      ],
+      affected_qubits: 1
+    }
+  }
+
+  pub fn Z(radians: &f64) -> MatrixFragment {
+    MatrixFragment {
+      matrix: array![[Complex::new(1.0, 0.), Complex::new(0.0, 0.)], [
+        Complex::new(0.0, 0.),
+        Complex::new(-1.0, 0.)
+      ]],
+      affected_qubits: 1
+    }
+  }
+
+  pub fn CX(radians: &f64) -> MatrixFragment {
+    MatrixFragment {
+      matrix: array![
+        [
+          Complex::new(1.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(1.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(*radians, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(*radians, 0.),
+          Complex::new(0.0, 0.)
+        ]
+      ],
+      affected_qubits: 2
+    }
+  }
+
+  pub fn CZ(radians: &f64) -> MatrixFragment {
+    MatrixFragment {
+      matrix: array![
+        [
+          Complex::new(1.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(1.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(*radians, 0.),
+          Complex::new(0.0, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(-*radians, 0.)
+        ]
+      ],
+      affected_qubits: 2
+    }
+  }
+
+  pub fn CY(radians: &f64) -> MatrixFragment {
+    MatrixFragment {
+      matrix: array![
+        [
+          Complex::new(1.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(1.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(-*radians, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(*radians, 0.),
+          Complex::new(0.0, 0.)
+        ]
+      ],
+      affected_qubits: 2
+    }
+  }
+
+  pub fn SWAP() -> MatrixFragment {
+    MatrixFragment {
+      matrix: array![
+        [
+          Complex::new(1.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(1.0, 0.),
+          Complex::new(0.0, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(1.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.)
+        ],
+        [
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(0.0, 0.),
+          Complex::new(1.0, 0.)
+        ]
+      ],
+      affected_qubits: 2
+    }
+  }
+}
+
+impl Mul for MatrixFragment {
+  type Output = MatrixFragment;
+
+  fn mul(self, rhs: Self) -> Self::Output {
+    MatrixFragment::new(
+      self.matrix * rhs.matrix,
+      self.affected_qubits + rhs.affected_qubits
+    )
+  }
+}
+
+impl Mul for &MatrixFragment {
+  type Output = MatrixFragment;
+
+  fn mul(self, rhs: Self) -> Self::Output {
+    MatrixFragment::new(
+      &self.matrix * &rhs.matrix,
+      self.affected_qubits + rhs.affected_qubits
+    )
+  }
+}
+
+impl Mul for &mut MatrixFragment {
+  type Output = MatrixFragment;
+
+  fn mul(self, rhs: Self) -> Self::Output {
+    MatrixFragment::new(
+      &self.matrix * &rhs.matrix,
+      self.affected_qubits + rhs.affected_qubits
+    )
+  }
+}
+
+// While there is no distinction it's better to define what the types mean, even if the generic
+// structures are the same.
+type QubitFragment = StateFragment;
+type EntangledFragment = StateFragment;
+
+/// Composite enum for matrix operations to be able to automatically expand when used against
+/// smaller ones.
+#[derive(Clone)]
+pub struct StateFragment {
+  matrix: Array2<Complex<f64>>,
+
+  /// This can also be interpreted as qubits-affected when the fragment is considered a gate.
+  represented_qubits: i32
+}
+
+impl StateFragment {
+  pub fn EmptyQubit() -> QubitFragment {
+    StateFragment {
+      matrix: array![[Complex::new(1.0, 0.0), Complex::new(0.0, 0.0)], [
+        Complex::new(0.0, 0.0),
+        Complex::new(0.0, 0.0)
+      ]],
+      represented_qubits: 1
+    }
+  }
+
+  /// Creates a state fragment to represent entanglement between 2 qubits. Needs setup with
+  /// initial qubit values.
+  pub fn EmptyEntangled() -> EntangledFragment {
+    StateFragment {
+      matrix: array![
+        [
+          Complex::new(1.0, 0.0),
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0)
+        ],
+        [
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0)
+        ],
+        [
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0)
+        ],
+        [
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0)
+        ]
+      ],
+      represented_qubits: 2
+    }
+  }
+
+  pub fn EntangledFromExisting(
+    top_left: &Ptr<QubitFragment>, bottom_right: &Ptr<QubitFragment>
+  ) -> EntangledFragment {
+    if top_left.represented_qubits != 1 || bottom_right.represented_qubits != 1 {
+      panic!("To create an entangled state both arguments must be qubits.")
     }
 
-    self.timeline.values().last().unwrap()
+    StateFragment {
+      matrix: array![
+        [
+          *top_left.matrix.get((0, 0)).unwrap(),
+          *top_left.matrix.get((0, 1)).unwrap(),
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0)
+        ],
+        [
+          *top_left.matrix.get((1, 0)).unwrap(),
+          *top_left.matrix.get((1, 1)).unwrap(),
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0)
+        ],
+        [
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0),
+          *bottom_right.matrix.get((0, 0)).unwrap(),
+          *bottom_right.matrix.get((0, 1)).unwrap()
+        ],
+        [
+          Complex::new(0.0, 0.0),
+          Complex::new(0.0, 0.0),
+          *bottom_right.matrix.get((1, 0)).unwrap(),
+          *bottom_right.matrix.get((1, 1)).unwrap()
+        ]
+      ],
+      represented_qubits: 2
+    }
+  }
+
+  pub fn apply(&mut self, gate: &MatrixFragment) -> Option<String> {
+    // If a fragment is larger than us we just ignore it, otherwise try and expand the gate to
+    // fit the state size.
+    if gate.affected_qubits < self.represented_qubits {
+      let gate = &gate.expand();
+    }
+
+    if self.represented_qubits != gate.affected_qubits {
+      return Some(String::from("Can't expand fragment to size of the state."));
+    }
+
+    self.represented_qubits = gate.affected_qubits;
+    self.matrix.mul_assign(&gate.matrix);
+    None
   }
 }
 
 #[derive(Clone)]
-pub enum StateElement {
-  Single(SingleState),
-  Cluster(Ptr<ClusterState>)
+pub struct SolverConfig {
+  active: bool
+}
+
+impl SolverConfig {
+  fn new(active: bool) -> SolverConfig { SolverConfig { active } }
+
+  fn off() -> SolverConfig { SolverConfig::new(false) }
+
+  fn on() -> SolverConfig { SolverConfig::new(true) }
+
+  fn with_config(config: &Ptr<RasqalConfig>) -> SolverConfig {
+    SolverConfig::new(config.solver_active)
+  }
 }
 
 #[derive(Clone)]
-pub struct SingleState {
-  counter: i64,
-  state: SpherePoint,
+pub struct SolverResult {}
 
-  /// Has this state been collapsed into a classical value?
-  collapsed: bool,
-  index: i64
+impl SolverResult {
+  pub fn new() -> SolverResult { SolverResult {} }
 }
 
-impl SingleState {
-  pub fn new(counter: &i64, state: SpherePoint, index: &i64) -> SingleState {
-    SingleState {
-      counter: *counter,
-      state,
-      collapsed: false,
-      index: *index
+/// Acts as a pseudo-state that allows for partial circuit solving and value introspection.
+pub struct QuantumSolver {
+  qubits: Ptr<HashMap<i64, Ptr<AnalysisQubit>>>,
+  clusters: Ptr<HashMap<i64, Ptr<EntanglementCluster>>>
+}
+
+impl QuantumSolver {
+  pub fn new() -> QuantumSolver {
+    QuantumSolver {
+      qubits: Ptr::from(HashMap::default()),
+      clusters: Ptr::from(HashMap::default())
     }
   }
 
-  /// States are commonly cloned with a different counter to perform further rotations on.
-  pub fn clone_with_counter(&self, counter: &i64) -> SingleState {
-    SingleState::new(counter, self.state.clone(), &self.index)
-  }
-
-  pub fn X(&mut self, radii: i64) { self.state.X(radii) }
-
-  pub fn Y(&mut self, radii: i64) { self.state.Y(radii) }
-
-  pub fn Z(&mut self, radii: i64) { self.state.Z(radii) }
-
-  /// Sets that this is a measure point with no modifications.
-  pub fn measure(&mut self) { self.collapsed = true; }
-}
-
-#[derive(Clone)]
-pub struct ClusterState {
-  clustered_state: QuantumState,
-  entanglement: Vec<ClusterRelationship>,
-
-  /// History of collapsed states. Key is counter, results are target qubit and its exact history.
-  // TODO: Pointer to avoid mutability.
-  collapse_history: Ptr<HashMap<i64, (i64, StateHistory)>>,
-  metadata: Ptr<Metadata>
-}
-
-impl ClusterState {
-  pub fn new(meta: &Ptr<Metadata>) -> ClusterState {
-    ClusterState {
-      clustered_state: QuantumState::new(meta),
-      entanglement: Vec::new(),
-      collapse_history: Ptr::from(HashMap::new()),
-      metadata: meta.clone()
-    }
-  }
-
-  pub fn measure(&self, target: &i64) {
-    let cstate = &self.clustered_state;
-    self.clustered_state.measure(target);
-
-    let graph = &cstate.state_graph;
-    let entry = with_mutable!(graph.remove(target).unwrap());
-    with_mutable_self!(self
-      .collapse_history
-      .insert(self.metadata.counter, (*target, entry)));
-  }
-
-  pub fn X(&self, radii: i64, index: &i64) { self.clustered_state.X(radii, index); }
-
-  pub fn Y(&self, radii: i64, index: &i64) { self.clustered_state.Y(radii, index); }
-
-  pub fn Z(&self, radii: i64, index: &i64) { self.clustered_state.Z(radii, index); }
-
-  pub fn entangle(&mut self, rel: ClusterRelationship) { self.entanglement.push(rel); }
-
-  pub fn spans(&self) -> HashSet<i64> {
-    self
-      .clustered_state
-      .state_graph
-      .keys()
-      .copied()
-      .collect::<HashSet<_>>()
-  }
-}
-
-/// TODO: Swap to more matrix-y representation now.
-#[derive(Clone)]
-pub struct SpherePoint {
-  amplitude: i64,
-  phase: i64
-}
-
-impl SpherePoint {
-  pub fn new() -> SpherePoint {
-    SpherePoint {
-      amplitude: 0,
-      phase: 0
-    }
-  }
-
-  pub fn with_X(radii: i64) -> SpherePoint {
-    let mut sp = SpherePoint::new();
-    sp.X(radii);
-    sp
-  }
-
-  pub fn with_Y(radii: i64) -> SpherePoint {
-    let mut sp = SpherePoint::new();
-    sp.Y(radii);
-    sp
-  }
-
-  pub fn with_Z(radii: i64) -> SpherePoint {
-    let mut sp = SpherePoint::new();
-    sp.Z(radii);
-    sp
-  }
-
-  pub fn X(&mut self, radii: i64) { self.amplitude = (self.amplitude + radii) % 360 }
-
-  pub fn Y(&mut self, radii: i64) { self.phase = (self.phase + radii) % 360 }
-
-  // TODO: wrong, fix later.
-  pub fn Z(&mut self, radii: i64) {
-    let ratio = radii % 360;
-
-    if radii == 0 {
-      return;
-    }
-
-    // Shortcircuit on rotation poles.
-    if (self.amplitude == 90 || self.amplitude == 270) && (self.phase == 0 || self.phase == 180) {
-      return;
-    }
-
-    let phase = self.phase;
-    let amp = self.amplitude;
-
-    if radii == 90 {
-      self.phase = amp;
-      self.amplitude = phase;
-    } else if radii == 180 {
-      self.phase = -amp % 360;
-      self.amplitude = -phase % 360;
-    } else if radii == 270 {
-      self.phase = -phase % 360;
-      self.amplitude = -amp % 360;
+  /// Gets a qubit, or adds a default one at this index if it doesn't exist.
+  fn qubit_for(&self, index: &i64) -> &Ptr<AnalysisQubit> {
+    if let Some(qubit) = self.qubits.get(index) {
+      qubit
     } else {
-      panic!("Irregular Y rotation added to prediction algorithm. Unsupported right now.")
+      with_mutable_self!(self
+        .qubits
+        .insert(index.clone(), Ptr::from(AnalysisQubit::with_index(index))));
+      self.qubits.get(&index).unwrap()
     }
   }
-}
 
-impl Default for SpherePoint {
-  fn default() -> Self { SpherePoint::new() }
-}
-
-#[derive(Clone)]
-pub struct ClusterRelationship {
-  rotation: SpherePoint,
-  at_counter: i64,
-  target: i64,
-  conditioned_on: Vec<i64>,
-  on_value: i8
-}
-
-impl ClusterRelationship {
-  pub fn new(
-    rotation: SpherePoint, at_counter: i64, target: i64, conditioned_on: &Vec<i64>, on_value: i8
-  ) -> ClusterRelationship {
-    ClusterRelationship {
-      rotation,
-      at_counter,
-      target,
-      conditioned_on: conditioned_on.clone(),
-      on_value
-    }
-  }
-}
-
-/// Collection representing a quantum state with qubits identified by index.
-#[derive(Clone)]
-pub struct QuantumState {
-  metadata: Ptr<Metadata>,
-
-  /// Key = index, Value = state history.
-  state_graph: Ptr<HashMap<i64, StateHistory>>
-}
-
-impl QuantumState {
-  pub fn new(meta: &Ptr<Metadata>) -> QuantumState {
-    let collection = QuantumState {
-      state_graph: Ptr::from(HashMap::default()),
-      metadata: meta.clone()
+  /// Gets the cluster for this index. Inserts the qubit into both solver and cluster, creating a
+  /// new cluster if required. Don't use this if you only want to fetch a cluster without modifying
+  /// it.
+  fn cluster_for(&self, index: &i64) -> &Ptr<EntanglementCluster> {
+    let cluster = if let Some(cluster) = with_mutable_self!(self.clusters.get_mut(index)) {
+      cluster
+    } else {
+      with_mutable_self!(self
+        .clusters
+        .insert(index.clone(), Ptr::from(EntanglementCluster::new())));
+      self.clusters.get(&index).unwrap()
     };
 
-    // If we're the root collection in the hierarchy just mark us as such.
-    if Ptr::is_null(&meta.root) {
-      with_mutable!(meta.root = Ptr::from(collection.borrow()));
+    if !cluster.contains_qubit(index) {
+      cluster.add(self.qubit_for(index));
     }
-    collection
+
+    cluster
   }
 
-  pub fn get_history(&self, index: &i64) -> &mut StateHistory {
-    if let Some(qt) = with_mutable_self!(self.state_graph.get_mut(index)) {
-      qt
-    } else {
-      let timeline = StateHistory::new(&self.metadata, index);
-      with_mutable_self!(self.state_graph.insert(*index, timeline));
-      with_mutable_self!(self.state_graph.get_mut(index).unwrap())
-    }
-  }
+  pub fn reset(&self, qb: &Qubit) {}
 
-  pub fn X(&self, radii: i64, target: &i64) {
-    let qt = self.get_history(target);
-    qt.X(radii);
-  }
+  pub fn measure(&self, qbs: &Qubit) {}
 
-  pub fn Y(&self, radii: i64, target: &i64) {
-    let qt = self.get_history(target);
-    qt.Y(radii);
-  }
+  pub fn X(&self, qb: &Qubit, radians: &f64) { self.qubit_for(&qb.index).X(radians) }
 
-  pub fn Z(&self, radii: i64, target: &i64) {
-    let qt = self.get_history(target);
-    qt.Z(radii);
-  }
+  pub fn Y(&self, qb: &Qubit, radians: &f64) { self.qubit_for(&qb.index).Y(radians) }
 
-  pub fn CX(&self, radii: i64, target: &i64, conditioned_on: &Vec<i64>, result: i8) {
-    let qt = self.get_history(target);
-    qt.CX(radii, conditioned_on, result);
-  }
+  pub fn Z(&self, qb: &Qubit, radians: &f64) { self.qubit_for(&qb.index).Z(radians) }
 
-  pub fn CY(&self, radii: i64, target: &i64, conditioned_on: &Vec<i64>, result: i8) {
-    let qt = self.get_history(target);
-    qt.CY(radii, conditioned_on, result);
-  }
-
-  pub fn CZ(&self, radii: i64, target: &i64, conditioned_on: &Vec<i64>, result: i8) {
-    let qt = self.get_history(target);
-    qt.CZ(radii, conditioned_on, result);
-  }
-
-  pub fn swap(&self, first: &i64, second: &i64) {
-    let left_history = self.get_history(first);
-    let right_history = self.get_history(second);
-
-    let left_state = left_history.state_of();
-    let right_state = right_history.state_of();
-
-    let op_counter = with_mutable_self!(self.metadata.next_counter());
-    match left_state {
-      StateElement::Single(single) => {
-        right_history.add(
-          op_counter,
-          StateElement::Single(single.clone_with_counter(&op_counter))
+  pub fn CX(&self, controls: &Vec<Qubit>, target: &Qubit, radians: &f64) {
+    let target_cluster = self.cluster_for(&target.index);
+    for qb in controls {
+      let cluster = self.cluster_for(&qb.index);
+      if !cluster.contains_qubit(&target.index) {
+        target_cluster.merge(cluster);
+        target_cluster.add_then_entangle(
+          self.qubit_for(&qb.index),
+          target_cluster.qubit_for(&target.index)
         );
       }
-      StateElement::Cluster(cluster) => {
-        right_history.add(op_counter, StateElement::Cluster(cluster.clone()));
-      }
-    }
 
-    match right_state {
-      StateElement::Single(single) => {
-        left_history.add(
-          op_counter,
-          StateElement::Single(single.clone_with_counter(&op_counter))
+      target_cluster.CX(
+        target_cluster.qubit_for(&qb.index),
+        target_cluster.qubit_for(&target.index),
+        radians
+      );
+    }
+  }
+
+  pub fn CY(&self, controls: &Vec<Qubit>, target: &Qubit, radians: &f64) {
+    let target_cluster = self.cluster_for(&target.index);
+    for qb in controls {
+      let cluster = self.cluster_for(&qb.index);
+      if !cluster.contains_qubit(&qb.index) {
+        target_cluster.merge(cluster);
+        target_cluster.add_then_entangle(
+          self.qubit_for(&qb.index),
+          target_cluster.qubit_for(&target.index)
         );
       }
-      StateElement::Cluster(cluster) => {
-        left_history.add(op_counter, StateElement::Cluster(cluster.clone()));
-      }
+
+      target_cluster.CY(
+        target_cluster.qubit_for(&qb.index),
+        target_cluster.qubit_for(&target.index),
+        radians
+      );
     }
   }
 
-  pub fn measure(&self, target: &i64) {
-    let state = self.get_history(target);
-    state.measure();
-  }
+  pub fn CZ(&self, controls: &Vec<Qubit>, target: &Qubit, radians: &f64) {
+    let target_cluster = self.cluster_for(&target.index);
+    for qb in controls {
+      let cluster = self.cluster_for(&qb.index);
+      if !cluster.contains_qubit(&qb.index) {
+        target_cluster.merge(cluster);
+        target_cluster.add_then_entangle(
+          self.qubit_for(&qb.index),
+          target_cluster.qubit_for(&target.index)
+        );
+      }
 
-  pub fn reset(&self, target: &i64) {
-    let state = self.get_history(target);
-    state.reset();
-  }
-}
-
-pub struct Metadata {
-  /// Current program-counter we're on.
-  counter: i64,
-
-  /// Root collection in our hierarchy. Can be used for top-level searches and queries.
-  root: Ptr<QuantumState>
-}
-
-impl Metadata {
-  pub fn new() -> Metadata {
-    Metadata {
-      counter: 0,
-      root: Ptr::default()
+      target_cluster.CZ(
+        target_cluster.qubit_for(&qb.index),
+        target_cluster.qubit_for(&target.index),
+        radians
+      );
     }
   }
 
-  pub fn next_counter(&mut self) -> i64 {
-    self.counter += 1;
-    self.counter
-  }
-}
-
-/// Transform radians into degrees for easy debugging for now.
-/// TODO: Likely change form later.
-fn conv(radians: &f64) -> i64 { (radians * 180.0 / f64::PI()) as i64 }
-
-pub struct QuantumStatePredictor {
-  state: QuantumState
-}
-
-impl QuantumStatePredictor {
-  pub fn new() -> QuantumStatePredictor {
-    QuantumStatePredictor {
-      state: QuantumState::new(&Ptr::from(Metadata::new()))
-    }
-  }
-
-  pub fn add(&self, op: Ptr<QuantumOperations>) {
-    match op.deref() {
-      QuantumOperations::Reset(qbs) => {
-        for qubit in qbs {
-          self.state.reset(&qubit.index);
-        }
-      }
-      QuantumOperations::U(qb, theta, phi, lambda) => {
-        self.state.Z(qb.index, &conv(lambda));
-        self.state.Y(qb.index, &conv(theta));
-        self.state.Z(qb.index, &conv(phi));
-      }
-      QuantumOperations::X(qb, radians) => {
-        self.state.X(qb.index, &conv(radians));
-      }
-      QuantumOperations::Y(qb, radians) => {
-        self.state.Y(qb.index, &conv(radians));
-      }
-      QuantumOperations::Z(qb, radians) => {
-        self.state.Z(qb.index, &conv(radians));
-      }
-      QuantumOperations::CX(controls, targets, radians) => self.state.CX(
-        180,
-        &targets.index,
-        &controls.iter().map(|val| val.index).collect::<Vec<_>>(),
-        1
-      ),
-      QuantumOperations::CZ(controls, targets, radians) => self.state.CZ(
-        180,
-        &targets.index,
-        &controls.iter().map(|val| val.index).collect::<Vec<_>>(),
-        1
-      ),
-      QuantumOperations::CY(controls, targets, radians) => self.state.CY(
-        180,
-        &targets.index,
-        &controls.iter().map(|val| val.index).collect::<Vec<_>>(),
-        1
-      ),
-      QuantumOperations::Measure(qbs) => {
-        for qb in qbs {
-          self.state.measure(&qb.index);
-        }
-      }
-      QuantumOperations::Initialize() | QuantumOperations::I(_) => {}
-    }
-  }
+  pub fn solve(&self) -> SolverResult { SolverResult::new() }
 }
 
 /// A projected value that is either concretized and has a result, or in analysis mode and can be
@@ -566,16 +774,17 @@ pub struct QuantumProjection {
   engines: Ptr<RuntimeCollection>,
   instructions: Vec<Ptr<QuantumOperations>>,
   cached_result: Option<AnalysisResult>,
-  cached_filtered: HashMap<String, AnalysisResult>
+  cached_filtered: HashMap<String, AnalysisResult>,
+  solver_config: SolverConfig
 }
 
 /// A for-now list of linear gates and hardware operations that we can store and send to our
-/// Python runtimes. In time these will be removed and we'll reconstruct gates from
+/// Python runtimes. In time these will be removed, and we'll reconstruct gates from
 /// our other analysis structures.
 pub enum QuantumOperations {
   Initialize(),
   Reset(Vec<Qubit>),
-  I(Qubit),
+  Id(Qubit),
   U(Qubit, f64, f64, f64),
   X(Qubit, f64),
   Y(Qubit, f64),
@@ -593,7 +802,7 @@ impl QuantumOperations {
     match self {
       QuantumOperations::Initialize() => vec![],
       QuantumOperations::Reset(qbs) => qbs.iter().collect(),
-      QuantumOperations::I(qb)
+      QuantumOperations::Id(qb)
       | QuantumOperations::U(qb, _, _, _)
       | QuantumOperations::X(qb, _)
       | QuantumOperations::Y(qb, _)
@@ -618,7 +827,7 @@ impl Display for QuantumOperations {
             .collect::<Vec<_>>()
             .join(", ")
         ),
-        QuantumOperations::I(qb) => format!("id[{qb}]"),
+        QuantumOperations::Id(qb) => format!("id[{qb}]"),
         QuantumOperations::U(qb, theta, phi, lambda) => {
           format!("U[{qb}] {theta},{phi},{lambda}")
         }
@@ -680,7 +889,8 @@ impl QuantumProjection {
       instructions: Vec::new(),
       trace_module: Ptr::from(TracingModule::new()),
       cached_result: None,
-      cached_filtered: HashMap::new()
+      cached_filtered: HashMap::new(),
+      solver_config: SolverConfig::off()
     }
   }
 
@@ -692,7 +902,21 @@ impl QuantumProjection {
       instructions: Vec::new(),
       trace_module: module.clone(),
       cached_result: None,
-      cached_filtered: HashMap::new()
+      cached_filtered: HashMap::new(),
+      solver_config: SolverConfig::off()
+    }
+  }
+
+  pub fn with_tracer_and_solver(
+    engines: &Ptr<RuntimeCollection>, module: &Ptr<TracingModule>, config: SolverConfig
+  ) -> QuantumProjection {
+    QuantumProjection {
+      engines: engines.clone(),
+      instructions: Vec::new(),
+      trace_module: module.clone(),
+      cached_result: None,
+      cached_filtered: HashMap::new(),
+      solver_config: SolverConfig::off()
     }
   }
 
@@ -751,11 +975,55 @@ impl QuantumProjection {
     true
   }
 
-  /// Is our projection simple enough to use algorithmic prediction?
-  pub fn can_predict(&self) -> bool { false }
-
   /// Perform algorithmic state value prediction.
-  fn predict(&mut self) -> AnalysisResult { AnalysisResult::one() }
+  fn solve(&mut self) -> AnalysisResult {
+    if !self.solver_config.active {
+      return AnalysisResult::empty();
+    }
+
+    let qsolver = QuantumSolver::new();
+    for inst in self.instructions.iter() {
+      match inst.deref() {
+        QuantumOperations::Initialize() => {}
+        QuantumOperations::Id(_) => {}
+        QuantumOperations::Reset(qbs) => {
+          for qubit in qbs {
+            qsolver.reset(qubit);
+          }
+        }
+        QuantumOperations::U(qb, theta, phi, lambda) => {
+          qsolver.Z(qb, lambda);
+          qsolver.Y(qb, phi);
+          qsolver.Z(qb, theta);
+        }
+        QuantumOperations::X(qb, radians) => {
+          qsolver.X(qb, radians);
+        }
+        QuantumOperations::Y(qb, radians) => {
+          qsolver.Y(qb, radians);
+        }
+        QuantumOperations::Z(qb, radians) => {
+          qsolver.Z(qb, radians);
+        }
+        QuantumOperations::CX(controls, targets, radians) => {
+          qsolver.CX(controls, targets, radians);
+        }
+        QuantumOperations::CZ(controls, targets, radians) => {
+          qsolver.CZ(controls, targets, radians);
+        }
+        QuantumOperations::CY(controls, targets, radians) => {
+          qsolver.CY(controls, targets, radians);
+        }
+        QuantumOperations::Measure(qbs) => {
+          for qb in qbs {
+            qsolver.measure(qb);
+          }
+        }
+      }
+    }
+
+    AnalysisResult::from_solver_result(qsolver.solve())
+  }
 
   /// Get results for this entire state.
   pub fn results(&mut self) -> AnalysisResult { self.concretize().clone() }
@@ -836,9 +1104,8 @@ impl QuantumProjection {
       return self.cached_result.as_ref().unwrap();
     }
 
-    let query_result = if self.can_predict() {
-      self.predict()
-    } else {
+    let mut query_result = self.solve();
+    if query_result.is_empty() {
       let features = QuantumFeatures::default();
       let runtime = self.engines.find_capable_QPU(&features).unwrap_or_else(|| {
         panic!(
@@ -856,7 +1123,7 @@ impl QuantumProjection {
               builder.reset(qubit);
             }
           }
-          QuantumOperations::I(qb) => {
+          QuantumOperations::Id(qb) => {
             builder.i(qb);
           }
           QuantumOperations::U(qb, theta, phi, lambda) => {
@@ -888,8 +1155,8 @@ impl QuantumProjection {
         }
       }
 
-      runtime.execute(&builder)
-    };
+      query_result = runtime.execute(&builder);
+    }
 
     self.cached_result = Some(query_result);
 
@@ -925,7 +1192,8 @@ impl Clone for QuantumProjection {
       engines: self.engines.clone(),
       instructions: self.instructions.clone(),
       cached_result: self.cached_result.clone(),
-      cached_filtered: self.cached_filtered.clone()
+      cached_filtered: self.cached_filtered.clone(),
+      solver_config: self.solver_config.clone()
     }
   }
 }
@@ -956,6 +1224,8 @@ impl AnalysisResult {
   pub fn new(distribution: HashMap<String, i64>) -> AnalysisResult {
     AnalysisResult { distribution }
   }
+
+  pub fn from_solver_result(res: SolverResult) -> AnalysisResult { AnalysisResult::empty() }
 
   pub fn is_empty(&self) -> bool { self.size() == 0 }
 
