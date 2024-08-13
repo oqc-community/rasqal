@@ -8,6 +8,7 @@ Properties {
     $ProjectRoot = Resolve-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
     $Root = Join-Path $ProjectRoot src
     $Docs = Join-Path $ProjectRoot docs
+    $Examples = Join-Path $ProjectRoot examples
     $BuildLlvm = Join-Path $Root build-llvm
     $Rasqal = Join-Path $Root rasqal
     $Target = Join-Path $Root target
@@ -85,7 +86,7 @@ task test-rasqal -depends build-rasqal {
     }
 
     # Run our examples Python file.
-    Invoke-LoggedCommand -workingDirectory $Docs {
+    Invoke-LoggedCommand -workingDirectory $Examples {
         python examples.py
     }
 }
