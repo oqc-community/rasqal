@@ -13,10 +13,10 @@ use crate::smart_pointers::Ptr;
 use crate::with_mutable;
 use inkwell::basic_block::BasicBlock;
 use inkwell::module::Module;
-use inkwell::types::{AnyType, AnyTypeEnum};
+use inkwell::types::AnyTypeEnum;
 use inkwell::values::{
-  AggregateValue, AnyValue, AnyValueEnum, ArrayValue, AsValueRef, BasicValue, BasicValueEnum,
-  FunctionValue, InstructionOpcode, InstructionValue, StructValue
+  AnyValue, AnyValueEnum, AsValueRef, BasicValue, BasicValueEnum, FunctionValue, InstructionOpcode,
+  InstructionValue
 };
 use inkwell::{FloatPredicate, IntPredicate};
 use llvm_sys::core::{
@@ -503,7 +503,7 @@ impl QIREvaluator {
                 .expect(
                   format!(
                     "Unable to find base profile value. Instruction: {}",
-                    stringified_value.clone()
+                    stringified_value
                   )
                   .as_str()
                 )
@@ -518,7 +518,7 @@ impl QIREvaluator {
             return match name {
               "Qubit" => Some(Value::Qubit(Qubit::new(value.parse().unwrap()))),
               "Result" => Some(Value::Int(value.parse().unwrap())),
-              _ => panic!("Attempted specific match on non-base-profile pointer. Instruction: {}, name: {}, value: {}", stringified_value.clone(), name.clone(), value.clone())
+              _ => panic!("Attempted specific match on non-base-profile pointer. Instruction: {}, name: {}, value: {}", stringified_value, name, value)
             };
           }
 

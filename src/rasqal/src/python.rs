@@ -7,7 +7,6 @@ use crate::execution::{parse_file, run_file, run_graph, RuntimeCollection};
 use crate::features::QuantumFeatures;
 use crate::graphs::ExecutableAnalysisGraph;
 use crate::instructions::Value;
-use crate::runtime::ActiveTracers;
 use crate::smart_pointers::Ptr;
 use crate::{initialize_loggers, DEFAULT_LOG_FILE};
 use log::{log, log_enabled, Level};

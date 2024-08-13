@@ -1093,7 +1093,7 @@ value_into!(bool, "bool", Bool);
 ///   squash everything into R's with a pauli, but is there a good reason for keeping them split?
 pub enum Gate {
   /// Qubit
-  I(Ptr<Value>),
+  Id(Ptr<Value>),
 
   /// Qubit, theta, phi, lambda.
   U(Ptr<Value>, Ptr<Value>, Ptr<Value>, Ptr<Value>),
@@ -1121,8 +1121,8 @@ pub enum Gate {
 pub struct GateBuilder {}
 
 impl GateBuilder {
-  /// See [`Gate::I`].
-  pub fn I(qubit: Value) -> Gate { Gate::I(Ptr::from(qubit)) }
+  /// See [`Gate::Id`].
+  pub fn Id(qubit: Value) -> Gate { Gate::Id(Ptr::from(qubit)) }
 
   /// See [`Gate::U`].
   pub fn U(qubit: Value, theta: Value, phi: Value, lambda: Value) -> Gate {
@@ -1183,7 +1183,7 @@ impl Display for Gate {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_str(
       match self {
-        Gate::I(qb) => {
+        Gate::Id(qb) => {
           format!("I {qb}")
         }
         Gate::U(qb, theta, phi, lambda) => {

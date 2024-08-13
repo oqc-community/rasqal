@@ -9,43 +9,34 @@ With these installed then run:
 
 [Linux]
 
-`sudo apt install -y build-essential libffi-dev xz-utils powershell curl wget gnupg apt-transport-https`
+`sudo apt-get install -y ninja-build`
 
 [Windows]
 
-[Winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) is the windows package manager and should be installed first.
+[Chocolatey](https://chocolatey.org/install) is a windows package manager that we use to organize some installs.
 
-`winget install build-essential libffi-dev xz-utils powershell curl wget gnupg apt-transport-https 7-zip`
+`choco install --accept-license -y ninja`
+
+Optional: 
+`choco uninstall -y llvm` if you are having problems with the correct LLVM install being found. 
 
 [Mac]
 
-Soon to come.
+`brew install ccache ninja`
 
-When these tools have been downloaded you run `build.ps1` at `/src/build.ps1`. This will initialize a Python venv, build the Rust projects, install the resultant wheel into that environment and run tests. 
+When this is all done run `build.ps1` at `/src/build.ps1`. 
 
-From this point you can build the Rust project with cargo and deal with it seperately.
-But if you need to redeploy the wheel and test things from Python you need to run the build script again.
+This will install and build LLVM, build all the Rust projects, build a wheel and install it into the local venv, perform style formatting and more.
 
-If you have issues you can look at the [CI cross-OS build script](https://github.com/oqc-community/rasqal/blob/develop/.github/workflows/deploy-wheels.yml) and see what might be missing or out of date from the documentation.
+Once this has been done you can open up the Rust projects and run cargo like normal as LLVM has been built and cached. You cna also use the built venv to run the Python as well.
 
-#### Building LLVM from source
-
-If your system has no LLVM binaries available you can [build it yourself](https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-llvm).
-You should only attempt this if you're familiar with LLVM already or have no binaries available, as it is rather involved and finicky on certain operating systems.
-
-You can use these environmental variables to customize the LLVM build:
-```bash
-RSQL_LLVM_EXTERNAL_DIR=/path/to/llvm # Directory to locally-built LLVM.
-RSQL_DOWNLOAD_LLVM=true # Whether to download anrd build LLVM.
-RSQL_CACHE_DIR=/where/to/extract # Where to store the downloaded LLVM build. Defaults to target which gets cleared on clean.
-...
-```
+You'll have to re-run the build script if you want to build a new wheel to be available from the Python, but beyond that you can develop in whatever environment most suits you.
 
 #### Potential issues
 
 [PyCharm]
 
-To get PyCharm to recognize the LLVM file path you need to add  `LLVM_SYS_140_PREFIX={path_to_repo}/src/target/llvm14-0` to the environment variables for any Rust command. You can also use a config.toml with the same value.
+To get PyCharm to recognize the LLVM file path you need to add  `LLVM_SYS_150_PREFIX={path_to_repo}/src/target/llvm15-0` to the environment variables for any Rust command. You can also use a config.toml with the same value.
 
 [Windows]
 

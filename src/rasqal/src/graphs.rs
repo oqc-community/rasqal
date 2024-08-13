@@ -702,7 +702,9 @@ impl AnalysisGraphBuilder {
   }
 
   pub fn I(&self, qx: Value) -> Ptr<Node> {
-    with_mutable_self!(self.graph.add(InstructionBuilder::Gate(GateBuilder::I(qx))))
+    with_mutable_self!(self
+      .graph
+      .add(InstructionBuilder::Gate(GateBuilder::Id(qx))))
   }
 
   pub fn U(&self, qx: Value, theta: f64, phi: f64, lambda: f64) -> Ptr<Node> {
