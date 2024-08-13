@@ -66,10 +66,10 @@ macro_rules! operand_to_bb {
   };
 }
 
-// TODO: Since Inkwell dosen't expose things properly try and use the llvm-sys objects to find the
-//  data. We want to remove all the string fetching/matching as it's inefficent.
+// TODO: Since Inkwell doesn't expose things properly try and use the llvm-sys objects to find the
+//  data. We want to remove all the string fetching/matching as it's inefficient.
 
-/// Fetches the assignment variable (&{value}) from a stringified LLVM instruction.
+/// Fetches the assignment variable &{value} = ... from a stringified LLVM instruction.
 pub fn get_ref_id_from_instruction(inst: &InstructionValue) -> String {
   let inst_str = inst
     .to_string()
@@ -91,6 +91,7 @@ pub fn parse_ref_id_from_instruction(inst: &InstructionValue) -> Option<String> 
   parse_ref_id_from_instruction_str(&inst_str)
 }
 
+/// See [`get_ref_id_from_instruction`].
 pub fn parse_ref_id_from_instruction_str(inst_str: &str) -> Option<String> {
   let llvm_var_finder = Regex::new("([%@][^ ]*) =").unwrap();
   llvm_var_finder.captures(inst_str).map_or_else(
@@ -99,13 +100,10 @@ pub fn parse_ref_id_from_instruction_str(inst_str: &str) -> Option<String> {
   )
 }
 
-pub fn get_ref_id_from_value(ptr_string: &str) -> String {
-  parse_ref_id_from_value(ptr_string).expect("Can't parse ref-id from value.")
-}
-
-/// TODO: Need a proper way to get the variables from a general state, while this works it's not
-///     entirely bulletproof and needs tweaking as issues come up. And issues caused from it are not
-///     immediately obvious.
+// TODO: Need a proper way to get the variables from a general state, while this works it's not
+//     entirely bulletproof and needs tweaking as issues come up. And issues caused from it are not
+//     immediately obvious.
+/// Attempts to get a variable assignment from an argument value: some_call(%Array* %register, ...).
 pub fn parse_ref_id_from_value(ptr_string: &str) -> Option<String> {
   let ptr_string = ptr_string.trim_matches('"').trim();
   let local_variable_finder: Regex = Regex::new("^.*\\s(%[\\w0-9\\-]+)$").unwrap();
@@ -140,6 +138,11 @@ pub fn parse_ref_id_from_value(ptr_string: &str) -> Option<String> {
       }
     })
   })
+}
+
+/// See [`parse_ref_id_from_value`]
+pub fn get_ref_id_from_value(ptr_string: &str) -> String {
+  parse_ref_id_from_value(ptr_string).expect("Can't parse ref-id from value.")
 }
 
 /// Parsing context, molds all state required by the evalautor to run.
@@ -305,7 +308,7 @@ impl QIREvaluator {
     let graph = Ptr::from(AnalysisGraph::new(method_name.clone()));
     with_mutable!(context.method_graphs.insert(method_name, graph.clone()));
 
-    // Build up anchor labels/nodes so we an associate them at the start and end.
+    // Build up anchor labels/nodes so we can associate them at the start and end.
     for bb in func.get_basic_blocks() {
       let bb_name = bb.get_name().to_str().unwrap().to_string();
       let anchor_node = with_mutable!(graph.add_loose(Instruction::Label(bb_name.clone())));
@@ -385,8 +388,7 @@ impl QIREvaluator {
     unsafe { BasicValueEnum::new(LLVMGetAggregateElement(array, index as c_uint)) }
   }
 
-  /// `as_value`
-  /// almost never want to use this directly. Use [`as_value`] instead.
+  /// Recursive call of [`as_value`]. Call the non-recursive version for most use-cases.
   fn _as_value_recursive(
     &self, graph: &Ptr<AnalysisGraphBuilder>, type_enum: &AnyTypeEnum, val_enum: &AnyValueEnum,
     context: &Ptr<EvaluationContext>
@@ -647,7 +649,7 @@ impl QIREvaluator {
     self._as_value_recursive(graph, any_val.get_type().borrow(), any_val, context)
   }
 
-  /// Evaluates the instruction and adds it to the graph.
+  /// Evaluates a specific LLVM IR instruction and adds it to the graph.
   fn walk_instruction(
     &self, inst: &Ptr<InstructionValue>, graph: &Ptr<AnalysisGraphBuilder>,
     context: &Ptr<EvaluationContext>
@@ -663,9 +665,7 @@ impl QIREvaluator {
       InstructionOpcode::Br => {
         self.eval_branch(inst, graph, context);
       }
-      InstructionOpcode::Switch
-      | InstructionOpcode::IndirectBr
-      | InstructionOpcode::Invoke => {
+      InstructionOpcode::Switch | InstructionOpcode::IndirectBr | InstructionOpcode::Invoke => {
         todo!("{}", inst.print_to_string().to_string())
       }
       InstructionOpcode::FNeg => {

@@ -562,7 +562,7 @@ impl PartialEq for CallableAnalysisGraph {
 
 impl Eq for CallableAnalysisGraph {}
 
-/// Analysis graph that has been fully analyzed and is ready to be executed. Carries graph and
+/// N analysis graph that has been fully analyzed and is ready to be executed. Carries graph and
 /// appropriate metadata.
 pub struct ExecutableAnalysisGraph {
   pub callable_graph: Ptr<CallableAnalysisGraph>,
@@ -625,8 +625,8 @@ impl Display for ExecutableAnalysisGraph {
   }
 }
 
-/// `AnalysisGraph`
-/// Note: uses auto-deref to allow it to act as an extension.
+/// Wrapper for various graphs that allow you to use builder syntax on them.
+/// Uses auto-deref to appropriately wrap the class.
 pub struct AnalysisGraphBuilder {
   pub graph: Ptr<AnalysisGraph>
 }

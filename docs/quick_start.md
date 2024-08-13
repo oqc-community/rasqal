@@ -1,5 +1,10 @@
 ### Getting started
 
+We have an examples folder in `/examples` that shows off much of what will be talked about here. 
+If you prefer to tinker with code that folder also has a Q# project you can play with and then use Rasqal to run the generated QIR. 
+
+### Basics
+
 To run Rasqal you'll need a QIR file, whether in its human-readable .ll form or bitcode. 
 We have some pre-built QIR that we use for tests (`src/tests/qsharp`) that you can use and modify if needed.
 
@@ -7,6 +12,7 @@ For our first example we're going to use the default simulator backend, so will 
 
 Since we're not providing a custom backend our Python to run Rasqal is relatively simple. 
 If your QIR has no return value or arguments, this is how you call it:
+
 ```python
 from rasqal.simulators import fetch_qasm_runner
 

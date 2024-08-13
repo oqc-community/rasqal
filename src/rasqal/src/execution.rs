@@ -35,6 +35,7 @@ pub fn run_file(
   catch_panics(|| run_graph(&parse_file(path, entry_point)?, args, runtimes, config))
 }
 
+/// Parses the .ll/.bc file and builds an [`ExecutableAnalysisGraph`] for it.
 pub fn parse_file(
   path: impl AsRef<Path>, entry_point: Option<&str>
 ) -> Result<Ptr<ExecutableAnalysisGraph>, String> {
