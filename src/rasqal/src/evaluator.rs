@@ -665,8 +665,10 @@ impl QIREvaluator {
       }
       InstructionOpcode::Switch
       | InstructionOpcode::IndirectBr
-      | InstructionOpcode::Invoke
-      | InstructionOpcode::FNeg => {
+      | InstructionOpcode::Invoke => {
+        todo!("{}", inst.print_to_string().to_string())
+      }
+      InstructionOpcode::FNeg => {
         self.eval_fneg(inst, graph, context);
       }
       InstructionOpcode::Add => {
