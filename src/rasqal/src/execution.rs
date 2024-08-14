@@ -25,7 +25,6 @@ use inkwell::{
 use crate::config::RasqalConfig;
 use crate::exceptions::catch_panics;
 use log::{log, Level};
-use std::ops::Deref;
 use std::{ffi::OsStr, path::Path};
 
 /// Executes the file.
@@ -36,6 +35,7 @@ pub fn run_file(
   catch_panics(|| run_graph(&parse_file(path, entry_point)?, args, runtimes, config))
 }
 
+/// Parses the .ll/.bc file and builds an [`ExecutableAnalysisGraph`] for it.
 pub fn parse_file(
   path: impl AsRef<Path>, entry_point: Option<&str>
 ) -> Result<Ptr<ExecutableAnalysisGraph>, String> {
@@ -222,7 +222,7 @@ mod tests {
 
     run_file(
       path,
-      &Vec::new(),
+      args,
       runtimes.borrow(),
       None,
       &Ptr::from(RasqalConfig::default())

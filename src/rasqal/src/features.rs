@@ -5,6 +5,7 @@ use std::fmt::{Display, Formatter};
 
 /// A feature collection which a QPU needs to have in order to run a particular projection.
 pub struct QuantumFeatures {
+  /// Amount of qubits required for this feature.
   pub qubits: i32
 }
 

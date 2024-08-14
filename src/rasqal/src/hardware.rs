@@ -4,6 +4,7 @@
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 
+/// Virtual representation of a qubit.
 #[derive(Debug, Clone)]
 pub struct Qubit {
   pub index: i64

@@ -17,7 +17,7 @@ use log::{log, Level};
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{Display, Formatter};
-use std::ops::{Add, AddAssign, Deref, DerefMut};
+use std::ops::{AddAssign, Deref, DerefMut};
 use std::time::Instant;
 
 /// Assign an order to nodes so we're able to tell trivially when one is further in the graph
@@ -710,10 +710,10 @@ impl QuantumRuntime {
         }
         Instruction::Gate(gate) => {
           match gate.deref() {
-            Gate::I(qb) => {
+            Gate::Id(qb) => {
               let followed = follow_qubit(qb, context);
               let mut projection = context.activate_projection(&followed);
-              projection.add(&Ptr::from(QuantumOperations::I(followed.clone())));
+              projection.add(&Ptr::from(QuantumOperations::Id(followed.clone())));
             }
             Gate::U(qb, theta, phi, lambda) => {
               let followed = follow_qubit(qb, context);
@@ -733,7 +733,7 @@ impl QuantumRuntime {
 
               match follow_reference(pauli, context).as_pauli() {
                 Pauli::I => {
-                  projection.add(&Ptr::from(QuantumOperations::I(followed)));
+                  projection.add(&Ptr::from(QuantumOperations::Id(followed)));
                 }
                 Pauli::X => {
                   projection.add(&Ptr::from(QuantumOperations::X(followed, radii)));

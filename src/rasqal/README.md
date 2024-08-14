@@ -9,7 +9,7 @@ Some of the key things this approach enables:
 2. Enabling hybrid algorithms to be run on machines and tools with only a gate-level API available. This includes QASM API's if you use its simulation framework.
 3. Lots of optimization potential when passed large amounts of classical context that a quantum algorithm uses to accentuate its own execution.
 
-We also have a [full feature list and quick intro to its concepts](https://github.com/oqc-community/rasqal/blob/develop/features_and_concepts.md) as well as a [draft paper](https://github.com/oqc-community/rasqal/blob/develop/docs/papers/Rasqal%20Draft%20v2.pdf) that covers its internals in excruciating detail.
+We also have a [full feature list and quick intro to its concepts](https://github.com/oqc-community/rasqal/blob/develop/docs/features_and_concepts.md) as well as a [draft paper](https://github.com/oqc-community/rasqal/blob/develop/docs/papers/Rasqal%20Draft%20v2.pdf) that covers its internals in excruciating detail.
 
 If you have any features or ideas you'd like to see implemented feel free to raise a [feature request](https://github.com/oqc-community/Rasqal/issues/new?assignees=&labels=enhancement&projects=&template=feature_request.md&title=)!
 
@@ -18,13 +18,13 @@ If you have any features or ideas you'd like to see implemented feel free to rai
 ### Getting Started
 
 1. Install Rasqal in your favourite Python venv by running `pip install rasqal`. Our current testing is done with `v3.10` of Python.
-2. Read the [quick start](https://github.com/oqc-community/rasqal/blob/develop/examples.md) and look at our [Python example](https://github.com/oqc-community/Rasqal/blob/develop/docs/examples.py).
-3. (Optional) Read the [paper](https://github.com/oqc-community/rasqal/blob/develop/docs/papers/Rasqal%20Draft%20v2.pdf) for a deep-dive into Rasqals concepts and data structures.
+2. Read the [quick start](https://github.com/oqc-community/rasqal/blob/develop/docs/quick_start.md) and look at our [Python example](https://github.com/oqc-community/Rasqal/blob/develop/examples/examples.py).
+3. (Optional) Read the [paper](https://github.com/oqc-community/rasqal/blob/develop/docs/papers/Rasqal%20Draft%20v3.pdf) for a deep-dive into Rasqals concepts and data structures.
 
 ### Contributing
 
-If you'd like to contribute your first destination will be to [build the system locally](https://github.com/oqc-community/rasqal/blob/develop/building.md).
-There's also a [getting started](https://github.com/oqc-community/rasqal/blob/develop/development.md) page that covers some of the most important bits you'd need to know about the project before jumping into writing code.
+If you'd like to contribute your first destination will be to [build the system locally](https://github.com/oqc-community/rasqal/blob/develop/docs/building.md).
+There's also a [getting started](https://github.com/oqc-community/rasqal/blob/develop/docs/development.md) page that covers some of the most important bits you'd need to know about the project before jumping into writing code.
 
 After that feel free to fork the project and put up PRs with any work you would like to add.
 All experimental work that isn't ready for prime time has to be disabled by default and have no impact on core execution time and stability.

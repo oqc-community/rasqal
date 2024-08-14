@@ -554,7 +554,7 @@ impl QuantumStatePredictor {
           self.state.measure(&qb.index);
         }
       }
-      QuantumOperations::Initialize() | QuantumOperations::I(_) => {}
+      QuantumOperations::Initialize() | QuantumOperations::Id(_) => {}
     }
   }
 }
@@ -570,12 +570,12 @@ pub struct QuantumProjection {
 }
 
 /// A for-now list of linear gates and hardware operations that we can store and send to our
-/// Python runtimes. In time these will be removed and we'll reconstruct gates from
+/// Python runtimes. In time these will be removed, and we'll reconstruct gates from
 /// our other analysis structures.
 pub enum QuantumOperations {
   Initialize(),
   Reset(Vec<Qubit>),
-  I(Qubit),
+  Id(Qubit),
   U(Qubit, f64, f64, f64),
   X(Qubit, f64),
   Y(Qubit, f64),
@@ -593,7 +593,7 @@ impl QuantumOperations {
     match self {
       QuantumOperations::Initialize() => vec![],
       QuantumOperations::Reset(qbs) => qbs.iter().collect(),
-      QuantumOperations::I(qb)
+      QuantumOperations::Id(qb)
       | QuantumOperations::U(qb, _, _, _)
       | QuantumOperations::X(qb, _)
       | QuantumOperations::Y(qb, _)
@@ -618,7 +618,7 @@ impl Display for QuantumOperations {
             .collect::<Vec<_>>()
             .join(", ")
         ),
-        QuantumOperations::I(qb) => format!("id[{qb}]"),
+        QuantumOperations::Id(qb) => format!("id[{qb}]"),
         QuantumOperations::U(qb, theta, phi, lambda) => {
           format!("U[{qb}] {theta},{phi},{lambda}")
         }
@@ -856,7 +856,7 @@ impl QuantumProjection {
               builder.reset(qubit);
             }
           }
-          QuantumOperations::I(qb) => {
+          QuantumOperations::Id(qb) => {
             builder.i(qb);
           }
           QuantumOperations::U(qb, theta, phi, lambda) => {
