@@ -203,18 +203,7 @@ impl<T> FlexiPtr<T> {
         }
       }
       FlexiPtr::Borrow(borrow) => {
-        match val {
-          FlexiPtr::RefCounted(_) => {
-            panic!("Can't extract from ref-counted into borrow-driven flexi-pointer.");
-          }
-          FlexiPtr::Borrow(other_borrow) => {
-            // TODO: Probably doesn't work, test and fix.
-            // Reading a reference with a bitwise copy is probably fine as it's just a
-            // pointer anyway.
-            unsafe { (*borrow).write(other_borrow.read()) };
-          }
-          _ => {}
-        }
+        panic!("Can't expand into borrow-driven flexi-pointers.");
       }
       _ => {}
     }
@@ -272,7 +261,6 @@ impl<T: ?Sized> FlexiPtr<T> {
     unsafe {
       // Borrows don't require a drop, neither does None, only if we're the owner of
       // an object do we want to do anything to it.
-
       if let FlexiPtr::RefCounted(ref_) = self {
         (**ref_).dec();
         if (**ref_).ref_count() <= 0 {

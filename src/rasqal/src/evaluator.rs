@@ -1162,6 +1162,20 @@ impl QIREvaluator {
         let qb = parse_qubit(inst, 0);
         graph.Measure(Value::Pauli(Pauli::Z), qb, target_value);
       }
+
+      // Slightly non-official QIR, measure then reset.
+      "__quantum__qis__mresetz__body" => {
+        let target_value = if let Some(val) = parse_ref_id_from_instruction(inst.borrow()) {
+          Value::String(val)
+        } else {
+          parse_as_value(inst, 1).expect("Can't find result register.")
+        };
+
+        let qb = parse_qubit(inst, 0);
+        graph.Measure(Value::Pauli(Pauli::Z), qb.clone(), target_value);
+        graph.Reset(qb);
+      }
+
       "__quantum__qis__cx__body" => {
         let control = parse_qubit(inst, 0);
         let target = parse_qubit(inst, 1);
@@ -1384,6 +1398,10 @@ impl QIREvaluator {
         graph.Arithmatic(ref_id, value, Operator::PowerOf, power_multiplier);
       }
 
+      // Output recording doesn't matter for us.
+      "__quantum__rt__tuple_record_output" | "__quantum__rt__array_record_output" => {
+      }
+
       // Bigint support that hopefully we'll just be able to ignore.
       "__quantum__rt__bigint_add"
       | "__quantum__rt__bigint_bitand"
@@ -1410,8 +1428,6 @@ impl QIREvaluator {
       | "__quantum__rt__array_slice_1d"
       | "__quantum__rt__array_get_dim"
       | "__quantum__rt__array_concatenate"
-      | "__quantum__rt__tuple_record_output"
-      | "__quantum__rt__array_record_output"
       | "__quantum__rt__string_get_data"
       | "__quantum__rt__string_get_length"
       | "__quantum__rt__tuple_copy"

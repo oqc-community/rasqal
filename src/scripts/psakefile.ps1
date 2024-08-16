@@ -19,16 +19,19 @@ Properties {
 }
 
 task default -depends build
-task build -depends build-llvm, build-rasqal, test-rasqal, format
+task build -depends build-llvm, build-rasqal, test-rasqal, run-examples, format
 task check -depends check-licenses
 task format -depends format-rust, format-python
 task pypi-build -depends build, audit-rasqal, check
+
+# Task should not be invoked if you're building and installing Rasqal locally.
+task initialize-examples -depends install-rasqal-from-pypi, setup-examples, run-examples
 
 task format-python {
     Invoke-LoggedCommand -workingDirectory $Root {
         pip install ruff
         ruff format
-        ruff check --fix --exit-zero
+        ruff check --fix --silent --exit-zero
     }
 }
 
@@ -84,12 +87,30 @@ task test-rasqal -depends build-rasqal {
         pip install pytest
         pytest .
     }
+}
 
-    # Run our examples Python file.
-    Invoke-LoggedCommand -workingDirectory $Examples {
-        python examples.py
+# Used to install and run the examples without building Rasqal fully.
+task install-rasqal-from-pypi -depends check-environment {
+    Invoke-LoggedCommand -workingDirectory $Root {
+        pip install rasqal
     }
 }
+
+task setup-examples -depends check-environment {
+    # Install required dependencies.
+    Invoke-LoggedCommand -workingDirectory $Root {
+        pip install qsharp
+    }
+}
+
+task run-examples -depends setup-examples {
+    # Run our Python examples.
+    Invoke-LoggedCommand -workingDirectory $Examples {
+        python examples.py
+        python sandbox.py
+    }
+}
+
 
 task check-environment {
     $pyenv = Join-Path $Root ".env"
