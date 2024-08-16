@@ -13,10 +13,10 @@ use crate::smart_pointers::Ptr;
 use crate::with_mutable;
 use inkwell::basic_block::BasicBlock;
 use inkwell::module::Module;
-use inkwell::types::{AnyType, AnyTypeEnum};
+use inkwell::types::AnyTypeEnum;
 use inkwell::values::{
-  AggregateValue, AnyValue, AnyValueEnum, ArrayValue, AsValueRef, BasicValue, BasicValueEnum,
-  FunctionValue, InstructionOpcode, InstructionValue, StructValue
+  AnyValue, AnyValueEnum, AsValueRef, BasicValue, BasicValueEnum, FunctionValue, InstructionOpcode,
+  InstructionValue
 };
 use inkwell::{FloatPredicate, IntPredicate};
 use llvm_sys::core::{
@@ -25,13 +25,14 @@ use llvm_sys::core::{
 };
 use llvm_sys::prelude::LLVMValueRef;
 use llvm_sys::LLVMTypeKind;
-use log::warn;
+use log::{log, warn, Level};
 use regex::Regex;
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::ffi::{c_uint, CStr};
 use std::ops::Deref;
+use std::time::Instant;
 
 macro_rules! operand_to_value {
   ($target:ident, $index:expr) => {
@@ -65,10 +66,10 @@ macro_rules! operand_to_bb {
   };
 }
 
-// TODO: Since Inkwell dosen't expose things properly try and use the llvm-sys objects to find the
-//  data. We want to remove all the string fetching/matching as it's inefficent.
+// TODO: Since Inkwell doesn't expose things properly try and use the llvm-sys objects to find the
+//  data. We want to remove all the string fetching/matching as it's inefficient.
 
-/// Fetches the assignment variable (&{value}) from a stringified LLVM instruction.
+/// Fetches the assignment variable &{value} = ... from a stringified LLVM instruction.
 pub fn get_ref_id_from_instruction(inst: &InstructionValue) -> String {
   let inst_str = inst
     .to_string()
@@ -90,6 +91,7 @@ pub fn parse_ref_id_from_instruction(inst: &InstructionValue) -> Option<String> 
   parse_ref_id_from_instruction_str(&inst_str)
 }
 
+/// See [`get_ref_id_from_instruction`].
 pub fn parse_ref_id_from_instruction_str(inst_str: &str) -> Option<String> {
   let llvm_var_finder = Regex::new("([%@][^ ]*) =").unwrap();
   llvm_var_finder.captures(inst_str).map_or_else(
@@ -98,13 +100,10 @@ pub fn parse_ref_id_from_instruction_str(inst_str: &str) -> Option<String> {
   )
 }
 
-pub fn get_ref_id_from_value(ptr_string: &str) -> String {
-  parse_ref_id_from_value(ptr_string).expect("Can't parse ref-id from value.")
-}
-
-/// TODO: Need a proper way to get the variables from a general state, while this works it's not
-///     entirely bulletproof and needs tweaking as issues come up. And issues caused from it are not
-///     immediately obvious.
+// TODO: Need a proper way to get the variables from a general state, while this works it's not
+//     entirely bulletproof and needs tweaking as issues come up. And issues caused from it are not
+//     immediately obvious.
+/// Attempts to get a variable assignment from an argument value: some_call(%Array* %register, ...).
 pub fn parse_ref_id_from_value(ptr_string: &str) -> Option<String> {
   let ptr_string = ptr_string.trim_matches('"').trim();
   let local_variable_finder: Regex = Regex::new("^.*\\s(%[\\w0-9\\-]+)$").unwrap();
@@ -139,6 +138,11 @@ pub fn parse_ref_id_from_value(ptr_string: &str) -> Option<String> {
       }
     })
   })
+}
+
+/// See [`parse_ref_id_from_value`]
+pub fn get_ref_id_from_value(ptr_string: &str) -> String {
+  parse_ref_id_from_value(ptr_string).expect("Can't parse ref-id from value.")
 }
 
 /// Parsing context, molds all state required by the evalautor to run.
@@ -231,7 +235,10 @@ impl QIREvaluator {
       target_global = global.get_next_global();
     }
 
+    let start = Instant::now();
     let builder = self.walk_function(entry_point, context.borrow());
+    let took = start.elapsed();
+    log!(Level::Info, "Evaluation took {}ms.", took.as_millis());
 
     // Create a callable graph with its arguments, but the values set as empty (validly).
     let mut callable = Ptr::from(CallableAnalysisGraph::new(&builder.graph));
@@ -301,7 +308,7 @@ impl QIREvaluator {
     let graph = Ptr::from(AnalysisGraph::new(method_name.clone()));
     with_mutable!(context.method_graphs.insert(method_name, graph.clone()));
 
-    // Build up anchor labels/nodes so we an associate them at the start and end.
+    // Build up anchor labels/nodes so we can associate them at the start and end.
     for bb in func.get_basic_blocks() {
       let bb_name = bb.get_name().to_str().unwrap().to_string();
       let anchor_node = with_mutable!(graph.add_loose(Instruction::Label(bb_name.clone())));
@@ -381,8 +388,7 @@ impl QIREvaluator {
     unsafe { BasicValueEnum::new(LLVMGetAggregateElement(array, index as c_uint)) }
   }
 
-  /// `as_value`
-  /// almost never want to use this directly. Use [`as_value`] instead.
+  /// Recursive call of [`as_value`]. Call the non-recursive version for most use-cases.
   fn _as_value_recursive(
     &self, graph: &Ptr<AnalysisGraphBuilder>, type_enum: &AnyTypeEnum, val_enum: &AnyValueEnum,
     context: &Ptr<EvaluationContext>
@@ -499,13 +505,14 @@ impl QIREvaluator {
                 .expect(
                   format!(
                     "Unable to find base profile value. Instruction: {}",
-                    stringified_value.clone()
+                    stringified_value
                   )
                   .as_str()
                 )
                 .as_str()
             };
 
+            // nulls get coerced into 0 if processed correctly, but we have to do it manually here.
             if value == "null" {
               value = "0";
             }
@@ -513,7 +520,7 @@ impl QIREvaluator {
             return match name {
               "Qubit" => Some(Value::Qubit(Qubit::new(value.parse().unwrap()))),
               "Result" => Some(Value::Int(value.parse().unwrap())),
-              _ => panic!("Attempted specific match on non-base-profile pointer. Instruction: {}, name: {}, value: {}", stringified_value.clone(), name.clone(), value.clone())
+              _ => panic!("Attempted specific match on non-base-profile pointer. Instruction: {}, name: {}, value: {}", stringified_value, name, value)
             };
           }
 
@@ -545,8 +552,6 @@ impl QIREvaluator {
           };
 
           // TODO: Make custom results object, probably re-use projection results.
-          // TODO: With LLVM version upgrade this likely isn't needed, this is all pointer-based
-          //  anyway.
           match struct_name {
             "Qubit" => Some(Value::Qubit(Qubit::new(index))),
             "Result" => Some(Value::Int(index)),
@@ -644,7 +649,7 @@ impl QIREvaluator {
     self._as_value_recursive(graph, any_val.get_type().borrow(), any_val, context)
   }
 
-  /// Evaluates the instruction and adds it to the graph.
+  /// Evaluates a specific LLVM IR instruction and adds it to the graph.
   fn walk_instruction(
     &self, inst: &Ptr<InstructionValue>, graph: &Ptr<AnalysisGraphBuilder>,
     context: &Ptr<EvaluationContext>
@@ -660,10 +665,10 @@ impl QIREvaluator {
       InstructionOpcode::Br => {
         self.eval_branch(inst, graph, context);
       }
-      InstructionOpcode::Switch
-      | InstructionOpcode::IndirectBr
-      | InstructionOpcode::Invoke
-      | InstructionOpcode::FNeg => {
+      InstructionOpcode::Switch | InstructionOpcode::IndirectBr | InstructionOpcode::Invoke => {
+        todo!("{}", inst.print_to_string().to_string())
+      }
+      InstructionOpcode::FNeg => {
         self.eval_fneg(inst, graph, context);
       }
       InstructionOpcode::Add => {
@@ -1157,6 +1162,20 @@ impl QIREvaluator {
         let qb = parse_qubit(inst, 0);
         graph.Measure(Value::Pauli(Pauli::Z), qb, target_value);
       }
+
+      // Slightly non-official QIR, measure then reset.
+      "__quantum__qis__mresetz__body" => {
+        let target_value = if let Some(val) = parse_ref_id_from_instruction(inst.borrow()) {
+          Value::String(val)
+        } else {
+          parse_as_value(inst, 1).expect("Can't find result register.")
+        };
+
+        let qb = parse_qubit(inst, 0);
+        graph.Measure(Value::Pauli(Pauli::Z), qb.clone(), target_value);
+        graph.Reset(qb);
+      }
+
       "__quantum__qis__cx__body" => {
         let control = parse_qubit(inst, 0);
         let target = parse_qubit(inst, 1);
@@ -1379,6 +1398,10 @@ impl QIREvaluator {
         graph.Arithmatic(ref_id, value, Operator::PowerOf, power_multiplier);
       }
 
+      // Output recording doesn't matter for us.
+      "__quantum__rt__tuple_record_output" | "__quantum__rt__array_record_output" => {
+      }
+
       // Bigint support that hopefully we'll just be able to ignore.
       "__quantum__rt__bigint_add"
       | "__quantum__rt__bigint_bitand"
@@ -1405,8 +1428,6 @@ impl QIREvaluator {
       | "__quantum__rt__array_slice_1d"
       | "__quantum__rt__array_get_dim"
       | "__quantum__rt__array_concatenate"
-      | "__quantum__rt__tuple_record_output"
-      | "__quantum__rt__array_record_output"
       | "__quantum__rt__string_get_data"
       | "__quantum__rt__string_get_length"
       | "__quantum__rt__tuple_copy"

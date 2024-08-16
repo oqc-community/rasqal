@@ -1,8 +1,8 @@
 [project]
 name = "rasqal"
-version = "0.1.5"
+version = "0.1.6"
 requires-python = ">=3.10"
-description = "A dynamically executed quantum-classical hybrid optimizing runtime."
+description = "A hybrid quantum-classical analysis/solving runtime."
 license = { file = "LICENSE" }
 readme = "README.md"
 classifiers = [

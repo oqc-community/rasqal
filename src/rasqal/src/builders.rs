@@ -6,7 +6,7 @@ use crate::features::QuantumFeatures;
 use crate::hardware::Qubit;
 use crate::python::RequiredFeatures;
 use crate::smart_pointers::Ptr;
-use pyo3::{IntoPy, PyAny, PyObject, PyResult, Python};
+use pyo3::{IntoPy, PyAny, PyObject, Python};
 use std::borrow::Borrow;
 use std::f64::consts::PI;
 use std::ops::{Deref, DerefMut};
