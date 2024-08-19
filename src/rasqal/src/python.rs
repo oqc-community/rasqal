@@ -8,7 +8,7 @@ use crate::features::QuantumFeatures;
 use crate::graphs::ExecutableAnalysisGraph;
 use crate::instructions::Value;
 use crate::smart_pointers::Ptr;
-use crate::{initialize_loggers, DEFAULT_LOG_FILE};
+use crate::{initialize_loggers, DEFAULT_LOG_FILE, DEFAULT_LOG_FOLDER};
 use log::{log, log_enabled, Level};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -22,6 +22,7 @@ fn _native(_py: Python, m: &PyModule) -> PyResult<()> {
   m.add_function(wrap_pyfunction!(initialize_file_logger, m)?);
   m.add_function(wrap_pyfunction!(initialize_commandline_logger, m)?);
   m.add("DEFAULT_LOG_FILE", DEFAULT_LOG_FILE);
+  m.add("DEFAULT_LOG_FOLDER", DEFAULT_LOG_FOLDER);
   Ok(())
 }
 
