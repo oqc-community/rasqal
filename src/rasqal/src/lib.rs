@@ -14,7 +14,7 @@
 #![feature(get_mut_unchecked)]
 #![feature(unwrap_infallible)]
 #![feature(strict_provenance)]
-
+#![feature(is_sorted)]
 extern crate core;
 
 use log::{log, log_enabled, Level, LevelFilter};
