@@ -14,7 +14,7 @@
 #![feature(get_mut_unchecked)]
 #![feature(unwrap_infallible)]
 #![feature(strict_provenance)]
-
+#![feature(is_sorted)]
 extern crate core;
 
 use log::{log, log_enabled, Level, LevelFilter};
@@ -22,6 +22,7 @@ use std::env::current_exe;
 use std::fs;
 use std::fs::File;
 use std::path::Path;
+use std::env;
 
 mod analysis;
 mod builders;
@@ -45,6 +46,12 @@ const DEFAULT_LOG_FOLDER: &str = ".logs";
 /// detects it's in development mode it'll move log file back up the folder tree.
 #[ctor::ctor]
 fn native_logger_initialize() {
+  // If we're in CI just print everything to the commandline.
+  if let Ok(_) = env::var("CI") {
+    initialize_commandline_logging(Vec::new());
+    return;
+  }
+
   let path = if let Ok(val) = current_exe() {
     // If we're embedded we need to be given a different file path to log too.
     if val.ends_with("python.exe") {
@@ -89,6 +96,18 @@ fn native_logger_initialize() {
   log!(Level::Info, "Initialized on library startup.");
 }
 
+fn initialize_commandline_logging(appended_messages: Vec<String>) {
+  // If we're fallen through previous forms of logger init have failed.
+  env_logger::builder()
+    .filter_level(LevelFilter::Debug)
+    .init();
+
+  log!(Level::Info, "Commandline logging initialized.");
+  for val in appended_messages {
+    log!(Level::Info, "{}", val);
+  }
+}
+
 fn initialize_loggers(log_path: Option<String>) {
   // If we've already been enabled, just do nothing.
   if log_enabled!(Level::Error) {
@@ -124,12 +143,5 @@ fn initialize_loggers(log_path: Option<String>) {
   }
 
   // If we're fallen through previous forms of logger init have failed.
-  env_logger::builder()
-    .filter_level(LevelFilter::Debug)
-    .init();
-
-  log!(Level::Info, "Commandline logging initialized.");
-  for val in appended_messages {
-    log!(Level::Info, "{}", val);
-  }
+  initialize_commandline_logging(appended_messages);
 }

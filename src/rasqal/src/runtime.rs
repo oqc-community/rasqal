@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
-use crate::analysis::{QuantumOperations, QuantumProjection};
+use crate::analysis::projections::QuantumProjection;
 use crate::config::RasqalConfig;
 use crate::evaluator::EvaluationContext;
 use crate::execution::RuntimeCollection;
@@ -290,14 +290,15 @@ impl Expression {
 }
 
 bitflags! {
-    /// Flags enabling various runtime tracing operations. Turning these on will drastically
-    /// affect performance and should only be done to debug output and issues.
-    #[derive(Clone)]
-    pub struct ActiveTracers: u8 {
-        const Runtime = 1;
-        const Projections = 1 << 1;
-        const Graphs = 1 << 2;
-    }
+  /// Flags enabling various runtime tracing operations. Turning these on will drastically
+  /// affect performance and should only be done to debug output and issues.
+  #[derive(Clone)]
+  pub struct ActiveTracers: u8 {
+    const Runtime = 1 << 1;
+    const Projections = 1 << 2;
+    const Graphs = 1 << 3;
+    const Solver = 1 << 4;
+  }
 }
 
 /// Tracing module for runtime for in-depth detailed logging of how our runtime functions.
@@ -341,14 +342,14 @@ impl RuntimeConstraints {
 pub struct QuantumRuntime {
   engines: Ptr<RuntimeCollection>,
   trace_module: Ptr<TracingModule>,
-  constraints: RuntimeConstraints
+  config: Ptr<RasqalConfig>
 }
 
 impl QuantumRuntime {
   pub fn new(engines: &Ptr<RuntimeCollection>, config: &Ptr<RasqalConfig>) -> QuantumRuntime {
     QuantumRuntime {
       engines: engines.clone(),
-      constraints: RuntimeConstraints::new(config.step_count_limit),
+      config: config.clone(),
       trace_module: Ptr::from(TracingModule::with(config.debug_tracers.clone()))
     }
   }
@@ -489,7 +490,7 @@ impl QuantumRuntime {
     let mut seen_nodes = HashSet::new();
     loop {
       context.step_count.add_assign(1);
-      if let Some(limit) = &self.constraints.step_limit {
+      if let Some(limit) = &self.config.step_count_limit {
         if context.step_count.deref() > limit {
           return Err(String::from(format!(
             "Execution step count limitation of {limit} exceeded."
@@ -686,7 +687,7 @@ impl QuantumRuntime {
           match qb.deref() {
             Value::Qubit(qb) => {
               let mut current_projection = context.activate_projection(&qb);
-              current_projection.add(&Ptr::from(QuantumOperations::Reset(vec![qb.clone()])));
+              current_projection.Reset(vec![qb.clone()]);
               context.deactivate_qubit(&qb);
             }
             Value::Array(array) => {
@@ -695,7 +696,7 @@ impl QuantumRuntime {
                 let qubit = followed.as_qubit();
 
                 let mut current_projection = context.activate_projection(qubit);
-                current_projection.add(&Ptr::from(QuantumOperations::Reset(vec![qubit.clone()])));
+                current_projection.Reset(vec![qubit.clone()]);
                 context.deactivate_qubit(qubit);
               }
             }
@@ -706,24 +707,20 @@ impl QuantumRuntime {
           let qb = qb.as_qubit();
           let proj = context.activate_projection(&qb);
 
-          with_mutable!(proj.add(&Ptr::from(QuantumOperations::Reset(vec![qb.clone()]))));
+          with_mutable!(proj.Reset(vec![qb.clone()]));
         }
         Instruction::Gate(gate) => {
           match gate.deref() {
-            Gate::Id(qb) => {
-              let followed = follow_qubit(qb, context);
-              let mut projection = context.activate_projection(&followed);
-              projection.add(&Ptr::from(QuantumOperations::Id(followed.clone())));
-            }
+            Gate::Id(qb) => {}
             Gate::U(qb, theta, phi, lambda) => {
               let followed = follow_qubit(qb, context);
               let mut projection = context.activate_projection(&followed);
-              projection.add(&Ptr::from(QuantumOperations::U(
+              projection.U(
                 followed.clone(),
                 follow_float(theta, context),
                 follow_float(phi, context),
                 follow_float(lambda, context)
-              )));
+              );
             }
 
             Gate::R(pauli, qubit, rot) => {
@@ -732,17 +729,15 @@ impl QuantumRuntime {
               let mut projection = context.activate_projection(&followed);
 
               match follow_reference(pauli, context).as_pauli() {
-                Pauli::I => {
-                  projection.add(&Ptr::from(QuantumOperations::Id(followed)));
-                }
+                Pauli::I => {}
                 Pauli::X => {
-                  projection.add(&Ptr::from(QuantumOperations::X(followed, radii)));
+                  projection.X(followed, radii);
                 }
                 Pauli::Z => {
-                  projection.add(&Ptr::from(QuantumOperations::Z(followed, radii)));
+                  projection.Z(followed, radii);
                 }
                 Pauli::Y => {
-                  projection.add(&Ptr::from(QuantumOperations::Y(followed, radii)));
+                  projection.Y(followed, radii);
                 }
               }
             }
@@ -750,19 +745,19 @@ impl QuantumRuntime {
               let followed = follow_qubit(qb, context);
               let mut projection = context.activate_projection(&followed);
               let radii = follow_float(radii, context);
-              projection.add(&Ptr::from(QuantumOperations::X(followed.clone(), radii)));
+              projection.X(followed.clone(), radii);
             }
             Gate::Y(qb, radii) => {
               let followed = follow_qubit(qb, context);
               let mut projection = context.activate_projection(&followed);
               let radii = follow_float(radii, context);
-              projection.add(&Ptr::from(QuantumOperations::Y(followed.clone(), radii)));
+              projection.Y(followed.clone(), radii);
             }
             Gate::Z(qb, radii) => {
               let followed = follow_qubit(qb, context);
               let mut projection = context.activate_projection(&followed);
               let radii = follow_float(radii, context);
-              projection.add(&Ptr::from(QuantumOperations::Z(followed.clone(), radii)));
+              projection.Z(followed.clone(), radii);
             }
             Gate::CR(pauli, controls, target, rotation) => {
               let pauli = follow_reference(pauli, context).as_pauli();
@@ -781,13 +776,13 @@ impl QuantumRuntime {
               match pauli {
                 Pauli::I => {}
                 Pauli::X => {
-                  projection.add(&Ptr::from(QuantumOperations::CX(controls, qubit, rotation)));
+                  projection.CX(controls, qubit, rotation);
                 }
                 Pauli::Z => {
-                  projection.add(&Ptr::from(QuantumOperations::CZ(controls, qubit, rotation)));
+                  projection.CZ(controls, qubit, rotation);
                 }
                 Pauli::Y => {
-                  projection.add(&Ptr::from(QuantumOperations::CY(controls, qubit, rotation)));
+                  projection.CY(controls, qubit, rotation);
                 }
               }
             }
@@ -805,11 +800,7 @@ impl QuantumRuntime {
                 _ => Vec::new()
               };
 
-              projection.add(&Ptr::from(QuantumOperations::CX(
-                controls,
-                followed.clone(),
-                rotation
-              )));
+              projection.CX(controls, followed.clone(), rotation);
             }
             Gate::CZ(control, target, radii) => {
               // TODO: Multi qubit activation, deal with.
@@ -825,11 +816,7 @@ impl QuantumRuntime {
                 _ => Vec::new()
               };
 
-              projection.add(&Ptr::from(QuantumOperations::CZ(
-                controls,
-                followed.clone(),
-                rotation
-              )));
+              projection.CZ(controls, followed.clone(), rotation);
             }
             Gate::CY(control, target, radii) => {
               // TODO: Multi qubit activation, deal with.
@@ -845,11 +832,7 @@ impl QuantumRuntime {
                 _ => Vec::new()
               };
 
-              projection.add(&Ptr::from(QuantumOperations::CY(
-                controls,
-                followed.clone(),
-                rotation
-              )));
+              projection.CY(controls, followed.clone(), rotation);
             }
             Gate::Measure(pauli, qbs, var) => {
               let qubits = match follow_reference(qbs, context).deref() {
@@ -868,7 +851,7 @@ impl QuantumRuntime {
                   .first()
                   .expect("Should have at least one qubit to measure.")
               );
-              projection.add(&Ptr::from(QuantumOperations::Measure(qubits.clone())));
+              projection.Measure(qubits.clone());
 
               let paulis = match follow_reference(pauli, context).deref() {
                 Value::Array(array) => array
@@ -1114,9 +1097,10 @@ impl RuntimeContext {
     // In general running a single projection covers all current qubits, so we
     // steal the one that's currently active if it's there.
     let projection = if self.projections.is_empty() {
-      Ptr::from(QuantumProjection::with_tracer(
-        self.associated_runtime.engines.borrow(),
-        self.associated_runtime.trace_module.borrow()
+      Ptr::from(QuantumProjection::with_tracer_and_config(
+        &self.associated_runtime.engines,
+        &self.associated_runtime.trace_module,
+        &self.associated_runtime.config
       ))
     } else {
       self.projections.values().next().unwrap().clone()
@@ -1128,4 +1112,36 @@ impl RuntimeContext {
 
   /// Removes this qubits projection association.
   pub fn deactivate_projection(&mut self, qb: &Qubit) { self.projections.remove(&qb.index); }
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::runtime::{ActiveTracers, TracingModule};
+
+  #[test]
+  fn tracers_all() {
+    let module = TracingModule::with(ActiveTracers::all());
+    assert!(module.has(ActiveTracers::all()))
+  }
+
+  #[test]
+  fn tracers_empty() {
+    let module = TracingModule::with(ActiveTracers::empty());
+    assert!(module.has(ActiveTracers::empty()))
+  }
+
+  fn tracer_combi(first: ActiveTracers, second: ActiveTracers) {
+    let testing_tracer = TracingModule::with(first.clone() & second.clone());
+    assert!(!testing_tracer.has(ActiveTracers::all() ^ first.clone() ^ second.clone()));
+    assert!(testing_tracer.has(first & second));
+  }
+
+  #[test]
+  fn tracers_combination() {
+    for tracer in ActiveTracers::all().iter() {
+      for other in ActiveTracers::all().iter() {
+        tracer_combi(tracer.clone(), other);
+      }
+    }
+  }
 }

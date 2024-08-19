@@ -208,11 +208,29 @@ mod tests {
   use std::fs::canonicalize;
 
   /// Just run a QIR file to make sure it parses and returns the value.
-  fn run(path: &str) -> Option<Ptr<Value>> {
-    run_with_config(path, RasqalConfig::default()).expect("Execution failed.")
+  fn run(path: &str) -> Option<Ptr<Value>> { run_with_config(path, RasqalConfig::default()) }
+
+  fn run_with_args(path: &str, args: &Vec<Value>) -> Option<Ptr<Value>> {
+    run_with_args_and_config(path, args, RasqalConfig::default()).expect("Execution failed.")
   }
 
-  fn run_with_args(path: &str, args: &Vec<Value>) -> Result<Option<Ptr<Value>>, String> {
+  fn run_with_config(path: &str, config: RasqalConfig) -> Option<Ptr<Value>> {
+    run_with_args_and_config(path, &Vec::new(), config).expect("Execution failed.")
+  }
+
+  fn fail(path: &str) -> Option<String> { fail_with_config(path, RasqalConfig::default()) }
+
+  fn fail_with_args(path: &str, args: &Vec<Value>) -> Option<String> {
+    run_with_args_and_config(path, args, RasqalConfig::default()).err()
+  }
+
+  fn fail_with_config(path: &str, config: RasqalConfig) -> Option<String> {
+    run_with_args_and_config(path, &Vec::new(), config).err()
+  }
+
+  fn run_with_args_and_config(
+    path: &str, args: &Vec<Value>, config: RasqalConfig
+  ) -> Result<Option<Ptr<Value>>, String> {
     let relative_path = canonicalize(path).unwrap();
     let path = relative_path.to_str().unwrap();
 
@@ -220,30 +238,14 @@ mod tests {
       IntegrationRuntime::default()
     )));
 
-    run_file(
-      path,
-      args,
-      runtimes.borrow(),
-      None,
-      &Ptr::from(RasqalConfig::default())
-    )
+    run_file(path, args, runtimes.borrow(), None, &Ptr::from(config))
   }
 
-  fn run_with_config(path: &str, config: RasqalConfig) -> Result<Option<Ptr<Value>>, String> {
-    let relative_path = canonicalize(path).unwrap();
-    let path = relative_path.to_str().unwrap();
-
-    let runtimes = Ptr::from(RuntimeCollection::from(&Ptr::from(
-      IntegrationRuntime::default()
-    )));
-
-    run_file(
-      path,
-      &Vec::new(),
-      runtimes.borrow(),
-      None,
-      &Ptr::from(config)
-    )
+  #[test]
+  fn execute_qaoa_solver() {
+    let config = RasqalConfig::default()
+      .with_activate_solver();
+    run_with_config("../tests/qsharp/qaoa/qir/qaoa.ll", config);
   }
 
   #[test]
@@ -272,8 +274,8 @@ mod tests {
   fn test_step_count() {
     let mut config = RasqalConfig::default();
     config.step_count_limit(2);
-    let results = run_with_config("../tests/files/qir/unrestricted_bell.ll", config);
-    assert!(results.is_err())
+    let results = fail_with_config("../tests/files/qir/unrestricted_bell.ll", config);
+    assert!(results.is_some())
   }
 
   #[test]
@@ -290,4 +292,10 @@ mod tests {
 
   #[test]
   fn execute_bell_theta_minus() { run(&"../tests/files/qir/bell_theta_minus.ll"); }
+
+  #[test]
+  fn execute_basic_cudaq() {
+    let config = RasqalConfig::default().with_trace_projections();
+    run_with_config(&"../tests/files/qir/basic_cudaq.ll", config);
+  }
 }
