@@ -24,7 +24,7 @@ use inkwell::{
 
 use crate::config::RasqalConfig;
 use crate::exceptions::catch_panics;
-use std::ops::Deref;
+use log::{log, Level};
 use std::{ffi::OsStr, path::Path};
 
 /// Executes the file.
@@ -35,9 +35,15 @@ pub fn run_file(
   catch_panics(|| run_graph(&parse_file(path, entry_point)?, args, runtimes, config))
 }
 
+/// Parses the .ll/.bc file and builds an [`ExecutableAnalysisGraph`] for it.
 pub fn parse_file(
   path: impl AsRef<Path>, entry_point: Option<&str>
 ) -> Result<Ptr<ExecutableAnalysisGraph>, String> {
+  log!(
+    Level::Info,
+    "Parsing from {}.",
+    path.as_ref().to_str().unwrap()
+  );
   let context = Context::create();
   let module = file_to_module(path, &context)?;
   catch_panics(|| build_graph_from_module(&module, entry_point))
@@ -78,11 +84,15 @@ pub fn build_graph_from_module(
     Target::initialize_native(&InitializationConfig::default())?;
     inkwell::support::load_library_permanently(Path::new(""));
 
+    let entry_point = choose_entry_point(module_functions(module), entry_point)?;
+
+    log!(
+      Level::Info,
+      "{} is the entry-point.",
+      entry_point.get_name().to_str().unwrap()
+    );
     let evaluator = QIREvaluator::new();
-    evaluator.evaluate(
-      &choose_entry_point(module_functions(module), entry_point)?,
-      &Ptr::from(module)
-    )
+    evaluator.evaluate(&entry_point, &Ptr::from(module))
   })
 }
 
@@ -212,7 +222,7 @@ mod tests {
 
     run_file(
       path,
-      &Vec::new(),
+      args,
       runtimes.borrow(),
       None,
       &Ptr::from(RasqalConfig::default())

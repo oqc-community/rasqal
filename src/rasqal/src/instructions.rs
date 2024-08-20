@@ -12,6 +12,7 @@ use std::fmt::{Display, Formatter};
 use std::ops;
 use std::ops::{BitAnd, BitOr, BitXor, Deref};
 
+/// Common equality operators.
 #[derive(Copy, Clone)]
 pub enum Equalities {
   Equals,
@@ -35,6 +36,7 @@ impl Display for Equalities {
   }
 }
 
+/// Standard arithmatic and bitwise operators.
 pub enum Operator {
   Multiply,
   Divide,
@@ -130,6 +132,7 @@ pub enum Instruction {
   Expression(Expression, Option<String>)
 }
 
+/// Static builder for instructions. Just makse processing them easier.
 pub struct InstructionBuilder {}
 
 impl InstructionBuilder {
@@ -338,12 +341,13 @@ impl Display for Pauli {
   }
 }
 
-// TODO: Remove pointers from objects who own the value - like qubit, analysis result, etc.
-//  A value should _be_ the representation of the value, and are always themselves wrapped in
-//  pointers, so the inner value also being a pointer increases complexity and adds potential for
-//  errors.
-
-/// A value that can flow around the graph.
+/// Values are the single 'Value' that is embedded into the graph at creation or at runtime. They
+/// are an implicitly-casting and comparing enum that have many overrides for all normal operations
+/// and hook into overarching functions such as auto-folding and increasing deferral duration.
+///
+/// When you have two Values who are primitives or arrays they operate as you'd expect. It's only
+/// when one side s a promise or a projection do they get far more complicated and trigger further
+/// functionality.
 pub enum Value {
   Empty,
   Byte(i8),
@@ -373,7 +377,6 @@ pub enum Value {
 
 impl Clone for Value {
   fn clone(&self) -> Self {
-    // TODO: As above, strip pointers away from certain objects.
     match self {
       Value::Empty => Value::Empty,
       Value::Byte(val) => Value::Byte(*val),
@@ -672,6 +675,11 @@ impl Value {
 // TODO: Improve projection results. It's a value distribution (and many other forms), come up
 //  with rules regarding certain numbers.
 
+/// When equality is attempted against Values they do a type match then a value match.
+///
+/// For primitives they just do a cast-then-compare.
+/// For arrays they do an element-value compare.
+/// For more complicated objects they delegate to the custom comparetor.
 impl PartialEq<Self> for Value {
   fn eq(&self, other: &Self) -> bool {
     match self {
@@ -1098,7 +1106,7 @@ value_into!(bool, "bool", Bool);
 ///   squash everything into R's with a pauli, but is there a good reason for keeping them split?
 pub enum Gate {
   /// Qubit
-  I(Ptr<Value>),
+  Id(Ptr<Value>),
 
   /// Qubit, theta, phi, lambda.
   U(Ptr<Value>, Ptr<Value>, Ptr<Value>, Ptr<Value>),
@@ -1125,9 +1133,10 @@ pub enum Gate {
 
 pub struct GateBuilder {}
 
+/// Static builder for gates hiding a lot of the verbosity of creation.
 impl GateBuilder {
-  /// See [`Gate::I`].
-  pub fn I(qubit: Value) -> Gate { Gate::I(Ptr::from(qubit)) }
+  /// See [`Gate::Id`].
+  pub fn Id(qubit: Value) -> Gate { Gate::Id(Ptr::from(qubit)) }
 
   /// See [`Gate::U`].
   pub fn U(qubit: Value, theta: Value, phi: Value, lambda: Value) -> Gate {
@@ -1144,14 +1153,17 @@ impl GateBuilder {
     Gate::R(Ptr::from(pauli), Ptr::from(qubit), Ptr::from(theta))
   }
 
+  /// See [`Gate::X`].
   pub fn X(qubit: Value, theta: Value) -> Gate {
     GateBuilder::R(Value::Pauli(Pauli::X), qubit, theta)
   }
 
+  /// See [`Gate::Y`].
   pub fn Y(qubit: Value, theta: Value) -> Gate {
     GateBuilder::R(Value::Pauli(Pauli::Y), qubit, theta)
   }
 
+  /// See [`Gate::Z`].
   pub fn Z(qubit: Value, theta: Value) -> Gate {
     GateBuilder::R(Value::Pauli(Pauli::Z), qubit, theta)
   }
@@ -1166,14 +1178,17 @@ impl GateBuilder {
     )
   }
 
+  /// See [`Gate::CX`].
   pub fn CX(controllers: Value, target: Value, theta: Value) -> Gate {
     GateBuilder::CR(Value::Pauli(Pauli::X), controllers, target, theta)
   }
 
+  /// See [`Gate::CZ`].
   pub fn CZ(controllers: Value, target: Value, theta: Value) -> Gate {
     GateBuilder::CR(Value::Pauli(Pauli::Z), controllers, target, theta)
   }
 
+  /// See [`Gate::CY`].
   pub fn CY(controllers: Value, target: Value, theta: Value) -> Gate {
     GateBuilder::CR(Value::Pauli(Pauli::Y), controllers, target, theta)
   }
@@ -1188,7 +1203,7 @@ impl Display for Gate {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_str(
       match self {
-        Gate::I(qb) => {
+        Gate::Id(qb) => {
           format!("I {qb}")
         }
         Gate::U(qb, theta, phi, lambda) => {
