@@ -1399,8 +1399,7 @@ impl QIREvaluator {
       }
 
       // Output recording doesn't matter for us.
-      "__quantum__rt__tuple_record_output" | "__quantum__rt__array_record_output" => {
-      }
+      "__quantum__rt__tuple_record_output" | "__quantum__rt__array_record_output" => {}
 
       // Bigint support that hopefully we'll just be able to ignore.
       "__quantum__rt__bigint_add"
