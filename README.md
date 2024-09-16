@@ -1,7 +1,7 @@
 [![PyPi Deployment](https://github.com/oqc-community/rasqal/actions/workflows/deploy-wheels.yml/badge.svg?event=release)](https://github.com/oqc-community/rasqal/actions/workflows/deploy-wheels.yml)
 
-<img src="logo.png#gh-light-mode-only" align="right" width="160px">
-<img src="logo_mono.png#gh-dark-mode-only" align="right" width="160px"/>
+<img src="https://github.com/oqc-community/rasqal/blob/develop/logo.png#gh-light-mode-only" align="right" width="160px">
+<img src="https://github.com/oqc-community/rasqal/blob/develop/logo_mono.png#gh-dark-mode-only" align="right" width="160px"/>
 
 Rasqal is a quantum-classical hybrid runtime which runs QIR in a fully dynamic fashion, building up quantum circuits on the fly and executing them against a provided quantum backend.
 It uses symbolic execution and heavily deferred execution to perform code transformations, optimizations and lowering to power the circuit synthesis.
