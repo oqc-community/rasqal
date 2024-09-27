@@ -3,7 +3,7 @@ import os
 from qsharp import init, TargetProfile
 from rasqal.runtime import RasqalRunner
 
-from utils import RuntimeMock
+from utils import TracingRuntime
 
 directory_path = os.path.dirname(os.path.abspath(__file__))
 
@@ -18,7 +18,7 @@ def run_sandbox():
     # So Namespace.EntryMethod(...) will then generate the QIR you want.
     sandbox = qsharp.compile("Sandbox.Main()")
 
-    runtime = RuntimeMock()
+    runtime = TracingRuntime()
 
     runner = RasqalRunner(runtime)
     results = runner.run_ll(str(sandbox))
