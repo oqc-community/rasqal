@@ -747,7 +747,7 @@ impl QIREvaluator {
         self.eval_trunc(inst, graph, context);
       }
       InstructionOpcode::ZExt | InstructionOpcode::FPExt | InstructionOpcode::SExt => {
-        todo!("{}", inst.print_to_string().to_string())
+        self.eval_ext(inst, graph, context);
       }
       InstructionOpcode::FPToUI => {
         self.eval_numeric_cast(inst, graph, context);
@@ -1261,7 +1261,11 @@ impl QIREvaluator {
         let copy_target = parse_as_value(inst, 0).expect("Should be a reference.");
         graph.Expression(Expression::Clone(copy_target), Some(ref_id));
       }
-      "__quantum__rt__array_create" | "__quantum__rt__array_create_1d" => {
+      // __quantum__rt__memory_allocate is an undocumented method that just assigns memory for a tuple, seemingly.
+      // As it's undocumented and rarely used we'll just treat it as an array assignment for now.
+      "__quantum__rt__array_create"
+      | "__quantum__rt__array_create_1d"
+      | "__quantum__rt__memory_allocate" => {
         // We don't care about sizes, we dynamically allocate them anyway.
         let ref_id = get_ref_id_from_instruction(inst.borrow());
         graph.Assign(ref_id, Value::Array(Vec::new()));
@@ -1494,6 +1498,17 @@ impl QIREvaluator {
     let val = self
       .as_value(operand_to_value!(inst, 0), graph, context)
       .expect("Int to pointer unresolvable.");
+    let ref_id = get_ref_id_from_instruction(inst.borrow());
+    graph.Assign(ref_id, val);
+  }
+
+  fn eval_ext(
+    &self, inst: &Ptr<InstructionValue>, graph: &Ptr<AnalysisGraphBuilder>,
+    context: &Ptr<EvaluationContext>
+  ) {
+    let val = self
+      .as_value(operand_to_value!(inst, 0), graph, context)
+      .expect("ext value unresolvable.");
     let ref_id = get_ref_id_from_instruction(inst.borrow());
     graph.Assign(ref_id, val);
   }

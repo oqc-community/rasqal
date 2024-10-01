@@ -1,0 +1,14 @@
+[project]
+name = "rasqal_examples"
+version = "0.0.1"
+requires-python = ">=3.10"
+description = "A hybrid quantum-classical analysis/solving runtime."
+authors = []
+
+dependencies = [
+    "rasqal>=1.6"
+]
+
+[project.urls]
+Repository = "https://github.com/oqc-community/rasqal.git"
+Issues = "https://github.com/oqc-community/rasqal/issues"
