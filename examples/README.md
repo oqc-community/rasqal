@@ -1,12 +1,12 @@
 ## Examples
 
-All dependencies to run the examples are installed into the Rasqal venv if you are building normally.
-If you can't run the full build, use `./bulid.ps1 -t "initialize-examples"` to install a Rasqal versio from pypi as a replacement.
+**Running examples without building Rasqal:** Install [poetry](https://python-poetry.org/) and do `poetry update` in `rasqal/examples` which will set up the venv for you. You can then run `poetry run python examples.py` to just run the script or use your favourite IDE to debug.
 
-All files can be run directly.
+If you've already built Rasqal via its build script its venv will have all the dependencies necessary so re-use that.
 
-**Examples.py** holds examples of how to use Rasqals Python APIs to run QIR.
+Note: all our examples are built using the old Q# compiler as Rasqal can exploit its fully interwoven classical LLVM instructions. 
 
-**Sandbox.py** runs the sandbox Q# project in `qsharp/src`.
-Modify the project as you need and then run the Python file to see how Rasqal reacts.
-Currently restricted to adaptive profile QIR.
+**Examples.py** holds runnable examples of Rasqal including returned value, arguments, and custom backends. 
+Source for most of the examples can be found in `src/tests/qsharp`. 
+
+**Sandbox.py** runs the sandbox Q# project in `qsharp/src`. This uses the new Q# compiler so instruction set is limited.
