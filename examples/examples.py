@@ -41,7 +41,6 @@ def base_profile_bell():
     }
     """
     print(f"Running base-profile-bell.")
-    # TODO: Bell state is reversed, has 01 and 10 at 50/50. Check QIR.
     runner = fetch_runner(4)
     results = runner.run_ll(read_qir_file("base-profile-bell.ll"))
 
@@ -63,7 +62,7 @@ def full_bell():
     }
     """
     print(f"Running full-bell.")
-    runner = fetch_runner(4, True)
+    runner = fetch_runner(4)
     results = runner.run_ll(read_qir_file("full-bell.ll"))
 
     # IsResultOne on a qubit register is interpreted as asking which value - 0 or 1 - is
