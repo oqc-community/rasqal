@@ -24,9 +24,6 @@ task check -depends check-licenses
 task format -depends format-rust, format-python
 task pypi-build -depends build, audit-rasqal, check
 
-# Task should not be invoked if you're building and installing Rasqal locally.
-task initialize-examples -depends install-rasqal-from-pypi, setup-examples, run-examples
-
 task format-python {
     Invoke-LoggedCommand -workingDirectory $Root {
         pip install ruff
@@ -86,13 +83,6 @@ task test-rasqal -depends build-rasqal {
     Invoke-LoggedCommand -workingDirectory $Root {
         pip install pytest
         pytest .
-    }
-}
-
-# Used to install and run the examples without building Rasqal fully.
-task install-rasqal-from-pypi -depends check-environment {
-    Invoke-LoggedCommand -workingDirectory $Root {
-        pip install rasqal
     }
 }
 

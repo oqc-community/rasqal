@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "rasqal-examples"
+version = "0.0.1"
+description = "Code examples for Rasqal."
+authors = []
+
+[tool.poetry.dependencies]
+python = "~=3.10"
+rasqal = "~=0.1.6"
+qsharp = "~=1.9.0"
+
+[[tool.poetry.source]]
+name = "PyPI"
+priority = "primary"
