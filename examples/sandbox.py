@@ -18,9 +18,7 @@ def run_sandbox():
     # So Namespace.EntryMethod(...) will then generate the QIR you want.
     sandbox = qsharp.compile("Sandbox.Main()")
 
-    runtime = TracingRuntime()
-
-    runner = RasqalRunner(runtime)
+    runner = RasqalRunner(TracingRuntime())
     results = runner.run_ll(str(sandbox))
 
     print(f"Sandbox results: {results}")

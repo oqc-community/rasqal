@@ -1,14 +1,14 @@
-[project]
-name = "rasqal_examples"
+[tool.poetry]
+name = "rasqal-examples"
 version = "0.0.1"
-requires-python = ">=3.10"
-description = "A hybrid quantum-classical analysis/solving runtime."
+description = "Code examples for Rasqal."
 authors = []
 
-dependencies = [
-    "rasqal>=1.6"
-]
+[tool.poetry.dependencies]
+python = "~=3.10"
+rasqal = "~=0.1.6"
+qsharp = "~=1.9.0"
 
-[project.urls]
-Repository = "https://github.com/oqc-community/rasqal.git"
-Issues = "https://github.com/oqc-community/rasqal/issues"
+[[tool.poetry.source]]
+name = "PyPI"
+priority = "primary"
