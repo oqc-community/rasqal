@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
-use crate::analysis::{AnalysisResult, QuantumProjection};
+use crate::analysis::projections::{AnalysisResult, QuantumProjection};
 use crate::graphs::CallableAnalysisGraph;
 use crate::hardware::Qubit;
 use crate::smart_pointers::Ptr;

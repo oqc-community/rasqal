@@ -7,6 +7,7 @@ from ._native import (
     initialize_file_logger,
     initialize_commandline_logger,
     DEFAULT_LOG_FILE,  # noqa
+    DEFAULT_LOG_FOLDER,  # noqa
 )
 
 

@@ -7,6 +7,8 @@ from .adaptors import RuntimeAdaptor
 
 DEFAULT_LOG_FILE = ""
 
+DEFAULT_LOG_FOLDER = ""
+
 def initialize_file_logger(file_path: str):
     pass
 

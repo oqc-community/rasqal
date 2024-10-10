@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
-use crate::analysis::AnalysisResult;
+use crate::analysis::projections::AnalysisResult;
 use crate::features::QuantumFeatures;
 use crate::hardware::Qubit;
 use crate::python::RequiredFeatures;
