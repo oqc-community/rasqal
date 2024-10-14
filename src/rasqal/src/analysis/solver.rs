@@ -206,15 +206,13 @@ impl AnalysisQubit {
 
   pub fn is_entangled(&self) -> bool { !self.tangles.is_empty() }
 
-  // TODO: Remove self_pointer and decide how to deal with this. Don't want to steal the
-  //  borrow really.
-  pub fn entangle(&self, self_pointer: &Ptr<AnalysisQubit>, other: &Ptr<AnalysisQubit>) {
+  pub fn entangle(&self, other: &Ptr<AnalysisQubit>) {
     if self.is_entangled_with(&other.index) {
       return;
     }
 
-    let tangle = Ptr::from(Tangle::from_qubits(self_pointer, other));
-    with_mutable!(self_pointer.tangles.insert(other.index, tangle.clone()));
+    let tangle = Ptr::from(Tangle::from_qubits(&Ptr::from(self), other));
+    with_mutable_self!(self.tangles.insert(other.index, tangle.clone()));
     with_mutable!(other.tangles.insert(self.index, tangle));
   }
 
@@ -560,7 +558,7 @@ impl EntanglementCluster {
   pub fn entangle(&self, left: &i64, right: &i64) {
     if let Some(rqubit) = self.qubits.get(right) {
       if let Some(lqubit) = self.qubits.get(left) {
-        rqubit.entangle(rqubit, lqubit);
+        rqubit.entangle(lqubit);
       }
     }
   }
