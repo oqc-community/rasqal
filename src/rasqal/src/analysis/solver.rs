@@ -255,7 +255,7 @@ impl AnalysisQubit {
           results.push(EntanglementMetadata::with_via(
             *key,
             current_qubit.clone(),
-            (max / entangled) * 100.
+            max / entangled
           ));
           recurse_chains(
             key,
@@ -1312,7 +1312,7 @@ impl ResultFragment {
     }
 
     ResultFragment {
-      rolling_probability: 100.0 - result.rolling_probability,
+      rolling_probability: 1.0 - result.rolling_probability,
       fragment: flipped_fragments
     }
   }
