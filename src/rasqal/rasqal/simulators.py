@@ -3,8 +3,6 @@
 
 from typing import Dict
 
-from qiskit.providers.models import QasmBackendConfiguration
-
 from qiskit import QiskitError, QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 
@@ -71,14 +69,9 @@ class QASMRuntime(RuntimeAdaptor):
         self.qubit_count = qubit_count
 
     def execute(self, builder: QASMBuilder) -> Dict[str, int]:
-        aer_config = QasmBackendConfiguration.from_dict(
-            AerSimulator._DEFAULT_CONFIGURATION
-        )
-        aer_config.n_qubits = builder.circuit.num_qubits
-        qasm_sim = AerSimulator(aer_config)
+        qasm_sim = AerSimulator()
 
         circuit = builder.circuit
-        # TODO: Needs a more nuanced try/catch. Some exceptions we should catch, others we should re-throw.
         try:
             job = qasm_sim.run(transpile(circuit, qasm_sim), shots=builder.shot_count)
             results = job.result()
