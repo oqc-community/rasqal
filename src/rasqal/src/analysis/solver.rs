@@ -1812,6 +1812,12 @@ impl QuantumSolver {
     );
 
     for qb in controls {
+      // If a single iteration drops entanglement we need to re-add the qubit for analysis.
+      // TODO: Rethink.
+      if !target_cluster.contains(&target.index) {
+        target_cluster.add(self.qubit_for(&target.index));
+      }
+
       target_cluster.CX(&qb.index, &target.index, radians);
     }
 
@@ -1845,6 +1851,12 @@ impl QuantumSolver {
     );
 
     for qb in controls {
+      // If a single iteration drops entanglement we need to re-add the qubit for analysis.
+      // TODO: Rethink.
+      if !target_cluster.contains(&target.index) {
+        target_cluster.add(self.qubit_for(&target.index));
+      }
+
       target_cluster.CY(&qb.index, &target.index, radians);
     }
 
@@ -1878,7 +1890,13 @@ impl QuantumSolver {
     );
 
     for qb in controls {
-      target_cluster.CY(&qb.index, &target.index, radians);
+      // If a single iteration drops entanglement we need to re-add the qubit for analysis.
+      // TODO: Rethink.
+      if !target_cluster.contains(&target.index) {
+        target_cluster.add(self.qubit_for(&target.index));
+      }
+
+      target_cluster.CZ(&qb.index, &target.index, radians);
     }
 
     if self.is_tracing() {
