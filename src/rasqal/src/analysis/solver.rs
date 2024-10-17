@@ -1082,7 +1082,7 @@ impl MatrixFragment {
 
       result.push(format!(
         "[{}, {}, {}, {}]",
-        first_row.get(0).unwrap(),
+        first_row.get(3).unwrap(),
         second_row.get(3).unwrap(),
         third_row.get(3).unwrap(),
         fourth_row.get(3).unwrap()
