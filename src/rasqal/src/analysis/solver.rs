@@ -347,14 +347,14 @@ impl AnalysisQubit {
       &gate.tensor(&MatrixFragment::id())
     };
 
-    let inverted_gate = gate.invert();
+    let inverted_gate = expanded_gate.invert();
     let mut unentangled = Vec::new();
     for tangle in self.tangles.values() {
       // If our actual target is inverted, invert the matrix too.
       let applied_gate = if tangle.right.index == self.index {
         &inverted_gate
       } else {
-        gate
+        expanded_gate
       };
 
       let mut before = None;
