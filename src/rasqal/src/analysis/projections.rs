@@ -11,7 +11,6 @@ use crate::runtime::{ActiveTracers, TracingModule};
 use crate::smart_pointers::Ptr;
 use crate::{with_mutable, with_mutable_self};
 use log::{log, Level};
-use ndarray::{array, Array2};
 use num::range;
 use num::traits::FloatConst;
 use num_complex::{Complex, Complex64, ComplexFloat};
