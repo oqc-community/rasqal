@@ -64,7 +64,7 @@ impl Tangle {
       let mut eleft = Ptr::from(EntangledQubit::new(left.index, left.trace_module.clone()));
       let mut eright = Ptr::from(EntangledQubit::new(right.index, right.trace_module.clone()));
       let tangle = Ptr::from(Tangle::new(eleft.clone(), Ptr::from(EntangledFragment::new(left.state.matrix_fragment.expand(&right.state.matrix_fragment))), eright.clone()));
-
+      log!(Level::Info, "After tangle: {}", tangle);
       eleft.tangles.insert(eright.index, tangle.clone());
       eright.tangles.insert(eleft.index, tangle);
       (eleft, eright)
@@ -84,6 +84,7 @@ impl Tangle {
         ent_right.state_matrix()
       };
 
+      // TODO: Merged values are going to be a 16x16, need to fetch proper values out.
       let merged = left_state.matrix_fragment.expand(&right_state.matrix_fragment);
       let tangle = Ptr::from(Tangle::new(ent_left.clone(),
         Ptr::from(EntangledFragment::new(merged)),
@@ -1448,9 +1449,11 @@ pub struct ResultFragment {
   rolling_probability: f64,
   fragment: HashMap<i64, i16>,
 
-  /// Max number of qubits that are actually measured. Indexes do not need to be sequential, so
-  /// you can measure qubits 5, 75, 240 and 700 and this will simply be 4. Used to pad out
-  /// unknowable values if a qubit is early in the analysis chain.
+  /// Shared pointer to set of qubits that are actually measured across the entire circuit.
+  /// Indexes do not need to be sequential, so you can measure qubits 5, 75, 240 and 700 and this
+  /// will simply be 4. Used to pad out unknowable values if a qubit is early in the analysis chain.
+  ///
+  /// If you want the qubits actually covered by this fragment ook at the fragment map.
   measureable_qubits: Ptr<HashSet<i64>>
 }
 
@@ -1680,13 +1683,20 @@ impl ResultsSynthsizer {
     let mut results = Vec::new();
 
     // Evaluate the lower bound now we have every current potential result.
-    let lower_bound = self
-      .fragments
-      .iter()
-      .map(|val| val.rolling_probability)
-      .reduce(f64::max)
-      .unwrap()
-      - self.probability_range;
+    let mut qubit_lower_bounds = HashMap::new();
+    for fragment in self.fragments.iter() {
+      let lower_bound = fragment.rolling_probability - self.probability_range;;
+      for key in fragment.fragment.keys() {
+        // If our boundary value is already higher, just continue.
+        if let Some(val) = qubit_lower_bounds.get(key) {
+          if val > &lower_bound {
+            continue;
+          }
+        }
+
+        qubit_lower_bounds.insert(*key, lower_bound);
+      }
+    }
 
     // Filter out duplicated values from results.
     // TODO: We need a more efficient way to filter out duplicates, preferably finding them earlier.
@@ -1700,11 +1710,20 @@ impl ResultsSynthsizer {
     let mut duplicated = HashSet::new();
 
     // Filter out the ones which don't breach the boundary.
-    let mut filtered_fragments = self
-      .fragments
-      .iter()
-      .filter(|val| val.rolling_probability >= lower_bound)
-      .collect::<Vec<_>>();
+    let mut filtered_fragments = Vec::new();
+    for fragment in self.fragments.iter() {
+      let mut skip = false;
+      for mqb in fragment.fragment.keys() {
+        if qubit_lower_bounds.get(mqb).unwrap() > &fragment.rolling_probability {
+          skip = true;
+        }
+      }
+
+      if !skip {
+        filtered_fragments.push(fragment);
+      }
+    }
+
     for fragment in filtered_fragments.iter() {
       let mut composite = (*fragment).clone();
       for overlay_fragment in filtered_fragments.iter() {
@@ -1712,8 +1731,16 @@ impl ResultsSynthsizer {
           continue;
         }
 
+        let composite_lower_bound = composite.fragment.keys().map(|qb| *qubit_lower_bounds.get(&qb).unwrap()).reduce(f64::max).unwrap();
+        let overlay_lower_bound = overlay_fragment.fragment.keys().map(|qb| *qubit_lower_bounds.get(&qb).unwrap()).reduce(f64::max).unwrap();
+        let lower_bound = if composite_lower_bound < overlay_lower_bound {
+          composite_lower_bound
+        } else {
+          overlay_lower_bound
+        };
+
         // Break if we get to a point where this fragment will drop out of prediction range.
-        if fragment.rolling_probability * overlay_fragment.rolling_probability < lower_bound {
+        if composite.rolling_probability * overlay_fragment.rolling_probability < lower_bound {
           break;
         }
 
@@ -1721,7 +1748,7 @@ impl ResultsSynthsizer {
       }
 
       let composite_key = composite.to_string();
-      if composite.rolling_probability >= lower_bound && !duplicated.contains(&composite_key) {
+      if !duplicated.contains(&composite_key) {
         composite.fill_empty(self.register_size);
         results.push(SolverResult::from_result_fragment(&composite));
         duplicated.insert(composite_key);
