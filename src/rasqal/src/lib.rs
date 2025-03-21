@@ -16,6 +16,7 @@
 #![feature(strict_provenance)]
 #![feature(is_sorted)]
 #![feature(let_chains)]
+#![feature(is_none_or)]
 extern crate core;
 
 use log::{log, log_enabled, Level, LevelFilter};

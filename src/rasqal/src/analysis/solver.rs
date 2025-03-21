@@ -118,11 +118,28 @@ impl Tangle {
       || self.state.get(3, 0) != &czero
       || self.state.get(3, 1) != &czero
   }
+
+  fn stringify(&self, indent_level: i32) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut base_indent = String::new();
+    for multiplier in 0..indent_level {
+      base_indent = format!("{}    ", base_indent);
+    }
+    let indent = format!("{}    ", base_indent);
+    result.push(format!(
+      "{}<{}~{}>:\n",
+      indent, self.left.index, self.right.index
+    ));
+    for matrix_fragment in &self.state.stringify_matrix() {
+      result.push(format!("{}{}\n", indent, matrix_fragment));
+    }
+    result
+  }
 }
 
 impl Display for Tangle {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_str(&format!("\nQ{}<->Q{}\n{}", self.left.index, self.right.index, self.state))
+    f.write_str(&*self.stringify(0).join(""))
   }
 }
 
@@ -449,11 +466,6 @@ impl EntangledQubit {
 
     let is_tracing = self.is_tracing();
     let mut tracer = Vec::new();
-    if is_tracing {
-      tracer.push(format!(
-        "\nQ{}:",
-        self.index));
-    }
 
     if let Some(tangle) = self.tangles.get(&other.index) {
       // If our actual target is inverted, invert the matrix too.
@@ -488,7 +500,8 @@ impl EntangledQubit {
         }
 
         tracer.push(format!(
-          "\n<{}~{}>:\n{}",
+          "\nQ{} <{}~{}>:\n{}",
+          self.index,
           tangle.left.index,
           tangle.right.index,
           composite.join("\n")
@@ -541,7 +554,7 @@ impl EntangledQubit {
     }
   }
 
-  fn stringify(&self, indent_level: i32) -> Vec<String> {
+  fn stringify(&self, indent_level: i32, already_exists: Option<&HashSet<String>>) -> Vec<String> {
     let mut result = Vec::new();
     let mut base_indent = String::new();
     for multiplier in 0..indent_level {
@@ -551,17 +564,17 @@ impl EntangledQubit {
 
     result.push(format!("{}{{\n", base_indent));
     if !self.tangles.is_empty() {
-      let mut tangles = self.tangles.iter().collect::<Vec<_>>();
+      let mut tangles = self.tangles.iter().filter(|tang| already_exists.is_none_or(|val| !val.contains(&format!("{}-{}", tang.1.left.index, tang.1.right.index)))).collect::<Vec<_>>();
+
+      // If we've filtered out every tangle in this qubit then just ignore it.
+      if tangles.is_empty() {
+        return Vec::new();
+      }
+
       tangles.sort_by_key(|val| val.0);
-      for (index, state) in tangles {
-        result.push(format!("{}\n", indent));
-        result.push(format!(
-          "{}<{}~{}>:\n",
-          indent, state.left.index, state.right.index
-        ));
-        for matrix_fragment in &state.state.stringify_matrix() {
-          result.push(format!("{}{}\n", indent, matrix_fragment));
-        }
+      for (index, tangle) in tangles {
+
+        result.append(&mut tangle.stringify(indent_level));
       }
     }
 
@@ -572,7 +585,7 @@ impl EntangledQubit {
 
 impl Display for EntangledQubit {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    for line in self.stringify(0) {
+    for line in self.stringify(0, None) {
       f.write_str(&line);
     }
     f.write_str("")
@@ -723,7 +736,7 @@ impl AnalysisQubit {
 
   fn stringify(&self, indent_level: i32) -> Vec<String> {
     match self {
-      Entangled(ent) => ent.stringify(indent_level),
+      Entangled(ent) => ent.stringify(indent_level, None),
       Reference(iso) => iso.stringify(indent_level),
     }
   }
@@ -756,6 +769,10 @@ impl EntanglementCluster {
   }
 
   fn is_tracing(&self) -> bool { self.trace_module.has(ActiveTracers::Solver) }
+
+  pub fn get(&self, index: &i64) -> Option<&Ptr<EntangledQubit>> {
+    self.qubits.get(index)
+  }
 
   pub fn spans(&self) -> Keys<'_, i64, Ptr<EntangledQubit>> { self.qubits.keys() }
 
@@ -942,15 +959,14 @@ impl Display for EntanglementCluster {
       f.write_str("((\n");
 
       let mut sorted_qubits = self.qubits.values().collect::<Vec<_>>();
-
       sorted_qubits.sort_by_key(|val| val.index);
-      f.write_str(
-        &sorted_qubits
-          .iter()
-          .map(|val| val.stringify(1).join(""))
-          .collect::<Vec<_>>()
-          .join("")
-      );
+      let mut seen = HashSet::new();
+      for qb in sorted_qubits {
+        f.write_str(&*qb.stringify(1, Some(&seen)).join(""));
+        for cache_key in qb.tangles.iter().map(|val | String::from(format!("{}-{}", val.1.left.index, val.1.right.index))) {
+          seen.insert(cache_key);
+        }
+      }
       f.write_str(")),\n")
     }
   }
@@ -1874,27 +1890,27 @@ impl QuantumSolver {
   pub fn measure(&self, qb: &Qubit) {
     let mut tracing_message = None;
     if self.is_tracing() {
-      let addendum = if let Some(cluster) = self.clusters.get(&qb.index) {
+      tracing_message = Some(if let Some(cluster) = self.clusters.get(&qb.index) {
         let clustered_with = cluster
           .spans()
           .filter(|val| *val != &qb.index)
           .map(|val| val.to_string())
           .collect::<Vec<_>>()
           .join(",");
-        if !clustered_with.is_empty() {
-          format!(", clustered with [{}]", clustered_with)
-        } else {
-          String::new()
-        }
+
+        format!(
+          "\nMeasuring Q{}{}:\n{}",
+          qb.index,
+          clustered_with,
+          cluster.get(&qb.index).unwrap()
+        )
       } else {
-        String::new()
-      };
-      tracing_message = Some(format!(
-        "\nMeasuring Q{}{}:\n{}",
-        qb.index,
-        addendum,
-        self.qubit_for(&qb.index)
-      ));
+        format!(
+          "\nMeasuring Q{}:\n{}",
+          qb.index,
+          self.qubit_for(&qb.index)
+        )
+      });
     }
 
     let result = if let Some(cluster) = self.clusters.get(&qb.index) {
