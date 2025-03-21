@@ -2337,7 +2337,7 @@ mod tests {
   fn bell_test() {
     let solver = QuantumSolver::with_trace(Ptr::from(TracingModule::with(ActiveTracers::all())));
     let (q0, q1) = (Qubit::new(0), Qubit::new(1));
-    solver.Had(&q1);
+    solver.Had(&q0);
     solver.CX(&vec![q1.clone()], &q0, &PI);
     solver.measure(&q0);
     solver.measure(&q1);
