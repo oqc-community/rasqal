@@ -298,6 +298,7 @@ bitflags! {
     const Projections = 1 << 2;
     const Graphs = 1 << 3;
     const Solver = 1 << 4;
+    const Detailed = 1 << 5; // Activates more in-depth debugging for other modes. Mostly useful for debugging.
   }
 }
 
@@ -326,6 +327,26 @@ impl TracingModule {
   pub fn is_active(&self) -> bool { !self.tracers.is_empty() }
 
   pub fn has(&self, check_against: ActiveTracers) -> bool { self.tracers.contains(check_against) }
+
+  pub fn solver_detailed(&self) -> bool {
+    self.has(ActiveTracers::Solver & ActiveTracers::Detailed)
+  }
+
+  pub fn solver(&self) -> bool {
+    self.has(ActiveTracers::Solver)
+  }
+
+  pub fn runtime(&self) -> bool {
+    self.has(ActiveTracers::Runtime)
+  }
+
+  pub fn projections(&self) -> bool {
+    self.has(ActiveTracers::Projections)
+  }
+
+  pub fn graph(&self) -> bool {
+    self.has(ActiveTracers::Graphs)
+  }
 }
 
 #[derive(Clone, Default)]

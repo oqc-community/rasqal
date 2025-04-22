@@ -22,7 +22,7 @@ use std::collections::{HashMap, HashSet};
 use std::f64::consts::PI;
 use std::fmt::{Display, Formatter, Write};
 use std::iter::zip;
-use std::ops::{Deref, Index, Mul, MulAssign};
+use std::ops::{Add, Deref, Index, Mul, MulAssign};
 use std::rc::Rc;
 use std::time::Instant;
 use faer::{mat, Mat};
@@ -59,41 +59,74 @@ impl Tangle {
     Tangle { left, state, right }
   }
 
-  pub fn from_analysis_qubits(left: &AnalysisQubit, right: &AnalysisQubit) -> (Ptr<EntangledQubit>, Ptr<EntangledQubit>) {
+  pub fn from_analysis_qubits(left: &AnalysisQubit, right: &AnalysisQubit, tracer: &Ptr<TracingModule>) -> (Ptr<EntangledQubit>, Ptr<EntangledQubit>) {
     if let Reference(left) = left && let Reference(right) = right {
       let mut eleft = Ptr::from(EntangledQubit::new(left.index, left.trace_module.clone()));
       let mut eright = Ptr::from(EntangledQubit::new(right.index, right.trace_module.clone()));
+
+      if tracer.solver_detailed() {
+        log!(Level::Info, "\nBuilding from isolated states.\nLeft: \n{} \n\nRight: \n{}", left.state.matrix_fragment, right.state.matrix_fragment);
+      }
+
       let tangle = Ptr::from(Tangle::new(eleft.clone(), Ptr::from(EntangledFragment::new(right.state.matrix_fragment.expand(&left.state.matrix_fragment))), eright.clone()));
+      if tracer.solver_detailed() {
+        log!(Level::Info, "\nResult: \n{}", tangle.state.matrix_fragment);
+      }
+
       eleft.tangles.insert(eright.index, tangle.clone());
       eright.tangles.insert(eleft.index, tangle);
       (eleft, eright)
     } else {
-      let ent_left = left.as_entangled();
-      let ent_right = right.as_entangled();
+      fn build_density_state(qb: &AnalysisQubit, left_bit: bool) -> EntangledFragment {
+        match qb {
+          Reference(ref_state) => ref_state.state.deref().clone(),
+          Entangled(ent_state) => {
+            let entangled_state = ent_state.state_matrix();
+            let prob = if !left_bit {
+              entangled_state.get(2, 2).re + entangled_state.get(3, 3).re
+            } else {
+              entangled_state.get(1, 1).re + entangled_state.get(4, 4).re
+            };
+            let link_strength = if prob > 0.5 {
+              prob - (0.5 - prob)
+            } else {
+              prob
+            };
 
-      let left_state = if let Reference(iso_left) = left {
-        EntangledFragment::new(iso_left.state.matrix_fragment.expand(&MatrixFragment::id()))
-      } else {
-        ent_left.state_matrix()
-      };
+            EntangledFragment::new(MatrixFragment::new(mat![
+              [C!(1.0 - prob, 0.), C!(link_strength, 0.)],
+              [C!(link_strength, 0.), C!(prob, 0.)]
+            ]))
+          }
+        }
+      }
 
-      let right_state = if let Reference(iso_right) = right {
-        EntangledFragment::new(iso_right.state.matrix_fragment.expand(&MatrixFragment::id()))
-      } else {
-        ent_right.state_matrix()
-      };
+      let mut left_state = build_density_state(left, true);
+      let mut right_state = build_density_state(right, false);
 
-      // TODO: Merged values are going to be a 16x16, need to fetch proper values out.
-      let merged = left_state.matrix_fragment.expand(&right_state.matrix_fragment);
-      let tangle = Ptr::from(Tangle::new(ent_left.clone(),
-        Ptr::from(EntangledFragment::new(merged)),
-        ent_right.clone()
+      if tracer.solver_detailed() {
+        log!(Level::Info, "\nBuilding from multi-entangled states.\nLeft: \n{} \n\nRight: \n{}", left_state, right_state);
+      }
+
+      let expanded = right_state.matrix_fragment.expand(&left_state.matrix_fragment);
+      if tracer.solver_detailed() {
+        log!(Level::Info, "\nResult: \n{}", expanded)
+      }
+
+      // Fetch a pointer to our entangled qubit or transform our reference qubit into a free entangled one.
+      let entangled_left = left.as_entangled();
+      let entangled_right = right.as_entangled();
+      let tangle = Ptr::from(
+        Tangle::new(
+          entangled_left.clone(),
+          Ptr::from(EntangledFragment::new(expanded)),
+          entangled_right.clone()
       ));
 
-      with_mutable!(ent_left.tangles.insert(ent_right.index, tangle.clone()));
-      with_mutable!(ent_right.tangles.insert(ent_left.index, tangle));
+      with_mutable!(entangled_left.tangles.insert(entangled_right.index, tangle.clone()));
+      with_mutable!(entangled_right.tangles.insert(entangled_left.index, tangle));
 
-      (ent_left.clone(), ent_right.clone())
+      (entangled_left.clone(), entangled_right.clone())
     }
   }
 
@@ -143,7 +176,6 @@ impl Display for Tangle {
   }
 }
 
-
 /// Solved entanglement metadata between qubits. Holds the ratio of entanglement and with what
 /// qubit, optionally if the resultant entanglement is inferred by another entanglement.
 ///
@@ -155,25 +187,41 @@ pub struct EntanglementMetadata {
   /// Entanglement is inferred via this qubit.
   via: Option<i64>,
 
-  /// Entanglement ratio with this particular qubit.
-  ratio: f64
+  /// Left is the owning qubit, right is the linked qubit. Put another way, the index in `qubit`
+  /// refers to the right bit.
+  OO: f64,
+  OI: f64,
+  IO: f64,
+  II: f64
 }
 
 impl EntanglementMetadata {
-  pub fn new(qubit: i64, ratio: f64) -> EntanglementMetadata {
+  pub fn new(qubit: i64, OO: f64, OI: f64, IO: f64, II: f64) -> EntanglementMetadata {
     EntanglementMetadata {
       qubit,
       via: None,
-      ratio
+      OO,
+      OI,
+      IO,
+      II
     }
   }
 
-  pub fn with_via(qubit: i64, via: i64, ratio: f64) -> EntanglementMetadata {
+  pub fn with_via(qubit: i64, via: i64, OO: f64, OI: f64, IO: f64, II: f64) -> EntanglementMetadata {
     EntanglementMetadata {
       qubit,
       via: Some(via),
-      ratio
+      OO,
+      OI,
+      IO,
+      II
     }
+  }
+
+  /// Returns max entanglement ratio for this metadata. Gives an idea about how
+  /// entangled these qubits are.
+  pub fn ratio(&self) -> f64 {
+    *[self.OO, self.OI, self.IO, self.II].into_iter().reduce(f64::max).unwrap()
   }
 }
 
@@ -212,7 +260,7 @@ impl Display for MeasureAnalysis {
     let tangles = self
       .entangled_with
       .iter()
-      .map(|val| format!("Q{}~{:.2}", val.qubit, val.ratio))
+      .map(|val| if val.ratio > 0. { format!("Q{}~{:.2}", val.qubit, val.ratio) } else { format!("Q{}", val.qubit) })
       .collect::<Vec<_>>();
     let mut additions = String::new();
     if !tangles.is_empty() {
@@ -329,10 +377,24 @@ impl EntangledQubit {
     if self.tangles.len() == 1 {
       self.tangles.iter().next().unwrap().1.state.deref().clone()
     } else {
-      let prob = self.measure().probability;
+      // TODO: Absolutely no clue if this will be accurate.
+      let mut result = mat![
+          [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
+          [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
+          [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
+          [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)]
+        ];
+
+      for tangle in self.tangles.values() {
+        result = result.add(tangle.state.matrix_fragment.matrix.clone());
+      }
+
+      let divisor = self.tangles.len() as f64;
       EntangledFragment::new(MatrixFragment::new(mat![
-        [C!(1.0 - prob, 0.), C!(0.0, 0.)],
-        [C!(0.0, 0.), C!(prob, 0.)]
+        [result.get(0, 0) / divisor, result.get(0, 1) / divisor, result.get(0, 2) / divisor, result.get(0, 3) / divisor],
+        [result.get(1, 0) / divisor, result.get(1, 1) / divisor, result.get(1, 2) / divisor, result.get(1, 3) / divisor],
+        [result.get(2, 0) / divisor, result.get(2, 1) / divisor, result.get(2, 2) / divisor, result.get(2, 3) / divisor],
+        [result.get(3, 0) / divisor, result.get(3, 1) / divisor, result.get(3, 2) / divisor, result.get(3, 3) / divisor],
       ]))
     }
   }
@@ -377,27 +439,31 @@ impl EntangledQubit {
 
         // TODO: Only checks for 11 / 00 entanglement, not reversed, need to see how that
         //  plays out.
-        let entangled = tangle.state.get(3, 0).re;
-        let mut max = tangle.state.get(0, 0).re;
-        let mut next = tangle.state.get(1, 1).re;
-        if next >= max {
-          max = next;
-        }
+        let state = tangle.state.deref().clone();
+        let OO = vec![
+          state.get(1, 0).re,state.get(2, 0).re, state.get(3, 0).re,
+        ].into_iter().reduce(f64::max).unwrap() * 2.;
 
-        next = tangle.state.get(2, 2).re;
-        if next >= max {
-          max = next;
-        }
+        let OI = vec![
+          state.get(1, 0).re,state.get(2, 1).re, state.get(3, 1).re,
+        ].into_iter().reduce(f64::max).unwrap() * 2.;
 
-        next = tangle.state.get(3, 3).re;
-        if next >= max {
-          max = next;
-        }
+        let IO = vec![
+          state.get(2, 0).re,state.get(2, 1).re, state.get(3, 2).re,
+        ].into_iter().reduce(f64::max).unwrap() * 2.;
 
+        let II = vec![
+          state.get(3, 0).re,state.get(3, 1).re, state.get(3, 2).re,
+        ].into_iter().reduce(f64::max).unwrap() * 2.;
+
+        // 0.5 entanglement means fully entangled so an 100% ratio, so we just double it.
         results.push(EntanglementMetadata::with_via(
           *key,
           current_qubit.clone(),
-          max / entangled
+          OO,
+          OI,
+          IO,
+          II
         ));
         recurse_chains(
           key,
@@ -832,14 +898,31 @@ impl EntanglementCluster {
   }
 
   /// Entangles these two qubits if they exist. Does not entangle if not.
-  pub fn entangle(&self, left: AnalysisQubit, right: AnalysisQubit) {
-    if left.is_entangled_with(right.index()) {
+  pub fn entangle(&self, left: &Ptr<ReferenceQubit>, right: &Ptr<ReferenceQubit>) {
+    let analysis_left = if let Some(val) = self.get(&left.index) {
+      Entangled(val.clone())
+    } else {
+      Reference(left.clone())
+    };
+
+    let analysis_right = if let Some(val) = self.get(&right.index) {
+      Entangled(val.clone())
+    } else {
+      Reference(right.clone())
+    };
+
+    if analysis_left.is_entangled_with(analysis_right.index()) {
       return;
     }
 
-    let (ent_left, ent_right) = Tangle::from_analysis_qubits(&left, &right);
-    with_mutable_self!(self.qubits.insert(ent_left.index, ent_left));
-    with_mutable_self!(self.qubits.insert(ent_right.index, ent_right));
+    let (result_left, result_right) = Tangle::from_analysis_qubits(&analysis_left, &analysis_right, &self.trace_module);
+    if !self.qubits.contains_key(&result_left.index) {
+      with_mutable_self!(self.qubits.insert(result_left.index, result_left));
+    }
+
+    if !self.qubits.contains_key(&result_right.index) {
+      with_mutable_self!(self.qubits.insert(result_right.index, result_right));
+    }
   }
 
   pub fn contains(&self, qubit: &i64) -> bool { self.qubits.contains_key(qubit) }
@@ -991,6 +1074,16 @@ impl MatrixFragment {
     }
   }
 
+  /// Default 0 matrix.
+  #[rustfmt::skip]
+  pub fn default() -> MatrixFragment {
+    MatrixFragment::new(
+      mat![
+        [C!(1.0, 0.), C!(0.0, 0.)],
+        [C!(0.0, 0.), C!(0.0, 0.)]
+      ])
+  }
+
   #[rustfmt::skip]
   pub fn id() -> MatrixFragment {
     MatrixFragment::new(
@@ -1006,11 +1099,19 @@ impl MatrixFragment {
 
   pub fn expand(&self, other: &MatrixFragment) -> MatrixFragment {
     let mut length = self.matrix.ncols();
-    if other.matrix.ncols() >= length {
-      length = other.matrix.ncols();
+
+    // Recursively auto-expand until equal sizes.
+    if other.matrix.ncols() != length {
+      if other.matrix.ncols() > length {
+        let expanded_self = MatrixFragment::id().expand(self);
+        return expanded_self.expand(other);
+      } else {
+        let expanded_other = MatrixFragment::id().expand(other);
+        return self.expand(&expanded_other);
+      }
     }
 
-    let mut destination = Mat::zeros(length * 2, length * 2);
+    let mut destination = Mat::zeros(length * length, length * length);
     kron(destination.as_mut(), self.matrix.as_ref(), other.matrix.as_ref());
     MatrixFragment::new(destination)
   }
@@ -1024,45 +1125,6 @@ impl MatrixFragment {
   pub fn invert(&self) -> MatrixFragment {
     // TODO: Need to check if this is accurate.
     return Self::new(self.matrix.reverse_rows_and_cols().to_owned());
-
-    if self.affected_qubits == 1 {
-      Self::new(mat![[*self.get(1, 1), *self.get(1, 0)], [
-        *self.get(0, 1),
-        *self.get(0, 0)
-      ],])
-    } else if self.affected_qubits == 2 {
-      Self::new(mat![
-        [
-          *self.get(3, 3),
-          *self.get(2, 3),
-          *self.get(1, 3),
-          *self.get(0, 3)
-        ],
-        [
-          *self.get(3, 2),
-          *self.get(2, 2),
-          *self.get(1, 2),
-          *self.get(0, 2)
-        ],
-        [
-          *self.get(3, 1),
-          *self.get(2, 1),
-          *self.get(1, 1),
-          *self.get(0, 1)
-        ],
-        [
-          *self.get(3, 0),
-          *self.get(2, 0),
-          *self.get(1, 0),
-          *self.get(0, 0)
-        ],
-      ])
-    } else {
-      panic!(
-        "Can't transpose a matrix covering {} qubits.",
-        self.affected_qubits
-      );
-    }
   }
 
   #[rustfmt::skip]
@@ -1214,91 +1276,89 @@ impl MatrixFragment {
         second_row.get(1).unwrap()
       ));
     } else if dimensions == 4 {
-      let mut first_row = vec![
-        strip(&format!("{:.2}", matrix.get(0, 0))),
-        strip(&format!("{:.2}", matrix.get(1, 0))),
-        strip(&format!("{:.2}", matrix.get(2, 0))),
-        strip(&format!("{:.2}", matrix.get(3, 0))),
-      ];
+      let format_row = |row: usize| -> Vec<String> {
+        let mut row = vec![
+          strip(&format!("{:.2}", matrix.get(0, row))),
+          strip(&format!("{:.2}", matrix.get(1, row))),
+          strip(&format!("{:.2}", matrix.get(2, row))),
+          strip(&format!("{:.2}", matrix.get(3, row))),
+        ];
 
-      let max_length = first_row.iter().map(|val| val.len()).max().unwrap();
-      first_row = first_row
-        .iter()
-        .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
-        .collect::<Vec<_>>();
+        let max_length = row.iter().map(|val| val.len()).max().unwrap();
+        row.iter()
+            .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
+            .collect::<Vec<_>>()
+      };
 
-      let mut second_row = vec![
-        strip(&format!("{:.2}", matrix.get(0, 1))),
-        strip(&format!("{:.2}", matrix.get(1, 1))),
-        strip(&format!("{:.2}", matrix.get(2, 1))),
-        strip(&format!("{:.2}", matrix.get(3, 1))),
-      ];
+      let mut first_row = format_row(0);
+      let mut second_row =  format_row(1);
+      let mut third_row = format_row(2);
+      let mut fourth_row =  format_row(3);
 
-      let max_length = second_row.iter().map(|val| val.len()).max().unwrap();
-      second_row = second_row
-        .iter()
-        .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
-        .collect::<Vec<_>>();
+      let mut push_results = |ind: usize| {
+        result.push(format!(
+          "[{}, {}, {}, {}]",
+          first_row.get(ind).unwrap(),
+          second_row.get(ind).unwrap(),
+          third_row.get(ind).unwrap(),
+          fourth_row.get(ind).unwrap()
+        ));
+      };
 
-      let mut third_row = vec![
-        strip(&format!("{:.2}", matrix.get(0, 2))),
-        strip(&format!("{:.2}", matrix.get(1, 2))),
-        strip(&format!("{:.2}", matrix.get(2, 2))),
-        strip(&format!("{:.2}", matrix.get(3, 2))),
-      ];
-
-      let max_length = third_row.iter().map(|val| val.len()).max().unwrap();
-      third_row = third_row
-        .iter()
-        .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
-        .collect::<Vec<_>>();
-
-      let mut fourth_row = vec![
-        strip(&format!("{:.2}", matrix.get(0, 3))),
-        strip(&format!("{:.2}", matrix.get(1, 3))),
-        strip(&format!("{:.2}", matrix.get(2, 3))),
-        strip(&format!("{:.2}", matrix.get(3, 3))),
-      ];
-
-      let max_length = fourth_row.iter().map(|val| val.len()).max().unwrap();
-      fourth_row = fourth_row
-        .iter()
-        .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
-        .collect::<Vec<_>>();
-
-      result.push(format!(
-        "[{}, {}, {}, {}]",
-        first_row.get(0).unwrap(),
-        second_row.get(0).unwrap(),
-        third_row.get(0).unwrap(),
-        fourth_row.get(0).unwrap()
-      ));
-
-      result.push(format!(
-        "[{}, {}, {}, {}]",
-        first_row.get(1).unwrap(),
-        second_row.get(1).unwrap(),
-        third_row.get(1).unwrap(),
-        fourth_row.get(1).unwrap()
-      ));
-
-      result.push(format!(
-        "[{}, {}, {}, {}]",
-        first_row.get(2).unwrap(),
-        second_row.get(2).unwrap(),
-        third_row.get(2).unwrap(),
-        fourth_row.get(2).unwrap()
-      ));
-
-      result.push(format!(
-        "[{}, {}, {}, {}]",
-        first_row.get(3).unwrap(),
-        second_row.get(3).unwrap(),
-        third_row.get(3).unwrap(),
-        fourth_row.get(3).unwrap()
-      ));
+      push_results(0);
+      push_results(1);
+      push_results(2);
+      push_results(3);
     } else {
-      panic!("Attempted to print matrix of irregular dimensions.")
+      let format_row = |row: usize| -> Vec<String> {
+        let mut row = vec![
+          strip(&format!("{:.2}", matrix.get(0, row))),
+          strip(&format!("{:.2}", matrix.get(1, row))),
+          strip(&format!("{:.2}", matrix.get(2, row))),
+          strip(&format!("{:.2}", matrix.get(3, row))),
+          strip(&format!("{:.2}", matrix.get(4, row))),
+          strip(&format!("{:.2}", matrix.get(5, row))),
+          strip(&format!("{:.2}", matrix.get(6, row))),
+          strip(&format!("{:.2}", matrix.get(7, row)))
+        ];
+
+        let max_length = row.iter().map(|val| val.len()).max().unwrap();
+        row.iter()
+            .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
+            .collect::<Vec<_>>()
+      };
+
+      let mut first_row = format_row(0);
+      let mut second_row =  format_row(1);
+      let mut third_row = format_row(2);
+      let mut fourth_row =  format_row(3);
+      let mut fifth_row =  format_row(4);
+      let mut sixth_row =  format_row(5);
+      let mut seventh_row =  format_row(6);
+      let mut eighth_row =  format_row(7);
+
+      let mut push_results = |ind: usize| {
+        result.push(format!(
+          "[{}, {}, {}, {}, {}, {}, {}, {}]",
+          first_row.get(ind).unwrap(),
+          second_row.get(ind).unwrap(),
+          third_row.get(ind).unwrap(),
+          fourth_row.get(ind).unwrap(),
+          fifth_row.get(ind).unwrap(),
+          sixth_row.get(ind).unwrap(),
+          seventh_row.get(ind).unwrap(),
+          eighth_row.get(ind).unwrap()
+        ));
+      };
+
+      push_results(0);
+      push_results(1);
+      push_results(2);
+      push_results(3);
+      push_results(4);
+      push_results(5);
+      push_results(6);
+      push_results(7);
     }
 
     // Reduce verbosity of the output where we don't need to know about it.
@@ -1358,21 +1418,6 @@ impl StateFragment {
           [C!(1.0, 0.0), C!(0.0, 0.0)],
           [C!(0.0, 0.0), C!(0.0, 0.0)]
         ])
-    }
-  }
-
-  /// Creates a state fragment to represent entanglement between 2 qubits. Needs setup with
-  /// initial qubit values.
-  #[rustfmt::skip]
-  pub fn DefaultEntangled() -> EntangledFragment {
-    StateFragment {
-      matrix_fragment:
-        MatrixFragment::new(mat![
-        [C!(1.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
-        [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
-        [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
-        [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)]
-      ])
     }
   }
 
@@ -1847,17 +1892,20 @@ impl QuantumSolver {
     }
   }
 
-  /// Merges clusters that
+  /// Merges clusters that cover the same qubits.
   fn prepare_cluster(&self, merger: &Vec<&Ptr<ReferenceQubit>>, mergee: &Ptr<ReferenceQubit>) -> &Ptr<EntanglementCluster> {
     let target_cluster = self.cluster_for(&mergee.index);
     for ref_qubit in merger {
       // If clusters are different, merge, entangle our two qubits, then replace reference.
       if let Some(cluster) = self.clusters.get(&ref_qubit.index) && !cluster.contains(&mergee.index){
         target_cluster.merge(cluster);
+        for qb in cluster.spans() {
+          with_mutable_self!(self.clusters.insert(*qb, target_cluster.clone()));
+        }
       }
 
       // Entangle our various qubits.
-      target_cluster.entangle(Reference(mergee.clone()), Reference((*ref_qubit).clone()));
+      target_cluster.entangle(mergee, ref_qubit);
 
       // Remove the previous cluster, it's no longer needed, replace with new merged one.
       with_mutable_self!(self.clusters.insert(ref_qubit.index, target_cluster.clone()));
@@ -1891,15 +1939,16 @@ impl QuantumSolver {
     let mut tracing_message = None;
     if self.is_tracing() {
       tracing_message = Some(if let Some(cluster) = self.clusters.get(&qb.index) {
-        let clustered_with = cluster
+        let mut clustered_with = cluster
           .spans()
           .filter(|val| *val != &qb.index)
           .map(|val| val.to_string())
-          .collect::<Vec<_>>()
-          .join(",");
+          .collect::<Vec<_>>();
+        clustered_with.sort();
+        let clustered_with = clustered_with.join(",");
 
         format!(
-          "\nMeasuring Q{}{}:\n{}",
+          "\nMeasuring Q{}<{}>:\n{}",
           qb.index,
           clustered_with,
           cluster.get(&qb.index).unwrap()
@@ -2251,6 +2300,27 @@ mod tests {
   use std::borrow::Borrow;
   use std::f64::consts::PI;
   use std::fmt::Display;
+
+  #[test]
+  fn ghz_modified_test() {
+    let solver = QuantumSolver::with_trace(Ptr::from(TracingModule::with(ActiveTracers::all())));
+    let (q0, q1, q2, q3, q4, q5) = (Qubit::new(0), Qubit::new(1), Qubit::new(2), Qubit::new(3), Qubit::new(4), Qubit::new(5));
+    solver.Had(&q0);
+    solver.CX(&vec![q0.clone()], &q1, &PI);
+    solver.CX(&vec![q1.clone()], &q2, &PI);
+    solver.X(&q1, &PI);
+
+    solver.measure_all(&vec![&q0, &q1, &q2]);
+    let result = solver.solve();
+
+    let results = result
+        .iter()
+        .filter(|val| val.bitstring == "11" || val.bitstring == "00")
+        .collect::<Vec<_>>();
+    assert_eq!(results.len(), 2);
+    assert!(results[0].probability >= 0.49 && results[0].probability <= 0.51);
+    assert!(results[1].probability >= 0.49 && results[1].probability <= 0.51);
+  }
 
   #[test]
   fn multistate_test() {
