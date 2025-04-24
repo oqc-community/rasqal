@@ -183,6 +183,7 @@ impl Display for Tangle {
 #[derive(Clone)]
 pub struct EntanglementMetadata {
   qubit: i64,
+  identity: String,
 
   /// Entanglement is inferred via this qubit.
   via: Option<i64>,
@@ -199,6 +200,7 @@ impl EntanglementMetadata {
   pub fn new(qubit: i64, OO: f64, OI: f64, IO: f64, II: f64) -> EntanglementMetadata {
     EntanglementMetadata {
       qubit,
+      identity: qubit.to_string(),
       via: None,
       OO,
       OI,
@@ -210,6 +212,7 @@ impl EntanglementMetadata {
   pub fn with_via(qubit: i64, via: i64, OO: f64, OI: f64, IO: f64, II: f64) -> EntanglementMetadata {
     EntanglementMetadata {
       qubit,
+      identity: format!("{}~{}", qubit, via),
       via: Some(via),
       OO,
       OI,
@@ -218,10 +221,16 @@ impl EntanglementMetadata {
     }
   }
 
+  /// A composite identity for this entanglement metadata for making sure duplicate data
+  /// isn't processed.
+  pub fn id(&self) -> &str {
+    self.identity.as_str()
+  }
+
   /// Returns max entanglement ratio for this metadata. Gives an idea about how
   /// entangled these qubits are.
   pub fn ratio(&self) -> f64 {
-    *[self.OO, self.OI, self.IO, self.II].into_iter().reduce(f64::max).unwrap()
+    [self.OO, self.OI, self.IO, self.II].into_iter().reduce(f64::max).unwrap()
   }
 }
 
@@ -260,7 +269,7 @@ impl Display for MeasureAnalysis {
     let tangles = self
       .entangled_with
       .iter()
-      .map(|val| if val.ratio > 0. { format!("Q{}~{:.2}", val.qubit, val.ratio) } else { format!("Q{}", val.qubit) })
+      .map(|val| if val.ratio() > 0. { format!("Q{}~{:.2}", val.qubit, val.ratio()) } else { format!("Q{}", val.qubit) })
       .collect::<Vec<_>>();
     let mut additions = String::new();
     if !tangles.is_empty() {
@@ -1498,7 +1507,7 @@ impl Display for SolverResult {
 pub struct ResultFragment {
   /// Rolling probability of this whole fragment being applicable. Used for filtering.
   rolling_probability: f64,
-  fragment: HashMap<i64, i16>,
+  qubit_values: HashMap<i64, i16>,
 
   /// Shared pointer to set of qubits that are actually measured across the entire circuit.
   /// Indexes do not need to be sequential, so you can measure qubits 5, 75, 240 and 700 and this
@@ -1513,11 +1522,11 @@ impl ResultFragment {
     index: i64, result: i16, probability: f64, measureable_qubits: Ptr<HashSet<i64>>
   ) -> ResultFragment {
     let mut fragment = ResultFragment {
-      fragment: HashMap::default(),
+      qubit_values: HashMap::default(),
       rolling_probability: probability,
       measureable_qubits
     };
-    fragment.fragment.insert(index, result);
+    fragment.qubit_values.insert(index, result);
     fragment
   }
 
@@ -1526,21 +1535,21 @@ impl ResultFragment {
   /// binary calculation.
   pub fn with_flipped(result: &ResultFragment) -> ResultFragment {
     let mut flipped_fragments = HashMap::default();
-    for (key, value) in result.fragment.iter() {
+    for (key, value) in result.qubit_values.iter() {
       let flipped = if *value == 0 { 1 } else { 0 };
       flipped_fragments.insert(*key, flipped);
     }
 
     ResultFragment {
       rolling_probability: 1.0 - result.rolling_probability,
-      fragment: flipped_fragments,
+      qubit_values: flipped_fragments,
       measureable_qubits: result.measureable_qubits.clone()
     }
   }
 
   pub fn add(&mut self, qubit: i64, result: i16, probability: f64) {
     self.rolling_probability = self.rolling_probability * probability;
-    self.fragment.insert(qubit, result);
+    self.qubit_values.insert(qubit, result);
   }
 
   /// If the passed-in fragment can be overlaid this one it then is. Note that this changes the
@@ -1560,8 +1569,8 @@ impl ResultFragment {
 
     // For now, only overlay if there is no collisions.
     let mut insertions = Vec::new();
-    for (key, value) in other.fragment.iter() {
-      if self.fragment.contains_key(key) {
+    for (key, value) in other.qubit_values.iter() {
+      if self.qubit_values.contains_key(key) {
         return;
       } else {
         insertions.push((key, value));
@@ -1569,7 +1578,7 @@ impl ResultFragment {
     }
 
     for (key, value) in insertions {
-      self.fragment.insert(*key, *value);
+      self.qubit_values.insert(*key, *value);
     }
 
     self.rolling_probability = self.rolling_probability * other.rolling_probability
@@ -1579,7 +1588,7 @@ impl ResultFragment {
   pub fn fill_empty(&mut self, register_count: i64) {
     for i in 0..=register_count {
       if !self.measureable_qubits.contains(&i) {
-        self.fragment.insert(i, 0);
+        self.qubit_values.insert(i, 0);
       }
     }
   }
@@ -1588,7 +1597,7 @@ impl ResultFragment {
   pub fn as_bitstring(&self) -> String {
     let mut result = String::new();
     for i in self.measureable_qubits.iter() {
-      if let Some(value) = self.fragment.get(&i) {
+      if let Some(value) = self.qubit_values.get(&i) {
         result.push_str(&value.to_string())
       } else {
         result.push('X')
@@ -1598,7 +1607,7 @@ impl ResultFragment {
   }
 
   /// Is this fragment actually fully resolved with results in every slot?
-  pub fn is_solved(&self) -> bool { self.fragment.len() >= self.measureable_qubits.len() }
+  pub fn is_solved(&self) -> bool { self.qubit_values.len() >= self.measureable_qubits.len() }
 }
 
 impl Display for ResultFragment {
@@ -1627,6 +1636,7 @@ pub struct ResultsSynthsizer {
   /// unmeasured to zero after we've synthesized a result.
   measured_qubits: Ptr<HashSet<i64>>,
 
+  already_processed: HashSet<String>,
   register_size: i64
 }
 
@@ -1640,6 +1650,7 @@ impl ResultsSynthsizer {
       max_entangles_per_add,
       fragments: Vec::default(),
       measured_qubits: Ptr::from(measured_qubits),
+      already_processed: HashSet::new(),
       register_size
     }
   }
@@ -1653,37 +1664,41 @@ impl ResultsSynthsizer {
       measure.probability,
       self.measured_qubits.clone()
     );
-
-    // Any full entanglement gets appended to the default fragment as there is no chance they
-    // will deviate. This can drastically reduce complexity depending upon how reliant the
-    // algorithm is on fully entangled values for their results.
-    let mut removals = HashSet::new();
-
     // Sort our entanglements by coupling strength.
     let mut entanglements = measure.entangled_with.iter().collect::<Vec<_>>();
-    entanglements.sort_by(|a, b| b.ratio.total_cmp(&a.ratio));
+    entanglements.sort_by(|a, b| b.ratio().total_cmp(&a.ratio()));
 
     for ent_meta in entanglements.iter() {
-      // Since we're sorted on this, soon as we see a non-one hundred value we know there
+      // Since we're sorted on this, soon as we see a non-one value we know there
       // will be no others. Ratio is 0.0 to 1.0.
-      if !is_near!(ent_meta.ratio, 1.0) {
+      if !is_near!(ent_meta.ratio(), 1.0) {
         break;
       }
 
-      starter.add(ent_meta.qubit, qubit_result, ent_meta.ratio);
-      removals.insert(ent_meta.qubit);
+      if !is_near!(ent_meta.IO, 1.0) {
+        starter.add(ent_meta.qubit, 0, 1.);
+      }
+
+      if !is_near!(ent_meta.II, 1.0) {
+        starter.add(ent_meta.qubit, 1, 1.);
+      }
+
+      self.already_processed.insert(ent_meta.id().to_string());
     }
 
+    // Add the inverted starter result before doing anything else.
     let mut results = Vec::new();
     results.push(ResultFragment::with_flipped(&starter));
     results.push(starter);
 
-    // Any entangled values will at best be equal, not lower.
+    // Any further results will have a probability at least the same as the qubits.
     let highest_probability = results
       .iter()
       .map(|val| val.rolling_probability)
       .reduce(f64::max)
       .unwrap();
+
+    // Work out lower bound for this analysis.
     let lowest_bound = highest_probability - self.probability_range;
 
     for ent_meta in entanglements.iter() {
@@ -1691,38 +1706,63 @@ impl ResultsSynthsizer {
         break;
       }
 
-      // Note: This will scale better than copy / remove with large lists but we need to
-      //  make sure qubits are unique. Otherwise, a composite identifier will be needed.
-      if removals.contains(&ent_meta.qubit) {
+      // If we've already seen this entanglement matchup before, skip.
+      if self.already_processed.contains(ent_meta.id()) {
         continue;
       }
 
       // Merge all templates starting with the highest probability to happen, breaking out
       // of the loop when we've breached our constraints.
-      let mut temp = Vec::new();
+      let temp = Ptr::from(Vec::new());
+      let current_result_count = results.len();
       for fragment in results.iter() {
-        if (fragment.rolling_probability * ent_meta.ratio) < lowest_bound {
-          continue;
-        }
+        // Add a new potential result with a particular qubit value if the chance it
+        // occurs is high enough.
+        let mut add_potential = |ratio: f64, result: i16| {
+          if (fragment.rolling_probability * ratio) < lowest_bound {
+            return false;
+          }
 
-        let mut new_fragment = fragment.clone();
+          let mut new_fragment = fragment.clone();
+          new_fragment.add(
+            ent_meta.qubit,
+            result,
+            fragment.rolling_probability
+          );
+          with_mutable!(temp.push(new_fragment));
 
-        // With entangled values they are all the same, whether 1 or 0, so we just take the first
-        // value and use that as our result.
-        let universal_result = fragment.fragment.values().take(1).last().unwrap();
-        new_fragment.add(
-          ent_meta.qubit,
-          *universal_result,
-          fragment.rolling_probability
-        );
-        temp.push(new_fragment);
+          // Return to break if required.
+          temp.len() + current_result_count >= self.max_entangles_per_add
+        };
 
-        if temp.len() + results.len() >= self.max_entangles_per_add {
-          break;
+        // If possible, flip our latest fragment and see if it's applicable to be added.
+        let mut add_last_flipped = || {
+          let last_result = with_mutable!(temp.last_mut().unwrap());
+          if last_result.rolling_probability - 1. < lowest_bound {
+            return false;
+          }
+
+          let new_fragment = ResultFragment::with_flipped(&last_result);
+          with_mutable!(temp.push(new_fragment));
+          temp.len() + current_result_count >= self.max_entangles_per_add
+        };
+
+        // Depending upon our target qubits value we need to check certain sorts of entanglement.
+        // Attempt the mapping, then attempt bit flipping the result.
+        if fragment.qubit_values.get(&ent_meta.qubit).unwrap() == &0 {
+          if add_potential(ent_meta.OO, 0) { break; }
+          if add_last_flipped() { break; }
+          if add_potential(ent_meta.OI, 1) { break; }
+          if add_last_flipped() { break; }
+        } else {
+          if add_potential(ent_meta.II, 1) { break; }
+          if add_last_flipped() { break; }
+          if add_potential(ent_meta.IO, 0) { break; }
+          if add_last_flipped() { break; }
         }
       }
 
-      results.append(&mut temp);
+      results.append(with_mutable!(temp.as_mut()));
     }
 
     self.fragments.append(&mut results);
@@ -1737,7 +1777,7 @@ impl ResultsSynthsizer {
     let mut qubit_lower_bounds = HashMap::new();
     for fragment in self.fragments.iter() {
       let lower_bound = fragment.rolling_probability - self.probability_range;;
-      for key in fragment.fragment.keys() {
+      for key in fragment.qubit_values.keys() {
         // If our boundary value is already higher, just continue.
         if let Some(val) = qubit_lower_bounds.get(key) {
           if val > &lower_bound {
@@ -1764,7 +1804,7 @@ impl ResultsSynthsizer {
     let mut filtered_fragments = Vec::new();
     for fragment in self.fragments.iter() {
       let mut skip = false;
-      for mqb in fragment.fragment.keys() {
+      for mqb in fragment.qubit_values.keys() {
         if qubit_lower_bounds.get(mqb).unwrap() > &fragment.rolling_probability {
           skip = true;
         }
@@ -1782,8 +1822,8 @@ impl ResultsSynthsizer {
           continue;
         }
 
-        let composite_lower_bound = composite.fragment.keys().map(|qb| *qubit_lower_bounds.get(&qb).unwrap()).reduce(f64::max).unwrap();
-        let overlay_lower_bound = overlay_fragment.fragment.keys().map(|qb| *qubit_lower_bounds.get(&qb).unwrap()).reduce(f64::max).unwrap();
+        let composite_lower_bound = composite.qubit_values.keys().map(|qb| *qubit_lower_bounds.get(&qb).unwrap()).reduce(f64::max).unwrap();
+        let overlay_lower_bound = overlay_fragment.qubit_values.keys().map(|qb| *qubit_lower_bounds.get(&qb).unwrap()).reduce(f64::max).unwrap();
         let lower_bound = if composite_lower_bound < overlay_lower_bound {
           composite_lower_bound
         } else {
@@ -2226,11 +2266,11 @@ impl QuantumSolver {
 
     for (index, ent) in postq.iter() {
       if !preq.contains_key(index) {
-        differences.push(format!("add Q{}~{}", ent.qubit, ent.ratio))
+        differences.push(format!("add Q{}~{}", ent.qubit, ent.ratio()))
       } else {
         let prev = preq.get(index).unwrap();
-        if ent.ratio != prev.ratio {
-          differences.push(format!("Q{}~{}", prev.qubit, prev.ratio))
+        if ent.ratio() != prev.ratio() {
+          differences.push(format!("Q{}~{}", prev.qubit, prev.ratio()))
         }
       }
     }
