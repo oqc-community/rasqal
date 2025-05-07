@@ -64,13 +64,9 @@ impl Tangle {
       let mut eleft = Ptr::from(EntangledQubit::new(left.index, left.trace_module.clone()));
       let mut eright = Ptr::from(EntangledQubit::new(right.index, right.trace_module.clone()));
 
-      if tracer.solver_detailed() {
-        log!(Level::Info, "\nBuilding from isolated states.\nLeft: \n{} \n\nRight: \n{}", left.state.matrix_fragment, right.state.matrix_fragment);
-      }
-
       let tangle = Ptr::from(Tangle::new(eleft.clone(), Ptr::from(EntangledFragment::new(right.state.matrix_fragment.expand(&left.state.matrix_fragment))), eright.clone()));
       if tracer.solver_detailed() {
-        log!(Level::Info, "\nBuilding result: \n{}", tangle.state.matrix_fragment);
+        log!(Level::Info, "\nBuilding from isolated states.\nLeft: \n{} \n\nRight: \n{}\n\nResult: \n{}\n", left.state.matrix_fragment, right.state.matrix_fragment,tangle.state.matrix_fragment);
       }
 
       eleft.tangles.insert(eright.index, tangle.clone());
@@ -104,13 +100,9 @@ impl Tangle {
       let mut left_state = build_density_state(left, true);
       let mut right_state = build_density_state(right, false);
 
-      if tracer.solver_detailed() {
-        log!(Level::Info, "\nBuilding from multi-entangled states.\nLeft: \n{} \n\nRight: \n{}", left_state, right_state);
-      }
-
       let expanded = right_state.matrix_fragment.expand(&left_state.matrix_fragment);
       if tracer.solver_detailed() {
-        log!(Level::Info, "\nResult: \n{}", expanded)
+        log!(Level::Info, "\nBuilding from multi-entangled states.\nLeft: \n{} \n\nRight: \n{}\n\nResult: \n{}\n", left_state, right_state, expanded)
       }
 
       // Fetch a pointer to our entangled qubit or transform our reference qubit into a free entangled one.
@@ -630,6 +622,10 @@ impl EntangledQubit {
       if !tangle.is_entangled() {
         unentangled.push(tangle);
       }
+    }
+
+    if self.trace_module.solver_detailed() {
+      log!(Level::Info, "\nApplying single qubit gate across tangle.\nGate:\n{}\n\nExpanded:\n{}\n\nResult:\n{}", gate, expanded_gate, self);
     }
 
     // If we're no longer entangled remove it from both qubits.
@@ -1226,6 +1222,7 @@ impl MatrixFragment {
         .replace(".00", "")
         .replace("-0+0i", "0")
         .replace("0+0i", "0")
+        .replace("+0i", "")
     }
 
     // Restrict precision, but trim off any which are fully zero to make the output less verbose.
