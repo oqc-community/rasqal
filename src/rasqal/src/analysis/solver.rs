@@ -297,6 +297,11 @@ impl ReferenceQubit {
   /// Do we currently have runtime tracing active.
   fn is_tracing(&self) -> bool { self.trace_module.has(ActiveTracers::Runtime) }
 
+  /// This simply proxies to `measure`.
+  pub fn analyze_measure(&self) -> MeasureAnalysis {
+    self.measure()
+  }
+
   /// Simply retrieve the current state results.
   pub fn measure(&self) -> MeasureAnalysis {
     MeasureAnalysis::qubit(self.index, self.state.get(1, 1).re)
@@ -432,10 +437,15 @@ impl EntangledQubit {
     //  qubits. Precision is the name of the game.
   }
 
+  pub fn measure(&self) -> MeasureAnalysis {
+    self.snap_entanglement();
+    self.analyze_measure()
+  }
+
   /// Retrieve the measurement information about this qubit but _don't_ sympathetically snap other
   /// qubits. This is important for when you're gathering measure information of qubits measured
   /// simultaneously or otherwise peeking at a qubit in isolation.
-  pub fn measure(&self) -> MeasureAnalysis {
+  pub fn analyze_measure(&self) -> MeasureAnalysis {
     fn recurse_chains(
       current_qubit: &i64, tangles: &Ptr<HashMap<i64, Ptr<Tangle>>>,
       results: &mut Vec<EntanglementMetadata>, guard: &mut HashSet<i64>
@@ -735,6 +745,14 @@ impl AnalysisQubit<'_> {
   /// Retrieve the measurement information about this qubit but _don't_ sympathetically snap other
   /// qubits. This is important for when you're gathering measure information of qubits measured
   /// simultaneously or otherwise peeking at a qubit in isolation.
+  pub fn analyze_measure(&self) -> MeasureAnalysis {
+    match self {
+      Entangled(ent) => ent.analyze_measure(),
+      Reference(iso) => iso.analyze_measure(),
+    }
+  }
+
+  /// Measures this qubit then snaps entanglement.
   pub fn measure(&self) -> MeasureAnalysis {
     match self {
       Entangled(ent) => ent.measure(),
@@ -742,17 +760,6 @@ impl AnalysisQubit<'_> {
     }
   }
 
-  /// Measures this qubit then snaps entanglement.
-  pub fn measure_then_snap(&self) -> MeasureAnalysis {
-    match self {
-      Entangled(ent) => {
-        let results = ent.measure();
-        ent.snap_entanglement();
-        results
-      },
-      Reference(iso) => iso.measure(),
-    }
-  }
 
   pub fn X(&self, radians: &f64) {
     match self {
@@ -908,15 +915,15 @@ impl EntanglementCluster {
 
   pub fn contains(&self, qubit: &i64) -> bool { self.qubits.contains_key(qubit) }
 
-  pub fn measure(&self, index: &i64) -> MeasureAnalysis {
+  pub fn analyze_measure(&self, index: &i64) -> MeasureAnalysis {
     let qubit = with_mutable_self!(self.qubits.get(&index).expect(&format!(
       "Measure performed on qubit {index} not in the cluster: {}",
       self
     )));
-    qubit.measure()
+    qubit.analyze_measure()
   }
 
-  pub fn measure_then_snap(&self, index: &i64) -> MeasureAnalysis {
+  pub fn measure(&self, index: &i64) -> MeasureAnalysis {
     let qubit = with_mutable_self!(self.qubits.get(&index).expect(&format!(
       "Measure performed on qubit {index} not in the cluster: {}",
       self
@@ -1979,9 +1986,9 @@ impl QuantumSolver {
     }
 
     let result = if let Some(cluster) = self.clusters.get(&qb.index) {
-      cluster.measure(&qb.index)
+      cluster.analyze_measure(&qb.index)
     } else {
-      self.qubit_for(&qb.index).measure()
+      self.qubit_for(&qb.index).analyze_measure()
     };
 
     if self.is_tracing() {
@@ -2000,7 +2007,7 @@ impl QuantumSolver {
   pub fn X(&self, qb: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&qb.index).measure());
+      pre = Some(self.qubit_for(&qb.index).analyze_measure());
     }
 
     self.qubit_for(&qb.index).X(radians);
@@ -2012,7 +2019,7 @@ impl QuantumSolver {
   pub fn Y(&self, qb: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&qb.index).measure());
+      pre = Some(self.qubit_for(&qb.index).analyze_measure());
     }
 
     self.qubit_for(&qb.index).Y(radians);
@@ -2024,7 +2031,7 @@ impl QuantumSolver {
   pub fn Z(&self, qb: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&qb.index).measure());
+      pre = Some(self.qubit_for(&qb.index).analyze_measure());
     }
 
     self.qubit_for(&qb.index).Z(radians);
@@ -2041,7 +2048,7 @@ impl QuantumSolver {
   pub fn CX(&self, controls: &Vec<Qubit>, target: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&target.index).measure());
+      pre = Some(self.qubit_for(&target.index).analyze_measure());
     }
 
     let qb = self.qubit_for(&target.index);
@@ -2073,7 +2080,7 @@ impl QuantumSolver {
   pub fn CY(&self, controls: &Vec<Qubit>, target: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&target.index).measure());
+      pre = Some(self.qubit_for(&target.index).analyze_measure());
     }
 
     let qb = self.qubit_for(&target.index);
@@ -2105,7 +2112,7 @@ impl QuantumSolver {
   pub fn CZ(&self, controls: &Vec<Qubit>, target: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&target.index).measure());
+      pre = Some(self.qubit_for(&target.index).analyze_measure());
     }
 
     let qb = self.qubit_for(&target.index);
@@ -2201,7 +2208,7 @@ impl QuantumSolver {
   fn trace_gate(
     &self, gate: &str, associated_qubits: String, pre: &MeasureAnalysis, radians: &f64
   ) {
-    let mut post = self.qubit_for(&pre.qubit).measure();
+    let mut post = self.qubit_for(&pre.qubit).analyze_measure();
     let mut differences = Vec::new();
     if pre.probability != post.probability {
       differences.push(format!("from {:.2}%", pre.probability * 100.))
