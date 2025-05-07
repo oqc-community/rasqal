@@ -70,7 +70,7 @@ impl Tangle {
 
       let tangle = Ptr::from(Tangle::new(eleft.clone(), Ptr::from(EntangledFragment::new(right.state.matrix_fragment.expand(&left.state.matrix_fragment))), eright.clone()));
       if tracer.solver_detailed() {
-        log!(Level::Info, "\nResult: \n{}", tangle.state.matrix_fragment);
+        log!(Level::Info, "\nBuilding result: \n{}", tangle.state.matrix_fragment);
       }
 
       eleft.tangles.insert(eright.index, tangle.clone());
@@ -520,21 +520,21 @@ impl EntangledQubit {
     self.apply(GateFragment::Z(radians));
   }
 
-  pub fn CX(&self, ref_qb: &Ptr<ReferenceQubit>, radians: &f64){
-    self.apply_entangling(ref_qb,GateFragment::CX(radians));
+  pub fn CX(&self, qb: &AnalysisQubit, radians: &f64){
+    self.apply_entangling(qb, GateFragment::CX(radians));
   }
 
-  pub fn CZ(&self, ref_qb: &Ptr<ReferenceQubit>, radians: &f64) {
-    self.apply_entangling(ref_qb,GateFragment::CZ(radians));
+  pub fn CZ(&self, qb: &AnalysisQubit, radians: &f64) {
+    self.apply_entangling(qb, GateFragment::CZ(radians));
   }
 
-  pub fn CY(&self, ref_qb: &Ptr<ReferenceQubit>, radians: &f64) {
-    self.apply_entangling(ref_qb, GateFragment::CY(radians));
+  pub fn CY(&self, qb: &AnalysisQubit, radians: &f64) {
+    self.apply_entangling(qb, GateFragment::CY(radians));
   }
 
   /// Apply a multi-qubit gate to this qubit. Assumes tangle already exists as the cluster will
   /// have taken care of it.
-  fn apply_entangling(&self, other: &Ptr<ReferenceQubit>, gate: GateFragment) {
+  fn apply_entangling(&self, other: &AnalysisQubit, gate: GateFragment) {
     if gate.affected_qubits != 2 {
       panic!("Attempted to apply single-qubit gate to multi-qubit entanglement extrapolation.")
     }
@@ -542,7 +542,7 @@ impl EntangledQubit {
     let is_tracing = self.is_tracing();
     let mut tracer = Vec::new();
 
-    if let Some(tangle) = self.tangles.get(&other.index) {
+    if let Some(tangle) = self.tangles.get(&other.index()) {
       // If our actual target is inverted, invert the matrix too.
       let applied_gate = if tangle.right.index == self.index {
         &gate.invert()
@@ -668,23 +668,16 @@ impl Display for EntangledQubit {
 }
 
 #[derive(Clone)]
-pub enum AnalysisQubit {
-  Entangled(Ptr<EntangledQubit>),
-  Reference(Ptr<ReferenceQubit>),
+pub enum AnalysisQubit<'a> {
+  Entangled(&'a Ptr<EntangledQubit>),
+  Reference(&'a Ptr<ReferenceQubit>),
 }
 
-impl AnalysisQubit {
-  pub fn new(
-    index: i64, state: Ptr<QubitFragment>, tangles: HashMap<i64, Ptr<Tangle>>,
-    tracer: Ptr<TracingModule>
-  ) -> AnalysisQubit {
-    Reference(Ptr::from(ReferenceQubit::new(index, tracer)))
-  }
-
+impl AnalysisQubit<'_> {
   /// Returns current qubit as an entangled qubit.
   pub fn as_entangled(&self) -> Ptr<EntangledQubit> {
     match self {
-      Entangled(ent) => ent.clone(),
+      Entangled(ent) => ent.clone_inner(),
       Reference(iso) => Ptr::from(EntangledQubit::new(iso.index, iso.trace_module.clone())),
     }
   }
@@ -693,7 +686,7 @@ impl AnalysisQubit {
   pub fn as_isolated(&self) -> Ptr<ReferenceQubit> {
     match self {
       Entangled(ent) => Ptr::from(ReferenceQubit::new(ent.index, ent.trace_module.clone())),
-      Reference(iso) => iso.clone(),
+      Reference(iso) => iso.clone_inner(),
     }
   }
 
@@ -702,15 +695,6 @@ impl AnalysisQubit {
       Entangled(ent) => ent.trace_module.has(ActiveTracers::Solver),
       Reference(iso) => iso.trace_module.has(ActiveTracers::Solver),
     }
-  }
-
-  pub fn with_index(index: i64, tracer: Ptr<TracingModule>) -> AnalysisQubit {
-    AnalysisQubit::new(
-      index,
-      Ptr::from(QubitFragment::DefaultQubit()),
-      HashMap::default(),
-      tracer
-    )
   }
 
   pub fn index(&self) -> &i64 {
@@ -791,19 +775,19 @@ impl AnalysisQubit {
     }
   }
 
-  pub fn CX(&self, other: &Ptr<ReferenceQubit>,  radians: &f64) {
+  pub fn CX(&self, other: &AnalysisQubit,  radians: &f64) {
     if let Entangled(ent) = self {
       ent.apply_entangling(other, GateFragment::CX(radians))
     }
   }
 
-  pub fn CZ(&self, other: &Ptr<ReferenceQubit>, radians: &f64) {
+  pub fn CZ(&self, other: &AnalysisQubit, radians: &f64) {
     if let Entangled(ent) = self {
       ent.apply_entangling(other, GateFragment::CZ(radians));
     }
   }
 
-  pub fn CY(&self, other: &Ptr<ReferenceQubit>,  radians: &f64) {
+  pub fn CY(&self, other: &AnalysisQubit,  radians: &f64) {
     if let Entangled(ent) = self {
       ent.apply_entangling(other, GateFragment::CY(radians));
     }
@@ -817,7 +801,7 @@ impl AnalysisQubit {
   }
 }
 
-impl Display for AnalysisQubit {
+impl Display for AnalysisQubit<'_> {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     for line in self.stringify(0) {
       f.write_str(&line);
@@ -907,24 +891,12 @@ impl EntanglementCluster {
   }
 
   /// Entangles these two qubits if they exist. Does not entangle if not.
-  pub fn entangle(&self, left: &Ptr<ReferenceQubit>, right: &Ptr<ReferenceQubit>) {
-    let analysis_left = if let Some(val) = self.get(&left.index) {
-      Entangled(val.clone())
-    } else {
-      Reference(left.clone())
-    };
-
-    let analysis_right = if let Some(val) = self.get(&right.index) {
-      Entangled(val.clone())
-    } else {
-      Reference(right.clone())
-    };
-
-    if analysis_left.is_entangled_with(analysis_right.index()) {
+  pub fn entangle(&self, left: &AnalysisQubit, right: &AnalysisQubit) {
+    if left.is_entangled_with(right.index()) {
       return;
     }
 
-    let (result_left, result_right) = Tangle::from_analysis_qubits(&analysis_left, &analysis_right, &self.trace_module);
+    let (result_left, result_right) = Tangle::from_analysis_qubits(left, right, &self.trace_module);
     if !self.qubits.contains_key(&result_left.index) {
       with_mutable_self!(self.qubits.insert(result_left.index, result_left));
     }
@@ -994,8 +966,8 @@ impl EntanglementCluster {
       .Z(radians);
   }
 
-  pub fn CX(&self, controls: &Vec<&Ptr<ReferenceQubit>>, target: &Ptr<ReferenceQubit>, radians: &f64) {
-    let qubit = self.qubits.get(&target.index).expect(&format!(
+  pub fn CX(&self, controls: &Vec<AnalysisQubit>, target: &AnalysisQubit, radians: &f64) {
+    let qubit = self.qubits.get(&target.index()).expect(&format!(
       "Attempted CX on qubit {target} which doesn't exist in cluster: {}",
       self
     ));
@@ -1004,14 +976,14 @@ impl EntanglementCluster {
       qubit.CX(control, radians);
     }
 
-    self.remove_if_unentangled(&target.index);
+    self.remove_if_unentangled(&target.index());
     for control in controls {
-      self.remove_if_unentangled(&control.index);
+      self.remove_if_unentangled(&control.index());
     }
   }
 
-  pub fn CZ(&self, controls: &Vec<&Ptr<ReferenceQubit>>, target: &Ptr<ReferenceQubit>, radians: &f64) {
-    let qubit = self.qubits.get(&target.index).expect(&format!(
+  pub fn CZ(&self, controls: &Vec<AnalysisQubit>, target: &AnalysisQubit, radians: &f64) {
+    let qubit = self.qubits.get(&target.index()).expect(&format!(
       "Attempted CZ on qubit {target} which doesn't exist in cluster: {}",
       self
     ));
@@ -1020,14 +992,14 @@ impl EntanglementCluster {
       qubit.CZ(control, radians);
     }
 
-    self.remove_if_unentangled(&target.index);
+    self.remove_if_unentangled(&target.index());
     for control in controls {
-      self.remove_if_unentangled(&control.index);
+      self.remove_if_unentangled(&control.index());
     }
   }
 
-  pub fn CY(&self, controls: &Vec<&Ptr<ReferenceQubit>>, target: &Ptr<ReferenceQubit>, radians: &f64) {
-    let qubit = self.qubits.get(&target.index).expect(&format!(
+  pub fn CY(&self, controls: &Vec<AnalysisQubit>, target: &AnalysisQubit, radians: &f64) {
+    let qubit = self.qubits.get(&target.index()).expect(&format!(
       "Attempted CY on qubit {target} which doesn't exist in cluster: {}",
       self
     ));
@@ -1036,9 +1008,9 @@ impl EntanglementCluster {
       qubit.CY(control, radians);
     }
 
-    self.remove_if_unentangled(&target.index);
+    self.remove_if_unentangled(&target.index());
     for control in controls {
-      self.remove_if_unentangled(&control.index);
+      self.remove_if_unentangled(&control.index());
     }
   }
 }
@@ -1133,7 +1105,7 @@ impl MatrixFragment {
   /// TODO: Check the latter.
   pub fn invert(&self) -> MatrixFragment {
     // TODO: Need to check if this is accurate.
-    return Self::new(self.matrix.reverse_rows_and_cols().to_owned());
+    Self::new(self.matrix.reverse_rows_and_cols().to_owned())
   }
 
   #[rustfmt::skip]
@@ -1902,15 +1874,19 @@ impl QuantumSolver {
   }
 
   /// Gets a qubit, or adds a default one at this index if it doesn't exist.
-  fn qubit_for(&self, index: &i64) -> &Ptr<ReferenceQubit> {
-    if let Some(qubit) = self.qubits.get(index) {
-      qubit
+  fn qubit_for(&self, index: &i64) -> AnalysisQubit {
+    if let Some(cluster) = self.clusters.get(index) {
+      Entangled(cluster.get(index).unwrap())
     } else {
-      with_mutable_self!(self.qubits.insert(
+      if let Some(qubit) = self.qubits.get(index) {
+        Reference(qubit)
+      } else {
+        with_mutable_self!(self.qubits.insert(
         index.clone(),
         Ptr::from(ReferenceQubit::new(*index, self.trace_module.clone()))
       ));
-      self.qubits.get(&index).unwrap()
+        Reference(self.qubits.get(&index).unwrap())
+      }
     }
   }
 
@@ -1933,11 +1909,11 @@ impl QuantumSolver {
   }
 
   /// Merges clusters that cover the same qubits.
-  fn prepare_cluster(&self, merger: &Vec<&Ptr<ReferenceQubit>>, mergee: &Ptr<ReferenceQubit>) -> &Ptr<EntanglementCluster> {
-    let target_cluster = self.cluster_for(&mergee.index);
+  fn prepare_cluster(&self, merger: &Vec<AnalysisQubit>, mergee: &AnalysisQubit) -> &Ptr<EntanglementCluster> {
+    let target_cluster = self.cluster_for(&mergee.index());
     for ref_qubit in merger {
       // If clusters are different, merge, entangle our two qubits, then replace reference.
-      if let Some(cluster) = self.clusters.get(&ref_qubit.index) && !cluster.contains(&mergee.index){
+      if let Some(cluster) = self.clusters.get(&ref_qubit.index()) && !cluster.contains(&mergee.index()){
         target_cluster.merge(cluster);
         for qb in cluster.spans() {
           with_mutable_self!(self.clusters.insert(*qb, target_cluster.clone()));
@@ -1948,7 +1924,7 @@ impl QuantumSolver {
       target_cluster.entangle(mergee, ref_qubit);
 
       // Remove the previous cluster, it's no longer needed, replace with new merged one.
-      with_mutable_self!(self.clusters.insert(ref_qubit.index, target_cluster.clone()));
+      with_mutable_self!(self.clusters.insert(*ref_qubit.index(), target_cluster.clone()));
     }
     target_cluster
   }
@@ -2027,12 +2003,7 @@ impl QuantumSolver {
       pre = Some(self.qubit_for(&qb.index).measure());
     }
 
-    if let Some(cluster) = self.clusters.get(&qb.index) {
-      cluster.X(&qb.index, radians);
-    } else {
-      self.qubit_for(&qb.index).X(radians)
-    }
-
+    self.qubit_for(&qb.index).X(radians);
     if self.is_tracing() {
       self.trace_gate("X", qb.index.to_string(), &pre.unwrap(), radians)
     }
@@ -2044,12 +2015,7 @@ impl QuantumSolver {
       pre = Some(self.qubit_for(&qb.index).measure());
     }
 
-    if let Some(cluster) = self.clusters.get(&qb.index) {
-      cluster.Y(&qb.index, radians);
-    } else {
-      self.qubit_for(&qb.index).Y(radians)
-    }
-
+    self.qubit_for(&qb.index).Y(radians);
     if self.is_tracing() {
       self.trace_gate("Y", qb.index.to_string(), &pre.unwrap(), radians)
     }
@@ -2061,12 +2027,7 @@ impl QuantumSolver {
       pre = Some(self.qubit_for(&qb.index).measure());
     }
 
-    if let Some(cluster) = self.clusters.get(&qb.index) {
-      cluster.Z(&qb.index, radians);
-    } else {
-      self.qubit_for(&qb.index).Z(radians)
-    }
-
+    self.qubit_for(&qb.index).Z(radians);
     if self.is_tracing() {
       self.trace_gate("Z", qb.index.to_string(), &pre.unwrap(), radians)
     }
@@ -2089,7 +2050,7 @@ impl QuantumSolver {
       &control_indexes, &qb
     );
 
-    target_cluster.CX(&control_indexes, qb, radians);
+    target_cluster.CX(&control_indexes, &qb, radians);
 
     if self.is_tracing() {
       self.trace_gate(
@@ -2121,7 +2082,7 @@ impl QuantumSolver {
       &control_indexes, &qb
     );
 
-    target_cluster.CY(&control_indexes, qb, radians);
+    target_cluster.CY(&control_indexes, &qb, radians);
 
     if self.is_tracing() {
       self.trace_gate(
@@ -2153,7 +2114,7 @@ impl QuantumSolver {
       &control_indexes, &qb
     );
 
-    target_cluster.CZ(&control_indexes, qb, radians);
+    target_cluster.CZ(&control_indexes, &qb, radians);
 
     if self.is_tracing() {
       self.trace_gate(
@@ -2266,18 +2227,18 @@ impl QuantumSolver {
 
     for (index, ent) in postq.iter() {
       if !preq.contains_key(index) {
-        differences.push(format!("add Q{}~{}", ent.qubit, ent.ratio()))
+        differences.push(format!("add Q{}~{:.2}", ent.qubit, ent.ratio()))
       } else {
         let prev = preq.get(index).unwrap();
         if ent.ratio() != prev.ratio() {
-          differences.push(format!("Q{}~{}", prev.qubit, prev.ratio()))
+          differences.push(format!("Q{}~{:.2}", prev.qubit, prev.ratio()))
         }
       }
     }
 
     let mut diff = String::new();
     if !differences.is_empty() {
-      diff = format!(" # {}", differences.join(","));
+      diff = format!(" # {}", differences.join(", "));
     }
 
     log!(
