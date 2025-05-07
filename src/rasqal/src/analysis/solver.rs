@@ -611,7 +611,7 @@ impl EntangledQubit {
       panic!("Attempted to apply multi-qubit gate to single-qubit entanglement extrapolation.")
     }
 
-    let expanded_gate = &gate.expand(&MatrixFragment::id());
+    let expanded_gate = MatrixFragment::id().expand(&gate);
     let inverted_gate = expanded_gate.invert();
     let mut unentangled = Vec::new();
     for tangle in self.tangles.values() {
@@ -619,10 +619,10 @@ impl EntangledQubit {
       let applied_gate = if tangle.right.index == self.index {
         &inverted_gate
       } else {
-        expanded_gate
+        &expanded_gate
       };
 
-      if let Some(error) = with_mutable!(tangle.state.apply(&expanded_gate)) {
+      if let Some(error) = with_mutable!(tangle.state.apply(&applied_gate)) {
         panic!("{}", error);
       }
 
