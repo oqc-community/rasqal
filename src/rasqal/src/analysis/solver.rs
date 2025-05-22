@@ -173,12 +173,12 @@ impl Display for Tangle {
 ///
 /// This means if you have Q0~Q1~Q2 any entanglement information for Q0 about Q2 will be via Q1.
 #[derive(Clone)]
-pub struct EntanglementMetadata {
+pub struct EntanglingLink {
+  /// The target of the current tangle.
   qubit: i64,
-  identity: String,
 
-  /// Entanglement is inferred via this qubit.
-  via: Option<i64>,
+  /// The qubit that this link is flowing through.
+  via: i64,
 
   /// Left is the owning qubit, right is the linked qubit. Put another way, the index in `qubit`
   /// refers to the right bit.
@@ -188,35 +188,16 @@ pub struct EntanglementMetadata {
   II: f64
 }
 
-impl EntanglementMetadata {
-  pub fn new(qubit: i64, OO: f64, OI: f64, IO: f64, II: f64) -> EntanglementMetadata {
-    EntanglementMetadata {
+impl EntanglingLink {
+  pub fn new(qubit: i64, via: i64, OO: f64, OI: f64, IO: f64, II: f64) -> EntanglingLink {
+    EntanglingLink {
       qubit,
-      identity: qubit.to_string(),
-      via: None,
+      via,
       OO,
       OI,
       IO,
       II
     }
-  }
-
-  pub fn with_via(qubit: i64, via: i64, OO: f64, OI: f64, IO: f64, II: f64) -> EntanglementMetadata {
-    EntanglementMetadata {
-      qubit,
-      identity: format!("{}~{}", qubit, via),
-      via: Some(via),
-      OO,
-      OI,
-      IO,
-      II
-    }
-  }
-
-  /// A composite identity for this entanglement metadata for making sure duplicate data
-  /// isn't processed.
-  pub fn id(&self) -> &str {
-    self.identity.as_str()
   }
 
   /// Returns max entanglement ratio for this metadata. Gives an idea about how
@@ -224,18 +205,44 @@ impl EntanglementMetadata {
   pub fn ratio(&self) -> f64 {
     [self.OO, self.OI, self.IO, self.II].into_iter().reduce(f64::max).unwrap()
   }
+
+  /// Is this links value an inverted mirror of our qubit (01 rather than 00) or not.
+  pub fn is_result_inverted(&self) -> bool {
+    self.IO > 0. || self.OI > 0.
+  }
 }
+
+impl Display for EntanglingLink {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    // TODO: Simplify print. Pretty sure they will always be mirrored so can condense 01/10 and
+    //  visa-versa.
+    fn strip(string: &String) -> String {
+      string.replace(".00", "")
+    }
+
+    let mut ratios = Vec::new();
+    if self.OO > 0. {
+      ratios.push(strip(&format!("{:.2}%", self.OO * 100.)));
+    }
+    if self.IO > 0. {
+      ratios.push(strip(&format!("{:.2}%", self.IO * 100.)));
+    }
+
+    f.write_str({if self.ratio() > 0. { format!("Q{}<{}>", self.qubit, ratios.join(", ")) } else { format!("{}", self.qubit) }}.as_str())
+  }
+}
+
 
 #[derive(Clone)]
 pub struct MeasureAnalysis {
   qubit: i64,
   probability: f64,
-  entangled_with: Vec<EntanglementMetadata>
+  entangled_with: Vec<EntanglingLink>
 }
 
 impl MeasureAnalysis {
   pub fn new(
-    qubit: i64, result: f64, entangled_with: Vec<EntanglementMetadata>
+    qubit: i64, result: f64, entangled_with: Vec<EntanglingLink>
   ) -> MeasureAnalysis {
     let result = if result < 0.0 { -result } else { result };
     MeasureAnalysis {
@@ -250,7 +257,7 @@ impl MeasureAnalysis {
   }
 
   pub fn entangled_qubit(
-    qubit: i64, result: f64, entangled_with: Vec<EntanglementMetadata>
+    qubit: i64, result: f64, entangled_with: Vec<EntanglingLink>
   ) -> MeasureAnalysis {
     MeasureAnalysis::new(qubit, result, entangled_with)
   }
@@ -261,7 +268,7 @@ impl Display for MeasureAnalysis {
     let tangles = self
       .entangled_with
       .iter()
-      .map(|val| if val.ratio() > 0. { format!("Q{}~{:.2}", val.qubit, val.ratio()) } else { format!("Q{}", val.qubit) })
+      .map(|val| val.to_string())
       .collect::<Vec<_>>();
     let mut additions = String::new();
     if !tangles.is_empty() {
@@ -440,7 +447,7 @@ impl EntangledQubit {
   pub fn analyze_measure(&self) -> MeasureAnalysis {
     fn recurse_chains(
       current_qubit: &i64, tangles: &Ptr<HashMap<i64, Ptr<Tangle>>>,
-      results: &mut Vec<EntanglementMetadata>, guard: &mut HashSet<i64>
+      results: &mut Vec<EntanglingLink>, guard: &mut HashSet<i64>
     ) {
       guard.insert(*current_qubit);
       for (key, tangle) in tangles.iter() {
@@ -468,7 +475,7 @@ impl EntangledQubit {
         ].into_iter().reduce(f64::max).unwrap() * 2.;
 
         // 0.5 entanglement means fully entangled so an 100% ratio, so we just double it.
-        results.push(EntanglementMetadata::with_via(
+        results.push(EntanglingLink::new(
           *key,
           current_qubit.clone(),
           OO,
@@ -1572,7 +1579,10 @@ impl ResultFragment {
   /// Generates a human-readable bitstring from this fragment. Replaces all unknown bits with X.
   pub fn as_bitstring(&self) -> String {
     let mut result = String::new();
-    for i in self.measureable_qubits.iter() {
+
+    let mut sorted_hashset = self.measureable_qubits.iter().collect::<Vec<_>>();
+    sorted_hashset.sort_unstable();
+    for i in sorted_hashset {
       if let Some(value) = self.qubit_values.get(&i) {
         result.push_str(&value.to_string())
       } else {
@@ -1596,249 +1606,33 @@ impl Display for ResultFragment {
   }
 }
 
-pub struct ResultsSynthsizer {
-  /// The range a probability must be within the highest to not be dropped from template creation.
-  /// So if our highest probability is 55%, and this value is 20, it will drop any combinations
-  /// whose probability is under %35.
-  probability_range: f64,
-
-  /// In the case where a large amount of entanglements all come out at around the same
-  /// probability the max amount we should add in total. The dropped ones will be the last
-  /// added, which will be the longest result chains.
-  max_entangles_per_add: usize,
-  fragments: Vec<ResultFragment>,
-
-  /// Set of measured qubit indexes so we know which indexes are used, or not, and to default all
-  /// unmeasured to zero after we've synthesized a result.
-  measured_qubits: Ptr<HashSet<i64>>,
-
-  already_processed: HashSet<String>,
-  register_size: i64
+struct QubitConstraints {
+  qubit: i64,
+  probability: f64,
+  mirrored: HashMap<i64, (f64, bool)>,
 }
 
-impl ResultsSynthsizer {
-  pub fn new(
-    probability_range: f64, max_entangles_per_add: usize, measured_qubits: HashSet<i64>,
-    register_size: i64
-  ) -> ResultsSynthsizer {
-    ResultsSynthsizer {
-      probability_range,
-      max_entangles_per_add,
-      fragments: Vec::default(),
-      measured_qubits: Ptr::from(measured_qubits),
-      already_processed: HashSet::new(),
-      register_size
-    }
+impl QubitConstraints {
+  pub fn new(qubit: i64, probability: f64, ) -> QubitConstraints {
+    QubitConstraints { qubit, probability, mirrored: HashMap::new() }
   }
 
-  pub fn add(&mut self, measure: &MeasureAnalysis) {
-    // Build starter fragment with just our qubit.
-    let qubit_result = 1;
-    let mut starter = ResultFragment::new(
-      measure.qubit,
-      qubit_result,
-      measure.probability,
-      self.measured_qubits.clone()
-    );
-    // Sort our entanglements by coupling strength.
-    let mut entanglements = measure.entangled_with.iter().collect::<Vec<_>>();
-    entanglements.sort_by(|a, b| b.ratio().total_cmp(&a.ratio()));
-
-    for ent_meta in entanglements.iter() {
-      // Since we're sorted on this, soon as we see a non-one value we know there
-      // will be no others. Ratio is 0.0 to 1.0.
-      if !is_near!(ent_meta.ratio(), 1.0) {
-        break;
-      }
-
-      if !is_near!(ent_meta.IO, 1.0) {
-        starter.add(ent_meta.qubit, 0, 1.);
-      }
-
-      if !is_near!(ent_meta.II, 1.0) {
-        starter.add(ent_meta.qubit, 1, 1.);
-      }
-
-      self.already_processed.insert(ent_meta.id().to_string());
-    }
-
-    // Add the inverted starter result before doing anything else.
-    let mut results = Vec::new();
-    results.push(ResultFragment::with_flipped(&starter));
-    results.push(starter);
-
-    // Any further results will have a probability at least the same as the qubits.
-    let highest_probability = results
-      .iter()
-      .map(|val| val.rolling_probability)
-      .reduce(f64::max)
-      .unwrap();
-
-    // Work out lower bound for this analysis.
-    let lowest_bound = highest_probability - self.probability_range;
-
-    for ent_meta in entanglements.iter() {
-      if results.len() >= self.max_entangles_per_add {
-        break;
-      }
-
-      // If we've already seen this entanglement matchup before, skip.
-      if self.already_processed.contains(ent_meta.id()) {
-        continue;
-      }
-
-      // Merge all templates starting with the highest probability to happen, breaking out
-      // of the loop when we've breached our constraints.
-      let temp = Ptr::from(Vec::new());
-      let current_result_count = results.len();
-      for fragment in results.iter() {
-        // Add a new potential result with a particular qubit value if the chance it
-        // occurs is high enough.
-        let mut add_potential = |ratio: f64, result: i16| {
-          if (fragment.rolling_probability * ratio) < lowest_bound {
-            return false;
-          }
-
-          let mut new_fragment = fragment.clone();
-          new_fragment.add(
-            ent_meta.qubit,
-            result,
-            fragment.rolling_probability
-          );
-          with_mutable!(temp.push(new_fragment));
-
-          // Return to break if required.
-          temp.len() + current_result_count >= self.max_entangles_per_add
-        };
-
-        // If possible, flip our latest fragment and see if it's applicable to be added.
-        let mut add_last_flipped = || {
-          let last_result = with_mutable!(temp.last_mut().unwrap());
-          if last_result.rolling_probability - 1. < lowest_bound {
-            return false;
-          }
-
-          let new_fragment = ResultFragment::with_flipped(&last_result);
-          with_mutable!(temp.push(new_fragment));
-          temp.len() + current_result_count >= self.max_entangles_per_add
-        };
-
-        // Depending upon our target qubits value we need to check certain sorts of entanglement.
-        // Attempt the mapping, then attempt bit flipping the result.
-        if fragment.qubit_values.get(&ent_meta.qubit).unwrap() == &0 {
-          if add_potential(ent_meta.OO, 0) { break; }
-          if add_last_flipped() { break; }
-          if add_potential(ent_meta.OI, 1) { break; }
-          if add_last_flipped() { break; }
-        } else {
-          if add_potential(ent_meta.II, 1) { break; }
-          if add_last_flipped() { break; }
-          if add_potential(ent_meta.IO, 0) { break; }
-          if add_last_flipped() { break; }
-        }
-      }
-
-      results.append(with_mutable!(temp.as_mut()));
-    }
-
-    self.fragments.append(&mut results);
+  pub fn inverted(&mut self, index: i64, prob: f64) {
+    self.mirrored.insert(index, (prob, false));
   }
 
-  /// Combine all the fragments together into usable bitstrings. Resolves whether we know the
-  /// value at a certain qubit point, or not.
-  pub fn synthesize(&self) -> Vec<SolverResult> {
-    let mut results = Vec::new();
-
-    // Evaluate the lower bound now we have every current potential result.
-    let mut qubit_lower_bounds = HashMap::new();
-    for fragment in self.fragments.iter() {
-      let lower_bound = fragment.rolling_probability - self.probability_range;;
-      for key in fragment.qubit_values.keys() {
-        // If our boundary value is already higher, just continue.
-        if let Some(val) = qubit_lower_bounds.get(key) {
-          if val > &lower_bound {
-            continue;
-          }
-        }
-
-        qubit_lower_bounds.insert(*key, lower_bound);
-      }
-    }
-
-    // Filter out duplicated values from results.
-    // TODO: We need a more efficient way to filter out duplicates, preferably finding them earlier.
-    //  But for now this should be OK. Duplicates should only come from 100% entangled qubits and
-    //  aren't affected by boundary filters at the point they are generated.
-    //
-    // TODO: At best we'll just have fully_entangled_qubits * max_entanglement duplicates in a state
-    //  which is fully entangled with each other. While not optimal, size of circuits right now are
-    //  not large enough for it to make a significant difference (probably), and certainly not by
-    //  comparison to other bottlenecks.
-    let mut duplicated = HashSet::new();
-
-    // Filter out the ones which don't breach the boundary.
-    let mut filtered_fragments = Vec::new();
-    for fragment in self.fragments.iter() {
-      let mut skip = false;
-      for mqb in fragment.qubit_values.keys() {
-        if qubit_lower_bounds.get(mqb).unwrap() > &fragment.rolling_probability {
-          skip = true;
-        }
-      }
-
-      if !skip {
-        filtered_fragments.push(fragment);
-      }
-    }
-
-    for fragment in filtered_fragments.iter() {
-      let mut composite = (*fragment).clone();
-      for overlay_fragment in filtered_fragments.iter() {
-        if std::ptr::eq(fragment, overlay_fragment) {
-          continue;
-        }
-
-        let composite_lower_bound = composite.qubit_values.keys().map(|qb| *qubit_lower_bounds.get(&qb).unwrap()).reduce(f64::max).unwrap();
-        let overlay_lower_bound = overlay_fragment.qubit_values.keys().map(|qb| *qubit_lower_bounds.get(&qb).unwrap()).reduce(f64::max).unwrap();
-        let lower_bound = if composite_lower_bound < overlay_lower_bound {
-          composite_lower_bound
-        } else {
-          overlay_lower_bound
-        };
-
-        // Break if we get to a point where this fragment will drop out of prediction range.
-        if composite.rolling_probability * overlay_fragment.rolling_probability < lower_bound {
-          break;
-        }
-
-        composite.overlay(overlay_fragment);
-      }
-
-      let composite_key = composite.to_string();
-      if !duplicated.contains(&composite_key) {
-        composite.fill_empty(self.register_size);
-        results.push(SolverResult::from_result_fragment(&composite));
-        duplicated.insert(composite_key);
-      }
-    }
-
-    // Sort by probability since list shouldn't be large at this point, and it's what we'll want.
-    results.sort_by(|left, right| right.probability.total_cmp(&left.probability));
-    results
+  pub fn same(&mut self, index: i64, prob: f64) {
+    self.mirrored.insert(index, (prob, true));
   }
 }
 
-impl Display for ResultsSynthsizer {
+impl Display for QubitConstraints {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_str(&format!(
-      "\n{}",
-      &self
-        .fragments
-        .iter()
-        .map(|val| val.to_string())
-        .collect::<Vec<_>>()
-        .join("\n")
-    ))
+    let mut sorted_tangles = self.mirrored.iter().collect::<Vec<_>>();
+    sorted_tangles.sort_by(|left, right| left.0.cmp(&right.0));
+
+    f.write_str(&format!("{} @ {:.2}% [{}]", self.qubit, self.probability * 100., sorted_tangles.iter()
+        .map(|(a, (b, c))| format!("{}{} @ {:.2}%", a, if !*c {"^"} else {""}, b * 100.)).collect::<Vec<_>>().join(", ")))
   }
 }
 
@@ -1848,7 +1642,11 @@ pub struct QuantumSolver {
   clusters: Ptr<HashMap<i64, Ptr<EntanglementCluster>>>,
   measures: Ptr<HashMap<i64, MeasureAnalysis>>,
   trace_module: Ptr<TracingModule>,
+
+  /// The probability range from the highest we should analyze.
   probability_range: f64,
+
+  /// Max entanglements each section of the solver can associate.
   max_entanglements: usize
 }
 
@@ -2155,27 +1953,13 @@ impl QuantumSolver {
     }
 
     let start = Instant::now();
-    let measurable_indexes = self
+    let measurable_indexes = Ptr::from(self
       .measures
       .keys()
       .map(|val| val.clone())
-      .collect::<HashSet<i64>>();
+      .collect::<HashSet<i64>>());
 
-    let mut synth = ResultsSynthsizer::new(
-      self.probability_range,
-      self.max_entanglements,
-      measurable_indexes,
-      *self.qubits.keys().max().unwrap()
-    );
-    for meas in self.measures.values() {
-      synth.add(meas);
-    }
-
-    if self.is_tracing() {
-      log!(Level::Info, "Unfiltered results: {}\n", synth);
-    }
-
-    let mut results = synth.synthesize();
+    let mut results = self.predict_results(&self.measures.values().collect::<Vec<_>>(), &measurable_indexes);
 
     // All results are independent of every other, so need to normalize probabilities.
     let total_probabilities: f64 = results.iter().map(|val| val.probability).sum();
@@ -2199,6 +1983,207 @@ impl QuantumSolver {
     log!(Level::Info, "Solving took {}ms", took.as_millis());
     results
   }
+
+  /// Takes the measurement values in and predicts what the results are going to be across
+  /// each qubit.
+  fn predict_results(&self, measure: &Vec<&MeasureAnalysis>, measurable_indexes: &Ptr<HashSet<i64>>) -> Vec<SolverResult> {
+    // Transform the constraints into a consolidated form and normalize the matrix positions.
+    let mut indexed_constraints = HashMap::new();
+    for m in measure {
+      // We need to walk entanglement chains to work out inversion rules, as the link only tells us
+      // the inversion to the previous result not if that result is mirroring, or not, the original
+      // qubit. This helps with that.
+      let mut inversion_chain_results = HashMap::new();
+      let mut tangle_index_map = HashMap::new();
+      for others in &m.entangled_with {
+        tangle_index_map.insert(others.qubit, others);
+        if others.via == m.qubit {
+          inversion_chain_results.insert(others.qubit, others.is_result_inverted());
+        }
+      }
+
+      fn is_inverted(qubit: i64, inversion_chain_results: &mut HashMap<i64, bool>, tangle_index_map: &HashMap<i64, &EntanglingLink>) -> bool {
+        if let Some(val) = inversion_chain_results.get(&qubit) {
+          *val
+        } else {
+          let tangle = tangle_index_map.get(&qubit).unwrap();
+
+          // When both are true we're not inverted, otherwise we are.
+          let inverted = is_inverted(tangle.via, inversion_chain_results, tangle_index_map) != tangle.is_result_inverted();
+          inversion_chain_results.insert(qubit, inverted);
+          inverted
+        }
+      };
+
+      let mut constraint = Ptr::from(QubitConstraints::new(m.qubit, m.probability));
+      for others in &m.entangled_with {
+        if is_inverted(others.qubit, &mut inversion_chain_results, &tangle_index_map) {
+          constraint.inverted(others.qubit, others.ratio());
+        } else {
+          constraint.same(others.qubit, others.ratio());
+        }
+      }
+      indexed_constraints.insert(constraint.qubit, constraint);
+    }
+
+    if self.is_tracing() {
+      let mut sorted_constraints = indexed_constraints.values().into_iter().collect::<Vec<_>>();
+      sorted_constraints.sort_by(|a, b| a.qubit.cmp(&b.qubit));
+      log!(Level::Info, "Starting constraints:\n{}", sorted_constraints.iter().map(|val| val.to_string()).collect::<Vec<_>>().join("\n"));
+    }
+
+    let mut guard = HashSet::new();
+    let mut initial_results = Vec::new();
+    for constraint in indexed_constraints.values() {
+      // Catch and remove duplicates early.
+      let mut guard_key = Vec::new();
+      guard_key.push(constraint.qubit);
+      for qb in constraint.mirrored.keys() { guard_key.push(*qb); }
+      guard_key.sort();
+      let guard_key = guard_key.iter().map(|val| val.to_string()).collect::<String>();
+      if guard.contains(&guard_key) {
+        if self.is_tracing() { log!(Level::Info, "Skipping duplicate: {}", constraint); }
+        break;
+      }
+      guard.insert(guard_key);
+
+      // Build starter fragment with just our qubit.
+      let qubit_result = 1;
+      let mut starter = ResultFragment::new(
+        constraint.qubit,
+        qubit_result,
+        constraint.probability,
+        measurable_indexes.clone()
+      );
+
+      // Sort our entanglements by coupling strength.
+      // Assuming quicker to just cycle all values quickly rather than sort.
+      // We check if an entanglement is at 100% strength and if so, merge that into
+      // our starting value.
+      let mut value_constraints = constraint.mirrored.iter().collect::<Vec<_>>();
+      value_constraints.sort_by(|(a, (b, c)), (d, (e, g))| b.total_cmp(&e));
+      for (qubit, (probability, mirrored)) in value_constraints.iter() {
+        if is_near!(*probability, 1.0) {
+          starter.add(**qubit, if *mirrored { 1 } else { 0 }, *probability);
+        }
+      }
+
+      if self.is_tracing() {
+        log!(Level::Info, "Starting fragment: {}", starter);
+      }
+
+      // Add the inverted starter result before doing anything else.
+      let mut constraint_results = Vec::new();
+      constraint_results.push(ResultFragment::with_flipped(&starter));
+      constraint_results.push(starter.clone());
+
+      // Any further results will have a probability at least the same as the starter.
+      let highest_probability = constraint_results
+          .iter()
+          .map(|val| val.rolling_probability)
+          .reduce(f64::max)
+          .unwrap();
+
+      // Iterate through the constraints taking our starter values and adding the constraints to them,
+      // creating another potential result, then iterate through our newly expanded list. This means
+      // that the highest probability bitstrings are tried first, then combining them.
+      let lowest_bound = highest_probability - self.probability_range;
+      for (qb, (prob, mirrored)) in value_constraints.iter().filter(|(qubit, _)| !starter.qubit_values.contains_key(qubit)) {
+        let mut temp_results = Vec::new();
+        for next_fragment in constraint_results.iter() {
+          // Make sure our fragment matches our constraints.
+          let qubit_value = next_fragment.qubit_values.get(&constraint.qubit).unwrap();
+          let mut new_fragment = if let Some(val) = next_fragment.qubit_values.get(qb) {
+            if (*mirrored && val != qubit_value) || (!mirrored && val == qubit_value) {
+              ResultFragment::with_flipped(next_fragment)
+            } else {
+              next_fragment.clone()
+            }
+          } else {
+            next_fragment.clone()
+          };
+
+          new_fragment.add(**qb, 1, *prob);
+          if new_fragment.rolling_probability < lowest_bound || constraint_results.len() >= self.max_entanglements {
+            break;
+          }
+
+          temp_results.push(new_fragment);
+        }
+
+        constraint_results.extend(temp_results);
+      }
+
+      initial_results.extend(constraint_results);
+    }
+
+    initial_results.sort_by(|a, b| b.rolling_probability.total_cmp(&a.rolling_probability));
+    if self.is_tracing() {
+      log!(Level::Info, "Fragment result count: {}", initial_results.len());
+    }
+
+    let constraint_results = initial_results.iter().take(self.max_entanglements).collect::<Vec<_>>();
+    if self.is_tracing() {
+      log!(Level::Info, "Usable fragments:\n{}", constraint_results.iter().map(|val| val.to_string()).collect::<Vec<_>>().join("\n"));
+    }
+
+    let mut qubit_boundaries = HashMap::new();
+    for constraint in constraint_results.iter() {
+      for qb in constraint.qubit_values.keys() {
+        if !qubit_boundaries.contains_key(qb) {
+          let lower_bound = constraint.rolling_probability - self.probability_range;
+          qubit_boundaries.insert(qb, (constraint.rolling_probability, if lower_bound < 0. { 0. } else { lower_bound }));
+        }
+      }
+    }
+
+    let register_size = self.qubits.keys().max().unwrap();
+    let mut overlay_results = Vec::new();
+    for fragment in constraint_results.iter() {
+      let mut composite = (*fragment).clone();
+      for overlay_fragment in constraint_results.iter() {
+        if std::ptr::eq(fragment, overlay_fragment) {
+          continue;
+        }
+
+        let composite_lower_bound = composite.qubit_values.keys().map(|qb| qubit_boundaries.get(&qb).unwrap().1).reduce(f64::max).unwrap();
+        let overlay_lower_bound = overlay_fragment.qubit_values.keys().map(|qb| qubit_boundaries.get(&qb).unwrap().1).reduce(f64::max).unwrap();
+        let lower_bound = if composite_lower_bound < overlay_lower_bound {
+          composite_lower_bound
+        } else {
+          overlay_lower_bound
+        };
+
+        // Break if we get to a point where this fragment will drop out of prediction range.
+        if composite.rolling_probability * overlay_fragment.rolling_probability < lower_bound {
+          break;
+        }
+
+        composite.overlay(overlay_fragment);
+      }
+
+      composite.fill_empty(*register_size);
+      overlay_results.push(composite);
+    }
+
+    overlay_results.sort_by(|left, right| left.rolling_probability.total_cmp(&right.rolling_probability));
+    let mut results = Vec::new();
+    let mut dup_guard = HashSet::new();
+    for res in overlay_results {
+      if results.len() > self.max_entanglements { break; }
+
+      let key = res.to_string();
+      if !dup_guard.contains(&key) {
+        dup_guard.insert(key);
+        results.push(SolverResult::from_result_fragment(&res));
+      }
+    }
+
+    // Sort by probability since list shouldn't be large at this point, and it's what we'll want.
+    results.sort_by(|left, right| right.probability.total_cmp(&left.probability));
+    results
+  }
+
 
   /// Tracing method for printing a simplified difference between measures before/after a
   /// gate application.
@@ -2320,7 +2305,7 @@ mod tests {
 
     let results = result
         .iter()
-        .filter(|val| val.bitstring == "11" || val.bitstring == "00")
+        .filter(|val| val.bitstring == "010" || val.bitstring == "101")
         .collect::<Vec<_>>();
     assert_eq!(results.len(), 2);
     assert!(results[0].probability >= 0.49 && results[0].probability <= 0.51);
