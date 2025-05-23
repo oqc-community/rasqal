@@ -79,9 +79,9 @@ impl Tangle {
           Entangled(ent_state) => {
             let entangled_state = ent_state.state_matrix();
             let prob = if !left_bit {
-              entangled_state.get(2, 2).re + entangled_state.get(3, 3).re
+              entangled_state.get(1, 1).re + entangled_state.get(2, 2).re
             } else {
-              entangled_state.get(1, 1).re + entangled_state.get(4, 4).re
+              entangled_state.get(0, 0).re + entangled_state.get(3, 3).re
             };
             let link_strength = if prob > 0.5 {
               prob - (0.5 - prob)
