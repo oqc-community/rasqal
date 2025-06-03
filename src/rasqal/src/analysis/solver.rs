@@ -1089,20 +1089,7 @@ impl MatrixFragment {
   }
 
   pub fn expand(&self, other: &MatrixFragment) -> MatrixFragment {
-    let mut length = self.matrix.ncols();
-
-    // Recursively auto-expand until equal sizes.
-    if other.matrix.ncols() != length {
-      if other.matrix.ncols() > length {
-        let expanded_self = MatrixFragment::id().expand(self);
-        return expanded_self.expand(other);
-      } else {
-        let expanded_other = MatrixFragment::id().expand(other);
-        return self.expand(&expanded_other);
-      }
-    }
-
-    let mut destination = Mat::zeros(length * length, length * length);
+    let mut destination = Mat::zeros(self.matrix.nrows() * other.matrix.nrows(), self.matrix.ncols() * other.matrix.ncols());
     kron(destination.as_mut(), self.matrix.as_ref(), other.matrix.as_ref());
     MatrixFragment::new(destination)
   }
