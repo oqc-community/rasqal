@@ -1220,7 +1220,6 @@ impl MatrixFragment {
 
   /// Returns this matrix in a nicely-formatted way for human readability and logging.
   fn stringify_matrix(&self) -> Vec<String> {
-    let mut result = Vec::new();
     let matrix = &self.matrix;
     let dimensions = matrix.ncols();
 
@@ -1232,129 +1231,34 @@ impl MatrixFragment {
         .replace("+0i", "")
     }
 
-    // Restrict precision, but trim off any which are fully zero to make the output less verbose.
-    if dimensions == 2 {
-      let mut first_row = vec![
-        strip(&format!("{:.2}", matrix.get(0, 0))),
-        strip(&format!("{:.2}", matrix.get(1, 0))),
-      ];
+    let string_for_dimensions = |dim: usize| {
+      let mut result = Vec::new();
+      let mut rows = Vec::new();
+      let mut max_length = 0;
+      for row in 0..dim {
+        let mut inc_vec = Vec::new();
+        for col in 0..dim {
+          inc_vec.push(strip(&format!("{:.2}", matrix.get(col, row))));
+        }
 
-      let max_length = first_row.iter().map(|val| val.len()).max().unwrap();
-      first_row = first_row
-        .iter()
-        .map(|val| format!("{val: >width$}", width = max_length + 1 - val.len()))
-        .collect::<Vec<_>>();
+        let rows_max = inc_vec.iter().map(|val| val.len()).max().unwrap();
+        if rows_max > max_length {
+          max_length = rows_max;
+        }
 
-      let mut second_row = vec![
-        strip(&format!("{:.2}", matrix.get(0, 1))),
-        strip(&format!("{:.2}", matrix.get(1, 1))),
-      ];
-
-      let max_length = second_row.iter().map(|val| val.len()).max().unwrap();
-      second_row = second_row
-        .iter()
-        .map(|val| format!("{val: >width$}", width = max_length + 1 - val.len()))
-        .collect::<Vec<_>>();
-
-      result.push(format!(
-        "[{}, {}]",
-        first_row.get(0).unwrap(),
-        second_row.get(0).unwrap()
-      ));
-
-      result.push(format!(
-        "[{}, {}]",
-        first_row.get(1).unwrap(),
-        second_row.get(1).unwrap()
-      ));
-    } else if dimensions == 4 {
-      let format_row = |row: usize| -> Vec<String> {
-        let mut row = vec![
-          strip(&format!("{:.2}", matrix.get(0, row))),
-          strip(&format!("{:.2}", matrix.get(1, row))),
-          strip(&format!("{:.2}", matrix.get(2, row))),
-          strip(&format!("{:.2}", matrix.get(3, row))),
-        ];
-
-        let max_length = row.iter().map(|val| val.len()).max().unwrap();
-        row.iter()
+        rows.push(inc_vec.iter()
             .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
-            .collect::<Vec<_>>()
-      };
+            .collect::<Vec<_>>());
+      }
 
-      let mut first_row = format_row(0);
-      let mut second_row =  format_row(1);
-      let mut third_row = format_row(2);
-      let mut fourth_row =  format_row(3);
+      for row in rows {
+        result.push(format!("[{}]", row.join(", ")));
+      }
 
-      let mut push_results = |ind: usize| {
-        result.push(format!(
-          "[{}, {}, {}, {}]",
-          first_row.get(ind).unwrap(),
-          second_row.get(ind).unwrap(),
-          third_row.get(ind).unwrap(),
-          fourth_row.get(ind).unwrap()
-        ));
-      };
+      result
+    };
 
-      push_results(0);
-      push_results(1);
-      push_results(2);
-      push_results(3);
-    } else {
-      let format_row = |row: usize| -> Vec<String> {
-        let mut row = vec![
-          strip(&format!("{:.2}", matrix.get(0, row))),
-          strip(&format!("{:.2}", matrix.get(1, row))),
-          strip(&format!("{:.2}", matrix.get(2, row))),
-          strip(&format!("{:.2}", matrix.get(3, row))),
-          strip(&format!("{:.2}", matrix.get(4, row))),
-          strip(&format!("{:.2}", matrix.get(5, row))),
-          strip(&format!("{:.2}", matrix.get(6, row))),
-          strip(&format!("{:.2}", matrix.get(7, row)))
-        ];
-
-        let max_length = row.iter().map(|val| val.len()).max().unwrap();
-        row.iter()
-            .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
-            .collect::<Vec<_>>()
-      };
-
-      let mut first_row = format_row(0);
-      let mut second_row =  format_row(1);
-      let mut third_row = format_row(2);
-      let mut fourth_row =  format_row(3);
-      let mut fifth_row =  format_row(4);
-      let mut sixth_row =  format_row(5);
-      let mut seventh_row =  format_row(6);
-      let mut eighth_row =  format_row(7);
-
-      let mut push_results = |ind: usize| {
-        result.push(format!(
-          "[{}, {}, {}, {}, {}, {}, {}, {}]",
-          first_row.get(ind).unwrap(),
-          second_row.get(ind).unwrap(),
-          third_row.get(ind).unwrap(),
-          fourth_row.get(ind).unwrap(),
-          fifth_row.get(ind).unwrap(),
-          sixth_row.get(ind).unwrap(),
-          seventh_row.get(ind).unwrap(),
-          eighth_row.get(ind).unwrap()
-        ));
-      };
-
-      push_results(0);
-      push_results(1);
-      push_results(2);
-      push_results(3);
-      push_results(4);
-      push_results(5);
-      push_results(6);
-      push_results(7);
-    }
-
-    // Reduce verbosity of the output where we don't need to know about it.
-    result
+    string_for_dimensions(dimensions)
   }
 }
 
