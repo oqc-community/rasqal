@@ -41,6 +41,3 @@ opt-level = 3
 
 [lib]
 crate-type = ["cdylib"]
-
-[package.metadata.maturin]
-name = "rasqal._native"
