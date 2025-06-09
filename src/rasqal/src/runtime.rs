@@ -332,21 +332,13 @@ impl TracingModule {
     self.has(ActiveTracers::Solver & ActiveTracers::Detailed)
   }
 
-  pub fn solver(&self) -> bool {
-    self.has(ActiveTracers::Solver)
-  }
+  pub fn solver(&self) -> bool { self.has(ActiveTracers::Solver) }
 
-  pub fn runtime(&self) -> bool {
-    self.has(ActiveTracers::Runtime)
-  }
+  pub fn runtime(&self) -> bool { self.has(ActiveTracers::Runtime) }
 
-  pub fn projections(&self) -> bool {
-    self.has(ActiveTracers::Projections)
-  }
+  pub fn projections(&self) -> bool { self.has(ActiveTracers::Projections) }
 
-  pub fn graph(&self) -> bool {
-    self.has(ActiveTracers::Graphs)
-  }
+  pub fn graph(&self) -> bool { self.has(ActiveTracers::Graphs) }
 }
 
 #[derive(Clone, Default)]
