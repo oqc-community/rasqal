@@ -78,7 +78,7 @@ impl Tangle {
         )),
         eright.clone()
       ));
-      if tracer.solver_detailed() {
+      if tracer.solver() {
         log!(
           Level::Info,
           "\nBuilding from isolated states.\nLeft: \n{} \n\nRight: \n{}\n\nResult: \n{}\n",
@@ -122,7 +122,7 @@ impl Tangle {
       let expanded = right_state
         .matrix_fragment
         .expand(&left_state.matrix_fragment);
-      if tracer.solver_detailed() {
+      if tracer.solver() {
         log!(Level::Info, "\nBuilding from isolated and entangled states.\nLeft: \n{} \n\nRight: \n{}\n\nResult: \n{}\n", left_state, right_state, expanded)
       }
 
@@ -660,7 +660,7 @@ impl EntangledQubit {
       }
     }
 
-    if self.trace_module.solver_detailed() {
+    if self.trace_module.solver() {
       log!(
         Level::Info,
         "\nApplying single qubit gate across tangle.\nGate:\n{}\n\nExpanded:\n{}\n\nResult:\n{}",
