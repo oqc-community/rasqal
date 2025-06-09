@@ -2342,51 +2342,67 @@ mod tests {
   use std::f64::consts::PI;
   use std::fmt::Display;
 
-  // #[test]
-  // fn ghz_modified_test() {
-  //   let solver = QuantumSolver::with_trace(Ptr::from(TracingModule::with(ActiveTracers::all())));
-  //   let (q0, q1, q2, q3, q4, q5) = (Qubit::new(0), Qubit::new(1), Qubit::new(2), Qubit::new(3), Qubit::new(4), Qubit::new(5));
-  //   solver.Had(&q0);
-  //   solver.CX(&vec![q0.clone()], &q1, &PI);
-  //   solver.CX(&vec![q1.clone()], &q2, &PI);
-  //   solver.X(&q1, &PI);
-  //
-  //   solver.measure_all(&vec![&q0, &q1, &q2]);
-  //   let result = solver.solve();
-  //
-  //   let results = result
-  //       .iter()
-  //       .filter(|val| val.bitstring == "010" || val.bitstring == "101")
-  //       .collect::<Vec<_>>();
-  //   assert_eq!(results.len(), 2);
-  //   assert!(results[0].probability >= 0.49 && results[0].probability <= 0.51);
-  //   assert!(results[1].probability >= 0.49 && results[1].probability <= 0.51);
-  // }
-  //
-  // #[test]
-  // fn multistate_test() {
-  //   let solver = QuantumSolver::with_trace(Ptr::from(TracingModule::with(ActiveTracers::all())));
-  //   let (q0, q1, q2, q3, q4, q5) = (Qubit::new(0), Qubit::new(1), Qubit::new(2), Qubit::new(3), Qubit::new(4), Qubit::new(5));
-  //   solver.Had(&q0);
-  //   solver.CX(&vec![q0.clone()], &q1, &PI);
-  //   solver.CX(&vec![q1.clone()], &q2, &PI);
-  //   solver.CX(&vec![q2.clone()], &q3, &PI);
-  //   solver.CX(&vec![q3.clone()], &q4, &PI);
-  //   solver.CX(&vec![q4.clone()], &q5, &PI);
-  //   solver.CX(&vec![q5.clone()], &q2, &PI);
-  //   solver.CX(&vec![q2.clone()], &q4, &PI);
-  //
-  //   solver.measure_all(&vec![&q0, &q1, &q2, &q3, &q4, &q5]);
-  //   let result = solver.solve();
-  //
-  //   let results = result
-  //     .iter()
-  //     .filter(|val| val.bitstring == "11" || val.bitstring == "00")
-  //     .collect::<Vec<_>>();
-  //   assert_eq!(results.len(), 2);
-  //   assert!(results[0].probability >= 0.49 && results[0].probability <= 0.51);
-  //   assert!(results[1].probability >= 0.49 && results[1].probability <= 0.51);
-  // }
+  #[ignore]
+  #[test]
+  fn ghz_modified_test() {
+    let solver = QuantumSolver::with_trace(Ptr::from(TracingModule::with(ActiveTracers::all())));
+    let (q0, q1, q2, q3, q4, q5) = (
+      Qubit::new(0),
+      Qubit::new(1),
+      Qubit::new(2),
+      Qubit::new(3),
+      Qubit::new(4),
+      Qubit::new(5)
+    );
+    solver.Had(&q0);
+    solver.CX(&vec![q0.clone()], &q1, &PI);
+    solver.CX(&vec![q1.clone()], &q2, &PI);
+    solver.X(&q1, &PI);
+
+    solver.measure_all(&vec![&q0, &q1, &q2]);
+    let result = solver.solve();
+
+    let results = result
+      .iter()
+      .filter(|val| val.bitstring == "010" || val.bitstring == "101")
+      .collect::<Vec<_>>();
+    assert_eq!(results.len(), 2);
+    assert!(results[0].probability >= 0.49 && results[0].probability <= 0.51);
+    assert!(results[1].probability >= 0.49 && results[1].probability <= 0.51);
+  }
+
+  #[ignore]
+  #[test]
+  fn multistate_test() {
+    let solver = QuantumSolver::with_trace(Ptr::from(TracingModule::with(ActiveTracers::all())));
+    let (q0, q1, q2, q3, q4, q5) = (
+      Qubit::new(0),
+      Qubit::new(1),
+      Qubit::new(2),
+      Qubit::new(3),
+      Qubit::new(4),
+      Qubit::new(5)
+    );
+    solver.Had(&q0);
+    solver.CX(&vec![q0.clone()], &q1, &PI);
+    solver.CX(&vec![q1.clone()], &q2, &PI);
+    solver.CX(&vec![q2.clone()], &q3, &PI);
+    solver.CX(&vec![q3.clone()], &q4, &PI);
+    solver.CX(&vec![q4.clone()], &q5, &PI);
+    solver.CX(&vec![q5.clone()], &q2, &PI);
+    solver.CX(&vec![q2.clone()], &q4, &PI);
+
+    solver.measure_all(&vec![&q0, &q1, &q2, &q3, &q4, &q5]);
+    let result = solver.solve();
+
+    let results = result
+      .iter()
+      .filter(|val| val.bitstring == "11" || val.bitstring == "00")
+      .collect::<Vec<_>>();
+    assert_eq!(results.len(), 2);
+    assert!(results[0].probability >= 0.49 && results[0].probability <= 0.51);
+    assert!(results[1].probability >= 0.49 && results[1].probability <= 0.51);
+  }
 
   #[test]
   fn bell_test() {
