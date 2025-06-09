@@ -681,12 +681,12 @@ impl Display for EntangledQubit {
 }
 
 #[derive(Clone)]
-pub enum AnalysisQubit<'a> {
-  Entangled(&'a Ptr<EntangledQubit>),
-  Reference(&'a Ptr<ReferenceQubit>),
+pub enum AnalysisQubit {
+  Entangled(Ptr<EntangledQubit>),
+  Reference(Ptr<ReferenceQubit>),
 }
 
-impl AnalysisQubit<'_> {
+impl AnalysisQubit {
   /// Returns current qubit as an entangled qubit.
   pub fn as_entangled(&self) -> Ptr<EntangledQubit> {
     match self {
@@ -811,7 +811,7 @@ impl AnalysisQubit<'_> {
   }
 }
 
-impl Display for AnalysisQubit<'_> {
+impl Display for AnalysisQubit {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     for line in self.stringify(0) {
       f.write_str(&line);
@@ -1569,16 +1569,16 @@ impl QuantumSolver {
   /// Gets a qubit, or adds a default one at this index if it doesn't exist.
   fn qubit_for(&self, index: &i64) -> AnalysisQubit {
     if let Some(cluster) = self.clusters.get(index) {
-      Entangled(cluster.get(index).unwrap())
+      Entangled(cluster.get(index).unwrap().clone())
     } else {
       if let Some(qubit) = self.qubits.get(index) {
-        Reference(qubit)
+        Reference(qubit.clone())
       } else {
         with_mutable_self!(self.qubits.insert(
         index.clone(),
         Ptr::from(ReferenceQubit::new(*index, self.trace_module.clone()))
       ));
-        Reference(self.qubits.get(&index).unwrap())
+        Reference(self.qubits.get(&index).unwrap().clone())
       }
     }
   }
