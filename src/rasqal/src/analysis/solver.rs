@@ -102,7 +102,7 @@ impl Tangle {
 
       let expanded = right_state.matrix_fragment.expand(&left_state.matrix_fragment);
       if tracer.solver_detailed() {
-        log!(Level::Info, "\nBuilding from multi-entangled states.\nLeft: \n{} \n\nRight: \n{}\n\nResult: \n{}\n", left_state, right_state, expanded)
+        log!(Level::Info, "\nBuilding from isolated and entangled states.\nLeft: \n{} \n\nRight: \n{}\n\nResult: \n{}\n", left_state, right_state, expanded)
       }
 
       // Fetch a pointer to our entangled qubit or transform our reference qubit into a free entangled one.
@@ -214,8 +214,6 @@ impl EntanglingLink {
 
 impl Display for EntanglingLink {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    // TODO: Simplify print. Pretty sure they will always be mirrored so can condense 01/10 and
-    //  visa-versa.
     fn strip(string: &String) -> String {
       string.replace(".00", "")
     }
@@ -398,6 +396,7 @@ impl EntangledQubit {
           [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)]
         ];
 
+      // TODO: Needs to swap polarity depending upon where our result is focused, almost garanteed.
       for tangle in self.tangles.values() {
         result = result.add(tangle.state.matrix_fragment.matrix.clone());
       }
@@ -1380,6 +1379,7 @@ impl Display for SolverResult {
 #[derive(Clone)]
 pub struct ResultFragment {
   /// Rolling probability of this whole fragment being applicable. Used for filtering.
+  /// Usually 1-0.
   rolling_probability: f64,
   qubit_values: HashMap<i64, i16>,
 
@@ -1522,8 +1522,14 @@ impl Display for QubitConstraints {
     let mut sorted_tangles = self.mirrored.iter().collect::<Vec<_>>();
     sorted_tangles.sort_by(|left, right| left.0.cmp(&right.0));
 
-    f.write_str(&format!("{} @ {:.2}% [{}]", self.qubit, self.probability * 100., sorted_tangles.iter()
-        .map(|(a, (b, c))| format!("{}{} @ {:.2}%", a, if !*c {"^"} else {""}, b * 100.)).collect::<Vec<_>>().join(", ")))
+    let tangle_string = if sorted_tangles.len() > 0 {
+      format!("[{}]", sorted_tangles.iter()
+          .map(|(a, (b, c))| format!("{}{} @ {:.2}%", a, if !*c {"^"} else {""}, b * 100.)).collect::<Vec<_>>().join(", "))
+    } else {
+      String::new()
+    };
+
+    f.write_str(&format!("Q{} @ {:.2}% {}", self.qubit, self.probability * 100., tangle_string))
   }
 }
 
@@ -2015,7 +2021,7 @@ impl QuantumSolver {
 
     let constraint_results = initial_results.iter().take(self.max_entanglements).collect::<Vec<_>>();
     if self.is_tracing() {
-      log!(Level::Info, "Usable fragments:\n{}", constraint_results.iter().map(|val| val.to_string()).collect::<Vec<_>>().join("\n"));
+      log!(Level::Info, "Usable fragments:\n{}\n", constraint_results.iter().map(|val| val.to_string()).collect::<Vec<_>>().join("\n"));
     }
 
     let mut qubit_boundaries = HashMap::new();
@@ -2165,7 +2171,7 @@ impl Display for QuantumSolver {
     let mut ordered_measures = self.measures.iter().collect::<Vec<_>>();
     ordered_measures.sort_by(|left, right| left.0.cmp(right.0));
     for (index, result) in ordered_measures.iter() {
-      f.write_fmt(format_args!("{} -> {}\n", index, result));
+      f.write_fmt(format_args!("Q{} -> {}\n", index, result));
     }
 
     f.write_str("")
