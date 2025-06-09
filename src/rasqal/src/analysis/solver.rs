@@ -1460,8 +1460,8 @@ impl ResultFragment {
 
   /// Fills out all unmeasured qubits in the bitstring with zeros, up to `register_count`.
   pub fn fill_empty(&mut self, register_count: i64) {
-    for i in 0..=register_count {
-      if !self.measureable_qubits.contains(&i) {
+    for i in 0..= register_count {
+      if !self.qubit_values.contains_key(&i) {
         self.qubit_values.insert(i, 0);
       }
     }
@@ -1886,7 +1886,7 @@ impl QuantumSolver {
   fn predict_results(&self, measure: &Vec<&MeasureAnalysis>, measurable_indexes: &Ptr<HashSet<i64>>) -> Vec<SolverResult> {
     // Transform the constraints into a consolidated form and normalize the matrix positions.
     let mut indexed_constraints = HashMap::new();
-    for m in measure {
+    for m in measure.iter() {
       // We need to walk entanglement chains to work out inversion rules, as the link only tells us
       // the inversion to the previous result not if that result is mirroring, or not, the original
       // qubit. This helps with that.
@@ -1923,25 +1923,21 @@ impl QuantumSolver {
       indexed_constraints.insert(constraint.qubit, constraint);
     }
 
+    let mut sorted_constraints = indexed_constraints.values().collect::<Vec<_>>();
+    sorted_constraints.sort_by(|a, b| a.qubit.cmp(&b.qubit));
     if self.is_tracing() {
-      let mut sorted_constraints = indexed_constraints.values().into_iter().collect::<Vec<_>>();
-      sorted_constraints.sort_by(|a, b| a.qubit.cmp(&b.qubit));
       log!(Level::Info, "Starting constraints:\n{}", sorted_constraints.iter().map(|val| val.to_string()).collect::<Vec<_>>().join("\n"));
     }
 
     let mut guard = HashSet::new();
     let mut initial_results = Vec::new();
-    for constraint in indexed_constraints.values() {
+    for constraint in sorted_constraints.iter() {
       // Catch and remove duplicates early.
       let mut guard_key = Vec::new();
       guard_key.push(constraint.qubit);
       for qb in constraint.mirrored.keys() { guard_key.push(*qb); }
       guard_key.sort();
       let guard_key = guard_key.iter().map(|val| val.to_string()).collect::<String>();
-      if guard.contains(&guard_key) {
-        if self.is_tracing() { log!(Level::Info, "Skipping duplicate: {}", constraint); }
-        break;
-      }
       guard.insert(guard_key);
 
       // Build starter fragment with just our qubit.
@@ -1965,14 +1961,21 @@ impl QuantumSolver {
         }
       }
 
-      if self.is_tracing() {
-        log!(Level::Info, "Starting fragment: {}", starter);
+      // If our starters probability is high enough that the flipped version will be outside of
+      // our probability range or visa versa, only add the valid one.
+      let mut constraint_results = Vec::new();
+      if (1.0 - starter.rolling_probability) - starter.rolling_probability < self.probability_range {
+        constraint_results.push(ResultFragment::with_flipped(&starter));
+        constraint_results.push(starter.clone());
+      } else if starter.rolling_probability  > 0.5 {
+        constraint_results.push(starter.clone());
+      } else {
+        constraint_results.push(ResultFragment::with_flipped(&starter));
       }
 
-      // Add the inverted starter result before doing anything else.
-      let mut constraint_results = Vec::new();
-      constraint_results.push(ResultFragment::with_flipped(&starter));
-      constraint_results.push(starter.clone());
+      if self.is_tracing() {
+        log!(Level::Info, "Q{} starting fragments: {}", constraint.qubit, constraint_results.iter().map(|val| val.to_string()).collect::<Vec<_>>().join(", "));
+      }
 
       // Any further results will have a probability at least the same as the starter.
       let highest_probability = constraint_results
@@ -2019,7 +2022,8 @@ impl QuantumSolver {
       log!(Level::Info, "Fragment result count: {}", initial_results.len());
     }
 
-    let constraint_results = initial_results.iter().take(self.max_entanglements).collect::<Vec<_>>();
+    // Drop anything which has no chance of being chosen. Only happens for small entanglement maps.
+    let constraint_results = initial_results.iter().filter(|val| val.rolling_probability != 0.).take(self.max_entanglements).collect::<Vec<_>>();
     if self.is_tracing() {
       log!(Level::Info, "Usable fragments:\n{}\n", constraint_results.iter().map(|val| val.to_string()).collect::<Vec<_>>().join("\n"));
     }
@@ -2066,11 +2070,13 @@ impl QuantumSolver {
     overlay_results.sort_by(|left, right| left.rolling_probability.total_cmp(&right.rolling_probability));
     let mut results = Vec::new();
     let mut dup_guard = HashSet::new();
-    for res in overlay_results {
+    for mut res in overlay_results {
       if results.len() > self.max_entanglements { break; }
 
       let key = res.to_string();
       if !dup_guard.contains(&key) {
+        // TODO: Change to usize?
+        res.fill_empty(self.qubits.len() as i64);
         dup_guard.insert(key);
         results.push(SolverResult::from_result_fragment(&res));
       }
