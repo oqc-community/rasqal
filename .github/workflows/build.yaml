@@ -27,7 +27,6 @@ jobs:
       - name: Setup rust toolchain
         uses: ./.github/actions/rust-toolchain
         with:
-          toolchain: 1.75.0
           components: rustfmt clippy
 
       - name: Set up Python ${{ matrix.py_version }}
