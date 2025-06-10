@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2024 Oxford Quantum Circuits Ltd
 
+use crate::analysis::solver::AnalysisQubit::{Entangled, Reference};
 use crate::config::RasqalConfig;
 use crate::execution::RuntimeCollection;
 use crate::features::QuantumFeatures;
@@ -9,8 +10,9 @@ use crate::hardware::Qubit;
 use crate::runtime::{ActiveTracers, TracingModule};
 use crate::smart_pointers::Ptr;
 use crate::{with_mutable, with_mutable_self};
+use faer::linalg::kron::kron;
+use faer::{mat, Mat};
 use log::{log, Level};
-use ndarray::{array, Array2};
 use num::traits::float::TotalOrder;
 use num::traits::real::Real;
 use num::traits::FloatConst;
@@ -23,7 +25,7 @@ use std::collections::{HashMap, HashSet};
 use std::f64::consts::PI;
 use std::fmt::{Display, Formatter, Write};
 use std::iter::zip;
-use std::ops::{Deref, Index, Mul, MulAssign};
+use std::ops::{Add, Deref, Index, Mul, MulAssign};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -45,22 +47,105 @@ macro_rules! is_near {
 /// Construct which holds the entanglement information between two qubits, shared between both.
 #[derive(Clone)]
 pub struct Tangle {
-  left: Ptr<AnalysisQubit>,
+  left: Ptr<EntangledQubit>,
   state: Ptr<EntangledFragment>,
-  right: Ptr<AnalysisQubit>
+  right: Ptr<EntangledQubit>
 }
 
 impl Tangle {
-  pub fn from_qubits(left: &Ptr<AnalysisQubit>, right: &Ptr<AnalysisQubit>) -> Tangle {
-    Tangle {
-      left: left.clone(),
-      state: Ptr::from(left.state.entangle_with(&right.state)),
-      right: right.clone()
+  pub fn new(
+    left: Ptr<EntangledQubit>, state: Ptr<EntangledFragment>, right: Ptr<EntangledQubit>
+  ) -> Tangle {
+    Tangle { left, state, right }
+  }
+
+  pub fn from_analysis_qubits(
+    left: &AnalysisQubit, right: &AnalysisQubit, tracer: &Ptr<TracingModule>
+  ) -> (Ptr<EntangledQubit>, Ptr<EntangledQubit>) {
+    if let Reference(left) = left
+      && let Reference(right) = right
+    {
+      let mut eleft = Ptr::from(EntangledQubit::new(left.index, left.trace_module.clone()));
+      let mut eright = Ptr::from(EntangledQubit::new(right.index, right.trace_module.clone()));
+
+      let tangle = Ptr::from(Tangle::new(
+        eleft.clone(),
+        Ptr::from(EntangledFragment::new(
+          right
+            .state
+            .matrix_fragment
+            .expand(&left.state.matrix_fragment)
+        )),
+        eright.clone()
+      ));
+      if tracer.solver() {
+        log!(
+          Level::Info,
+          "\nBuilding from isolated states.\nLeft: \n{} \n\nRight: \n{}\n\nResult: \n{}\n",
+          left.state.matrix_fragment,
+          right.state.matrix_fragment,
+          tangle.state.matrix_fragment
+        );
+      }
+
+      eleft.tangles.insert(eright.index, tangle.clone());
+      eright.tangles.insert(eleft.index, tangle);
+      (eleft, eright)
+    } else {
+      fn build_density_state(qb: &AnalysisQubit, left_bit: bool) -> EntangledFragment {
+        match qb {
+          Reference(ref_state) => ref_state.state.deref().clone(),
+          Entangled(ent_state) => {
+            let entangled_state = ent_state.state_matrix();
+            let prob = if !left_bit {
+              entangled_state.get(1, 1).re + entangled_state.get(2, 2).re
+            } else {
+              entangled_state.get(0, 0).re + entangled_state.get(3, 3).re
+            };
+            let link_strength = if prob > 0.5 {
+              prob - (0.5 - prob)
+            } else {
+              prob
+            };
+
+            EntangledFragment::new(MatrixFragment::new(mat![
+              [C!(1.0 - prob, 0.), C!(link_strength, 0.)],
+              [C!(link_strength, 0.), C!(prob, 0.)]
+            ]))
+          }
+        }
+      }
+
+      let mut left_state = build_density_state(left, true);
+      let mut right_state = build_density_state(right, false);
+
+      let expanded = right_state
+        .matrix_fragment
+        .expand(&left_state.matrix_fragment);
+      if tracer.solver() {
+        log!(Level::Info, "\nBuilding from isolated and entangled states.\nLeft: \n{} \n\nRight: \n{}\n\nResult: \n{}\n", left_state, right_state, expanded)
+      }
+
+      // Fetch a pointer to our entangled qubit or transform our reference qubit into a free entangled one.
+      let entangled_left = left.as_entangled();
+      let entangled_right = right.as_entangled();
+      let tangle = Ptr::from(Tangle::new(
+        entangled_left.clone(),
+        Ptr::from(EntangledFragment::new(expanded)),
+        entangled_right.clone()
+      ));
+
+      with_mutable!(entangled_left
+        .tangles
+        .insert(entangled_right.index, tangle.clone()));
+      with_mutable!(entangled_right.tangles.insert(entangled_left.index, tangle));
+
+      (entangled_left.clone(), entangled_right.clone())
     }
   }
 
   /// Helper method to just return a qubit of a certain index. Returns None if neither match.
-  pub fn with_index(&self, index: &i64) -> Option<&Ptr<AnalysisQubit>> {
+  pub fn with_index(&self, index: &i64) -> Option<&Ptr<EntangledQubit>> {
     if self.left.index == *index {
       Some(&self.left)
     } else if self.right.index == *index {
@@ -75,10 +160,33 @@ impl Tangle {
     // I would prefer this be static but can't without shared pointer workarounds, which at
     // that point value is questionable.
     let czero: Complex<f64> = Complex::zero();
-    self.state.get((2, 0)) != &czero
-      || self.state.get((2, 1)) != &czero
-      || self.state.get((3, 0)) != &czero
-      || self.state.get((3, 1)) != &czero
+    self.state.get(2, 0) != &czero
+      || self.state.get(2, 1) != &czero
+      || self.state.get(3, 0) != &czero
+      || self.state.get(3, 1) != &czero
+  }
+
+  fn stringify(&self, indent_level: i32) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut base_indent = String::new();
+    for multiplier in 0..indent_level {
+      base_indent = format!("{}    ", base_indent);
+    }
+    let indent = format!("{}    ", base_indent);
+    result.push(format!(
+      "{}<{}~{}>:\n",
+      indent, self.left.index, self.right.index
+    ));
+    for matrix_fragment in &self.state.stringify_matrix() {
+      result.push(format!("{}{}\n", indent, matrix_fragment));
+    }
+    result
+  }
+}
+
+impl Display for Tangle {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_str(&*self.stringify(0).join(""))
   }
 }
 
@@ -87,31 +195,68 @@ impl Tangle {
 ///
 /// This means if you have Q0~Q1~Q2 any entanglement information for Q0 about Q2 will be via Q1.
 #[derive(Clone)]
-pub struct EntanglementMetadata {
+pub struct EntanglingLink {
+  /// The target of the current tangle.
   qubit: i64,
 
-  /// Entanglement is inferred via this qubit.
-  via: Option<i64>,
+  /// The qubit that this link is flowing through.
+  via: i64,
 
-  /// Entanglement ratio with this particular qubit.
-  ratio: f64
+  /// Left is the owning qubit, right is the linked qubit. Put another way, the index in `qubit`
+  /// refers to the right bit.
+  OO: f64,
+  OI: f64,
+  IO: f64,
+  II: f64
 }
 
-impl EntanglementMetadata {
-  pub fn new(qubit: i64, ratio: f64) -> EntanglementMetadata {
-    EntanglementMetadata {
+impl EntanglingLink {
+  pub fn new(qubit: i64, via: i64, OO: f64, OI: f64, IO: f64, II: f64) -> EntanglingLink {
+    EntanglingLink {
       qubit,
-      via: None,
-      ratio
+      via,
+      OO,
+      OI,
+      IO,
+      II
     }
   }
 
-  pub fn with_via(qubit: i64, via: i64, ratio: f64) -> EntanglementMetadata {
-    EntanglementMetadata {
-      qubit,
-      via: Some(via),
-      ratio
+  /// Returns max entanglement ratio for this metadata. Gives an idea about how
+  /// entangled these qubits are.
+  pub fn ratio(&self) -> f64 {
+    [self.OO, self.OI, self.IO, self.II]
+      .into_iter()
+      .reduce(f64::max)
+      .unwrap()
+  }
+
+  /// Is this links value an inverted mirror of our qubit (01 rather than 00) or not.
+  pub fn is_result_inverted(&self) -> bool { self.IO > 0. || self.OI > 0. }
+}
+
+impl Display for EntanglingLink {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn strip(string: &String) -> String { string.replace(".00", "") }
+
+    let mut ratios = Vec::new();
+    if self.OO > 0. {
+      ratios.push(strip(&format!("{:.2}%", self.OO * 100.)));
     }
+    if self.IO > 0. {
+      ratios.push(strip(&format!("{:.2}%", self.IO * 100.)));
+    }
+
+    f.write_str(
+      {
+        if self.ratio() > 0. {
+          format!("Q{}<{}>", self.qubit, ratios.join(", "))
+        } else {
+          format!("{}", self.qubit)
+        }
+      }
+      .as_str()
+    )
   }
 }
 
@@ -119,13 +264,11 @@ impl EntanglementMetadata {
 pub struct MeasureAnalysis {
   qubit: i64,
   probability: f64,
-  entangled_with: Vec<EntanglementMetadata>
+  entangled_with: Vec<EntanglingLink>
 }
 
 impl MeasureAnalysis {
-  pub fn new(
-    qubit: i64, result: f64, entangled_with: Vec<EntanglementMetadata>
-  ) -> MeasureAnalysis {
+  pub fn new(qubit: i64, result: f64, entangled_with: Vec<EntanglingLink>) -> MeasureAnalysis {
     let result = if result < 0.0 { -result } else { result };
     MeasureAnalysis {
       qubit,
@@ -139,7 +282,7 @@ impl MeasureAnalysis {
   }
 
   pub fn entangled_qubit(
-    qubit: i64, result: f64, entangled_with: Vec<EntanglementMetadata>
+    qubit: i64, result: f64, entangled_with: Vec<EntanglingLink>
   ) -> MeasureAnalysis {
     MeasureAnalysis::new(qubit, result, entangled_with)
   }
@@ -150,7 +293,7 @@ impl Display for MeasureAnalysis {
     let tangles = self
       .entangled_with
       .iter()
-      .map(|val| format!("Q{}~{:.2}", val.qubit, val.ratio))
+      .map(|val| val.to_string())
       .collect::<Vec<_>>();
     let mut additions = String::new();
     if !tangles.is_empty() {
@@ -161,14 +304,93 @@ impl Display for MeasureAnalysis {
   }
 }
 
-// TODO: Split entangled/unentangled qubits, the former are only represented by their
-//  tangles anyway so there's a clean distinction between them.
 #[derive(Clone)]
-pub struct AnalysisQubit {
+pub struct ReferenceQubit {
   index: i64,
 
   /// Record of the raw qubit sans entanglement.
   state: Ptr<QubitFragment>,
+  trace_module: Ptr<TracingModule>
+}
+
+impl ReferenceQubit {
+  pub fn new(index: i64, tracer: Ptr<TracingModule>) -> ReferenceQubit {
+    ReferenceQubit {
+      index,
+      state: Ptr::from(QubitFragment::DefaultQubit()),
+      trace_module: tracer
+    }
+  }
+
+  /// Do we currently have runtime tracing active.
+  fn is_tracing(&self) -> bool { self.trace_module.has(ActiveTracers::Runtime) }
+
+  /// This simply proxies to `measure`.
+  pub fn analyze_measure(&self) -> MeasureAnalysis { self.measure() }
+
+  /// Simply retrieve the current state results.
+  pub fn measure(&self) -> MeasureAnalysis {
+    MeasureAnalysis::qubit(self.index, self.state.get(1, 1).re)
+  }
+
+  pub fn X(&self, radians: &f64) { self.apply(&GateFragment::X(radians)); }
+
+  pub fn Y(&self, radians: &f64) { self.apply(&GateFragment::Y(radians)); }
+
+  pub fn Z(&self, radians: &f64) { self.apply(&GateFragment::Z(radians)); }
+
+  /// Applies this gate to this qubit and all tangles.
+  pub fn apply(&self, gate: &GateFragment) {
+    // To reduce verbosity we only trace multi-qubit gates. Applications of normal gates going
+    // wrong can be visibly seen by other tracing methods.
+    let mut tracer = Vec::new();
+    if self.is_tracing() {
+      tracer.push(format!(
+        "\nQ{}:\n{}",
+        self.index,
+        self.state.stringify_matrix().join("\n")
+      ));
+    }
+
+    with_mutable_self!(self.state.apply(gate));
+  }
+
+  fn stringify(&self, indent_level: i32) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut base_indent = String::new();
+    for multiplier in 0..indent_level {
+      base_indent = format!("{}    ", base_indent);
+    }
+    let indent = format!("{}    ", base_indent);
+
+    result.push(format!("{}{{\n", base_indent));
+    result.push(format!(
+      "{}Q{}: {:.2}%\n",
+      indent,
+      self.index,
+      self.state.get(1, 1).re
+    ));
+    for matrix_fragment in self.state.stringify_matrix() {
+      result.push(format!("{}{}\n", indent, matrix_fragment));
+    }
+
+    result.push(format!("{}}},\n", base_indent));
+    result
+  }
+}
+
+impl Display for ReferenceQubit {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    for line in self.stringify(0) {
+      f.write_str(&line);
+    }
+    f.write_str("")
+  }
+}
+
+#[derive(Clone)]
+pub struct EntangledQubit {
+  index: i64,
 
   /// All the tangles between this qubit and others. Key is the index of the other qubit, along
   /// with a 4x4 density matrix.
@@ -176,127 +398,45 @@ pub struct AnalysisQubit {
   trace_module: Ptr<TracingModule>
 }
 
-impl AnalysisQubit {
-  pub fn new(
-    index: i64, state: Ptr<QubitFragment>, tangles: HashMap<i64, Ptr<Tangle>>,
-    tracer: Ptr<TracingModule>
-  ) -> AnalysisQubit {
-    AnalysisQubit {
+impl EntangledQubit {
+  pub fn new(index: i64, tracer: Ptr<TracingModule>) -> EntangledQubit {
+    EntangledQubit {
       index,
-      state,
-      tangles: Ptr::from(tangles),
+      tangles: Ptr::from(HashMap::new()),
       trace_module: tracer
     }
   }
 
-  fn is_tracing(&self) -> bool { self.trace_module.has(ActiveTracers::Solver) }
+  /// Do we currently have runtime tracing active.
+  fn is_tracing(&self) -> bool { self.trace_module.has(ActiveTracers::Runtime) }
 
-  pub fn with_index(index: i64, tracer: Ptr<TracingModule>) -> AnalysisQubit {
-    AnalysisQubit::new(
-      index,
-      Ptr::from(QubitFragment::DefaultQubit()),
-      HashMap::default(),
-      tracer
-    )
-  }
-
-  pub fn entangled_with(&self) -> Keys<'_, i64, Ptr<Tangle>> { self.tangles.keys() }
-
-  pub fn is_entangled_with(&self, index: &i64) -> bool { self.tangles.contains_key(index) }
-
-  pub fn is_entangled(&self) -> bool { !self.tangles.is_empty() }
-
-  pub fn entangle(&self, other: &Ptr<AnalysisQubit>) {
-    if self.is_entangled_with(&other.index) {
-      return;
-    }
-
-    let tangle = Ptr::from(Tangle::from_qubits(&Ptr::from(self), other));
-    with_mutable_self!(self.tangles.insert(other.index, tangle.clone()));
-    with_mutable!(other.tangles.insert(self.index, tangle));
-  }
-
-  /// Retrieve the measurement information about this qubit but _don't_ sympathetically snap other
-  /// qubits. This is important for when you're gathering measure information of qubits measured
-  /// simultaneously or otherwise peeking at a qubit in isolation.
-  pub fn measure(&self) -> MeasureAnalysis {
-    if self.tangles.is_empty() {
-      MeasureAnalysis::qubit(self.index, self.state.get((1, 1)).re)
+  /// Composes a representative state matrix from a group of tangles.
+  #[rustfmt::skip]
+  pub fn state_matrix(&self) -> EntangledFragment {
+    if self.tangles.len() == 1 {
+      self.tangles.iter().next().unwrap().1.state.deref().clone()
     } else {
-      fn recurse_chains(
-        current_qubit: &i64, tangles: &Ptr<HashMap<i64, Ptr<Tangle>>>,
-        results: &mut Vec<EntanglementMetadata>, guard: &mut HashSet<i64>
-      ) {
-        guard.insert(*current_qubit);
-        for (key, tangle) in tangles.iter() {
-          if guard.contains(key) {
-            continue;
-          }
+      // TODO: Absolutely no clue if this will be accurate.
+      let mut result = mat![
+        [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
+        [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
+        [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
+        [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)]
+      ];
 
-          // TODO: Only checks for 11 / 00 entanglement, not reversed, need to see how that
-          //  plays out.
-          let entangled = tangle.state.get((3, 0)).re;
-          let mut max = tangle.state.get((0, 0)).re;
-          let mut next = tangle.state.get((1, 1)).re;
-          if next >= max {
-            max = next;
-          }
-
-          next = tangle.state.get((2, 2)).re;
-          if next >= max {
-            max = next;
-          }
-
-          next = tangle.state.get((3, 3)).re;
-          if next >= max {
-            max = next;
-          }
-
-          results.push(EntanglementMetadata::with_via(
-            *key,
-            current_qubit.clone(),
-            max / entangled
-          ));
-          recurse_chains(
-            key,
-            &tangle.with_index(key).unwrap().tangles,
-            results,
-            guard
-          );
-        }
+      // TODO: Needs to swap polarity depending upon where our result is focused, almost garanteed.
+      for tangle in self.tangles.values() {
+        result = result.add(tangle.state.matrix_fragment.matrix.clone());
       }
 
-      // Collect full entanglement metadata across every chain at this moment in time.
-      let mut entanglement_meta = Vec::new();
-      let mut guard = HashSet::new();
-      recurse_chains(
-        &self.index,
-        &self.tangles,
-        &mut entanglement_meta,
-        &mut guard
-      );
-
-      let mut percentage = 0.0;
-      for (key, tangle) in self.tangles.iter() {
-        // Depending which qubit we're looking at, our 'is one' check on a cell slightly changes.
-        percentage = percentage
-          + (if tangle.left.index == self.index {
-            tangle.state.get((1, 1)).re + tangle.state.get((3, 3)).re
-          } else {
-            tangle.state.get((2, 2)).re + tangle.state.get((3, 3)).re
-          });
-      }
-
-      percentage = percentage / self.tangles.len() as f64;
-      MeasureAnalysis::entangled_qubit(self.index, percentage, entanglement_meta)
+      let divisor = self.tangles.len() as f64;
+      EntangledFragment::new(MatrixFragment::new(mat![
+        [result.get(0, 0) / divisor, result.get(0, 1) / divisor, result.get(0, 2) / divisor, result.get(0, 3) / divisor],
+        [result.get(1, 0) / divisor, result.get(1, 1) / divisor, result.get(1, 2) / divisor, result.get(1, 3) / divisor],
+        [result.get(2, 0) / divisor, result.get(2, 1) / divisor, result.get(2, 2) / divisor, result.get(2, 3) / divisor],
+        [result.get(3, 0) / divisor, result.get(3, 1) / divisor, result.get(3, 2) / divisor, result.get(3, 3) / divisor],
+      ]))
     }
-  }
-
-  /// Measures this qubit then snaps entanglement.
-  pub fn measure_then_snap(&self) -> MeasureAnalysis {
-    let results = self.measure();
-    self.snap_entanglement();
-    results
   }
 
   /// Sympathetically snaps entangled qubits to their appropriate values then removes the
@@ -323,38 +463,129 @@ impl AnalysisQubit {
     //  qubits. Precision is the name of the game.
   }
 
-  /// Applies this gate to this qubit and all tangles.
-  pub fn apply(&self, gate: &GateFragment) {
-    // To reduce verbosity we only trace multi-qubit gates. Applications of normal gates going
-    // wrong can be visibly seen by other tracing methods.
-    let is_tracing = self.is_tracing() && gate.affected_qubits == 2;
+  pub fn measure(&self) -> MeasureAnalysis {
+    self.snap_entanglement();
+    self.analyze_measure()
+  }
 
-    let mut tracer = Vec::new();
-    if is_tracing {
-      tracer.push(format!(
-        "\nQ{}:\n{}",
-        self.index,
-        self.state.stringify_matrix().join("\n")
-      ));
+  /// Retrieve the measurement information about this qubit but _don't_ sympathetically snap other
+  /// qubits. This is important for when you're gathering measure information of qubits measured
+  /// simultaneously or otherwise peeking at a qubit in isolation.
+  pub fn analyze_measure(&self) -> MeasureAnalysis {
+    fn recurse_chains(
+      current_qubit: &i64, tangles: &Ptr<HashMap<i64, Ptr<Tangle>>>,
+      results: &mut Vec<EntanglingLink>, guard: &mut HashSet<i64>
+    ) {
+      guard.insert(*current_qubit);
+      for (key, tangle) in tangles.iter() {
+        if guard.contains(key) {
+          continue;
+        }
+
+        // TODO: Only checks for 11 / 00 entanglement, not reversed, need to see how that
+        //  plays out.
+        let state = tangle.state.deref().clone();
+        let OO = vec![state.get(1, 0).re, state.get(2, 0).re, state.get(3, 0).re]
+          .into_iter()
+          .reduce(f64::max)
+          .unwrap()
+          * 2.;
+
+        let OI = vec![state.get(1, 0).re, state.get(2, 1).re, state.get(3, 1).re]
+          .into_iter()
+          .reduce(f64::max)
+          .unwrap()
+          * 2.;
+
+        let IO = vec![state.get(2, 0).re, state.get(2, 1).re, state.get(3, 2).re]
+          .into_iter()
+          .reduce(f64::max)
+          .unwrap()
+          * 2.;
+
+        let II = vec![state.get(3, 0).re, state.get(3, 1).re, state.get(3, 2).re]
+          .into_iter()
+          .reduce(f64::max)
+          .unwrap()
+          * 2.;
+
+        // 0.5 entanglement means fully entangled so an 100% ratio, so we just double it.
+        results.push(EntanglingLink::new(
+          *key,
+          current_qubit.clone(),
+          OO,
+          OI,
+          IO,
+          II
+        ));
+        recurse_chains(
+          key,
+          &tangle.with_index(key).unwrap().tangles,
+          results,
+          guard
+        );
+      }
     }
 
-    with_mutable_self!(self.state.apply(gate));
+    // Collect full entanglement metadata across every chain at this moment in time.
+    let mut entanglement_meta = Vec::new();
+    let mut guard = HashSet::new();
+    recurse_chains(
+      &self.index,
+      &self.tangles,
+      &mut entanglement_meta,
+      &mut guard
+    );
 
-    // If we're a single-qubit gate, expand.
-    let expanded_gate = if gate.affected_qubits == 2 {
-      gate
-    } else {
-      &gate.tensor(&MatrixFragment::id())
-    };
+    let mut percentage = 0.0;
+    for (key, tangle) in self.tangles.iter() {
+      // Depending which qubit we're looking at, our 'is one' check on a cell slightly changes.
+      percentage = percentage
+        + (if tangle.left.index == self.index {
+          tangle.state.get(1, 1).re + tangle.state.get(3, 3).re
+        } else {
+          tangle.state.get(2, 2).re + tangle.state.get(3, 3).re
+        });
+    }
 
-    let inverted_gate = expanded_gate.invert();
-    let mut unentangled = Vec::new();
-    for tangle in self.tangles.values() {
+    percentage = percentage / self.tangles.len() as f64;
+    MeasureAnalysis::entangled_qubit(self.index, percentage, entanglement_meta)
+  }
+
+  pub fn X(&self, radians: &f64) { self.apply(GateFragment::X(radians)); }
+
+  pub fn Y(&self, radians: &f64) { self.apply(GateFragment::Y(radians)); }
+
+  pub fn Z(&self, radians: &f64) { self.apply(GateFragment::Z(radians)); }
+
+  pub fn CX(&self, qb: &AnalysisQubit, radians: &f64) {
+    self.apply_entangling(qb, GateFragment::CX(radians));
+  }
+
+  pub fn CZ(&self, qb: &AnalysisQubit, radians: &f64) {
+    self.apply_entangling(qb, GateFragment::CZ(radians));
+  }
+
+  pub fn CY(&self, qb: &AnalysisQubit, radians: &f64) {
+    self.apply_entangling(qb, GateFragment::CY(radians));
+  }
+
+  /// Apply a multi-qubit gate to this qubit. Assumes tangle already exists as the cluster will
+  /// have taken care of it.
+  fn apply_entangling(&self, other: &AnalysisQubit, gate: GateFragment) {
+    if gate.affected_qubits != 2 {
+      panic!("Attempted to apply single-qubit gate to multi-qubit entanglement extrapolation.")
+    }
+
+    let is_tracing = self.is_tracing();
+    let mut tracer = Vec::new();
+
+    if let Some(tangle) = self.tangles.get(&other.index()) {
       // If our actual target is inverted, invert the matrix too.
       let applied_gate = if tangle.right.index == self.index {
-        &inverted_gate
+        &gate.invert()
       } else {
-        expanded_gate
+        &gate
       };
 
       let mut before = None;
@@ -382,7 +613,8 @@ impl AnalysisQubit {
         }
 
         tracer.push(format!(
-          "\n<{}~{}>:\n{}",
+          "\nQ{} <{}~{}>:\n{}",
+          self.index,
           tangle.left.index,
           tangle.right.index,
           composite.join("\n")
@@ -391,12 +623,51 @@ impl AnalysisQubit {
 
       // If our rotation has removed entanglement, drop the tangle entirely.
       if !tangle.is_entangled() {
-        unentangled.push(tangle);
+        with_mutable!(tangle.left.tangles.remove(&tangle.right.index));
+        with_mutable!(tangle.right.tangles.remove(&tangle.left.index));
       }
     }
 
     if is_tracing {
       log!(Level::Info, "{}\n", tracer.join("\n"));
+    }
+  }
+
+  /// Applies this gate to this qubit and all tangles.
+  fn apply(&self, gate: GateFragment) {
+    if gate.affected_qubits != 1 {
+      panic!("Attempted to apply multi-qubit gate to single-qubit entanglement extrapolation.")
+    }
+
+    let expanded_gate = MatrixFragment::id().expand(&gate);
+    let inverted_gate = expanded_gate.invert();
+    let mut unentangled = Vec::new();
+    for tangle in self.tangles.values() {
+      // If our actual target is inverted, invert the matrix too.
+      let applied_gate = if tangle.right.index == self.index {
+        &inverted_gate
+      } else {
+        &expanded_gate
+      };
+
+      if let Some(error) = with_mutable!(tangle.state.apply(&applied_gate)) {
+        panic!("{}", error);
+      }
+
+      // If our rotation has removed entanglement, drop the tangle entirely.
+      if !tangle.is_entangled() {
+        unentangled.push(tangle);
+      }
+    }
+
+    if self.trace_module.solver() {
+      log!(
+        Level::Info,
+        "\nApplying single qubit gate across tangle.\nGate:\n{}\n\nExpanded:\n{}\n\nResult:\n{}",
+        gate,
+        expanded_gate,
+        self
+      );
     }
 
     // If we're no longer entangled remove it from both qubits.
@@ -406,19 +677,7 @@ impl AnalysisQubit {
     }
   }
 
-  pub fn X(&self, radians: &f64) { self.apply(&GateFragment::X(radians)); }
-
-  pub fn Y(&self, radians: &f64) { self.apply(&GateFragment::Y(radians)); }
-
-  pub fn Z(&self, radians: &f64) { self.apply(&GateFragment::Z(radians)) }
-
-  pub fn CX(&self, control: &i64, radians: &f64) { self.apply(&GateFragment::CX(radians)) }
-
-  pub fn CZ(&self, control: &i64, radians: &f64) { self.apply(&GateFragment::CZ(radians)) }
-
-  pub fn CY(&self, control: &i64, radians: &f64) { self.apply(&GateFragment::CY(radians)) }
-
-  fn stringify(&self, indent_level: i32) -> Vec<String> {
+  fn stringify(&self, indent_level: i32, already_exists: Option<&HashSet<String>>) -> Vec<String> {
     let mut result = Vec::new();
     let mut base_indent = String::new();
     for multiplier in 0..indent_level {
@@ -427,33 +686,169 @@ impl AnalysisQubit {
     let indent = format!("{}    ", base_indent);
 
     result.push(format!("{}{{\n", base_indent));
-    result.push(format!(
-      "{}Q{}: {:.2}%\n",
-      indent,
-      self.index,
-      self.state.get((1, 1)).re
-    ));
-    for matrix_fragment in self.state.stringify_matrix() {
-      result.push(format!("{}{}\n", indent, matrix_fragment));
-    }
-
     if !self.tangles.is_empty() {
-      let mut tangles = self.tangles.iter().collect::<Vec<_>>();
+      let mut tangles = self
+        .tangles
+        .iter()
+        .filter(|tang| {
+          already_exists.is_none_or(|val| {
+            !val.contains(&format!("{}-{}", tang.1.left.index, tang.1.right.index))
+          })
+        })
+        .collect::<Vec<_>>();
+
+      // If we've filtered out every tangle in this qubit then just ignore it.
+      if tangles.is_empty() {
+        return Vec::new();
+      }
+
       tangles.sort_by_key(|val| val.0);
-      for (index, state) in tangles {
-        result.push(format!("{}\n", indent));
-        result.push(format!(
-          "{}<{}~{}>:\n",
-          indent, state.left.index, state.right.index
-        ));
-        for matrix_fragment in &state.state.stringify_matrix() {
-          result.push(format!("{}{}\n", indent, matrix_fragment));
-        }
+      for (index, tangle) in tangles {
+        result.append(&mut tangle.stringify(indent_level));
       }
     }
 
     result.push(format!("{}}},\n", base_indent));
     result
+  }
+}
+
+impl Display for EntangledQubit {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    for line in self.stringify(0, None) {
+      f.write_str(&line);
+    }
+    f.write_str("")
+  }
+}
+
+#[derive(Clone)]
+pub enum AnalysisQubit {
+  Entangled(Ptr<EntangledQubit>),
+  Reference(Ptr<ReferenceQubit>)
+}
+
+impl AnalysisQubit {
+  /// Returns current qubit as an entangled qubit.
+  pub fn as_entangled(&self) -> Ptr<EntangledQubit> {
+    match self {
+      Entangled(ent) => ent.clone_inner(),
+      Reference(iso) => Ptr::from(EntangledQubit::new(iso.index, iso.trace_module.clone()))
+    }
+  }
+
+  /// Returns current qubit as an isolated qubit.
+  pub fn as_isolated(&self) -> Ptr<ReferenceQubit> {
+    match self {
+      Entangled(ent) => Ptr::from(ReferenceQubit::new(ent.index, ent.trace_module.clone())),
+      Reference(iso) => iso.clone_inner()
+    }
+  }
+
+  fn is_tracing(&self) -> bool {
+    match self {
+      Entangled(ent) => ent.trace_module.has(ActiveTracers::Solver),
+      Reference(iso) => iso.trace_module.has(ActiveTracers::Solver)
+    }
+  }
+
+  pub fn index(&self) -> &i64 {
+    match self {
+      Entangled(ent) => &ent.index,
+      Reference(ent) => &ent.index
+    }
+  }
+
+  pub fn entangled_with(&self) -> Vec<&i64> {
+    match self {
+      Entangled(ent) => ent.tangles.keys().collect::<Vec<_>>(),
+      _ => Vec::new() // TODO: Just find a non-option way of dealing with this.
+    }
+  }
+
+  pub fn is_entangled_with(&self, index: &i64) -> bool {
+    match self {
+      Entangled(ent) => ent.tangles.contains_key(index),
+      _ => false
+    }
+  }
+
+  pub fn is_entangled(&self) -> bool {
+    match self {
+      Entangled(ent) => true,
+      _ => false
+    }
+  }
+
+  pub fn is_isolated(&self) -> bool {
+    match self {
+      Reference(iso) => true,
+      _ => false
+    }
+  }
+
+  /// Retrieve the measurement information about this qubit but _don't_ sympathetically snap other
+  /// qubits. This is important for when you're gathering measure information of qubits measured
+  /// simultaneously or otherwise peeking at a qubit in isolation.
+  pub fn analyze_measure(&self) -> MeasureAnalysis {
+    match self {
+      Entangled(ent) => ent.analyze_measure(),
+      Reference(iso) => iso.analyze_measure()
+    }
+  }
+
+  /// Measures this qubit then snaps entanglement.
+  pub fn measure(&self) -> MeasureAnalysis {
+    match self {
+      Entangled(ent) => ent.measure(),
+      Reference(iso) => iso.measure()
+    }
+  }
+
+  pub fn X(&self, radians: &f64) {
+    match self {
+      Entangled(ent) => ent.apply(GateFragment::X(radians)),
+      Reference(iso) => iso.apply(&GateFragment::X(radians))
+    }
+  }
+
+  pub fn Y(&self, radians: &f64) {
+    match self {
+      Entangled(ent) => ent.apply(GateFragment::Y(radians)),
+      Reference(iso) => iso.apply(&GateFragment::Y(radians))
+    }
+  }
+
+  pub fn Z(&self, radians: &f64) {
+    match self {
+      Entangled(ent) => ent.apply(GateFragment::Z(radians)),
+      Reference(iso) => iso.apply(&GateFragment::Z(radians))
+    }
+  }
+
+  pub fn CX(&self, other: &AnalysisQubit, radians: &f64) {
+    if let Entangled(ent) = self {
+      ent.apply_entangling(other, GateFragment::CX(radians))
+    }
+  }
+
+  pub fn CZ(&self, other: &AnalysisQubit, radians: &f64) {
+    if let Entangled(ent) = self {
+      ent.apply_entangling(other, GateFragment::CZ(radians));
+    }
+  }
+
+  pub fn CY(&self, other: &AnalysisQubit, radians: &f64) {
+    if let Entangled(ent) = self {
+      ent.apply_entangling(other, GateFragment::CY(radians));
+    }
+  }
+
+  fn stringify(&self, indent_level: i32) -> Vec<String> {
+    match self {
+      Entangled(ent) => ent.stringify(indent_level, None),
+      Reference(iso) => iso.stringify(indent_level)
+    }
   }
 }
 
@@ -469,7 +864,7 @@ impl Display for AnalysisQubit {
 /// A cluster of entangled states that should be treated as an individual cohesive state.
 #[derive(Clone)]
 pub struct EntanglementCluster {
-  qubits: Ptr<HashMap<i64, Ptr<AnalysisQubit>>>,
+  qubits: Ptr<HashMap<i64, Ptr<EntangledQubit>>>,
   trace_module: Ptr<TracingModule>,
   solver: Ptr<QuantumSolver>
 }
@@ -485,28 +880,18 @@ impl EntanglementCluster {
 
   fn is_tracing(&self) -> bool { self.trace_module.has(ActiveTracers::Solver) }
 
-  pub fn spans(&self) -> Keys<'_, i64, Ptr<AnalysisQubit>> { self.qubits.keys() }
+  pub fn get(&self, index: &i64) -> Option<&Ptr<EntangledQubit>> { self.qubits.get(index) }
+
+  pub fn spans(&self) -> Keys<'_, i64, Ptr<EntangledQubit>> { self.qubits.keys() }
 
   /// Gets the qubit at this index crom this cluster. Assumes existence.
-  pub fn qubit_for(&self, index: &i64) -> &Ptr<AnalysisQubit> { self.qubits.get(&index).unwrap() }
+  pub fn qubit_for(&self, index: &i64) -> &Ptr<EntangledQubit> { self.qubits.get(&index).unwrap() }
 
   pub fn merge(&self, other: &Ptr<EntanglementCluster>) {
     // No need to check for existence since if a qubit is related it will already be in a
     // cluster together.
     for (index, qubit) in other.qubits.iter() {
       with_mutable_self!(self.qubits.insert(index.clone(), qubit.clone()));
-    }
-  }
-
-  pub fn add_then_entangle(&self, qubit_one: &Ptr<AnalysisQubit>, qubit_two: &i64) {
-    self.add(qubit_one);
-    self.entangle(&qubit_one.index, qubit_two);
-  }
-
-  /// Adds this qubit to the cluster.
-  pub fn add(&self, qubit: &Ptr<AnalysisQubit>) {
-    if !self.qubits.contains_key(&qubit.index) {
-      with_mutable_self!(self.qubits.insert(qubit.index, qubit.clone()));
     }
   }
 
@@ -555,25 +940,32 @@ impl EntanglementCluster {
   }
 
   /// Entangles these two qubits if they exist. Does not entangle if not.
-  pub fn entangle(&self, left: &i64, right: &i64) {
-    if let Some(rqubit) = self.qubits.get(right) {
-      if let Some(lqubit) = self.qubits.get(left) {
-        rqubit.entangle(lqubit);
-      }
+  pub fn entangle(&self, left: &AnalysisQubit, right: &AnalysisQubit) {
+    if left.is_entangled_with(right.index()) {
+      return;
+    }
+
+    let (result_left, result_right) = Tangle::from_analysis_qubits(left, right, &self.trace_module);
+    if !self.qubits.contains_key(&result_left.index) {
+      with_mutable_self!(self.qubits.insert(result_left.index, result_left));
+    }
+
+    if !self.qubits.contains_key(&result_right.index) {
+      with_mutable_self!(self.qubits.insert(result_right.index, result_right));
     }
   }
 
   pub fn contains(&self, qubit: &i64) -> bool { self.qubits.contains_key(qubit) }
 
-  pub fn measure(&self, index: &i64) -> MeasureAnalysis {
+  pub fn analyze_measure(&self, index: &i64) -> MeasureAnalysis {
     let qubit = with_mutable_self!(self.qubits.get(&index).expect(&format!(
       "Measure performed on qubit {index} not in the cluster: {}",
       self
     )));
-    qubit.measure()
+    qubit.analyze_measure()
   }
 
-  pub fn measure_then_snap(&self, index: &i64) -> MeasureAnalysis {
+  pub fn measure(&self, index: &i64) -> MeasureAnalysis {
     let qubit = with_mutable_self!(self.qubits.get(&index).expect(&format!(
       "Measure performed on qubit {index} not in the cluster: {}",
       self
@@ -623,52 +1015,51 @@ impl EntanglementCluster {
       .Z(radians);
   }
 
-  pub fn CX(&self, control: &i64, target: &i64, radians: &f64) {
-    let qubit = self.qubits.get(target).expect(&format!(
+  pub fn CX(&self, controls: &Vec<AnalysisQubit>, target: &AnalysisQubit, radians: &f64) {
+    let qubit = self.qubits.get(&target.index()).expect(&format!(
       "Attempted CX on qubit {target} which doesn't exist in cluster: {}",
       self
     ));
-    qubit.CX(control, radians);
 
-    self.remove_if_unentangled(target);
-    self.remove_if_unentangled(control);
+    for control in controls {
+      qubit.CX(control, radians);
+    }
+
+    self.remove_if_unentangled(&target.index());
+    for control in controls {
+      self.remove_if_unentangled(&control.index());
+    }
   }
 
-  pub fn CZ(&self, control: &i64, target: &i64, radians: &f64) {
-    let qubit = self.qubits.get(target).expect(&format!(
+  pub fn CZ(&self, controls: &Vec<AnalysisQubit>, target: &AnalysisQubit, radians: &f64) {
+    let qubit = self.qubits.get(&target.index()).expect(&format!(
       "Attempted CZ on qubit {target} which doesn't exist in cluster: {}",
       self
     ));
-    qubit.CZ(control, radians);
 
-    self.remove_if_unentangled(target);
-    self.remove_if_unentangled(control);
+    for control in controls {
+      qubit.CZ(control, radians);
+    }
+
+    self.remove_if_unentangled(&target.index());
+    for control in controls {
+      self.remove_if_unentangled(&control.index());
+    }
   }
 
-  pub fn CY(&self, control: &i64, target: &i64, radians: &f64) {
-    let qubit = self.qubits.get(target).expect(&format!(
+  pub fn CY(&self, controls: &Vec<AnalysisQubit>, target: &AnalysisQubit, radians: &f64) {
+    let qubit = self.qubits.get(&target.index()).expect(&format!(
       "Attempted CY on qubit {target} which doesn't exist in cluster: {}",
       self
     ));
 
-    qubit.CY(control, radians);
-    self.remove_if_unentangled(target);
-    self.remove_if_unentangled(control);
-  }
-
-  /// Swaps the two qubits in the clusters internal structures, dosen't change anything else.
-  pub fn SWAP(&mut self, left: &i64, right: &i64) {
-    // The actual swap is taken care of at a higher level, we just need to re-associate the
-    // qubit indexes when they come in here.
-    let left_qubit = self.qubits.remove(left);
-    let right_qubit = self.qubits.remove(right);
-
-    if let Some(qb) = left_qubit {
-      self.qubits.insert(*right, qb);
+    for control in controls {
+      qubit.CY(control, radians);
     }
 
-    if let Some(qb) = right_qubit {
-      self.qubits.insert(*left, qb);
+    self.remove_if_unentangled(&target.index());
+    for control in controls {
+      self.remove_if_unentangled(&control.index());
     }
   }
 }
@@ -681,15 +1072,18 @@ impl Display for EntanglementCluster {
       f.write_str("((\n");
 
       let mut sorted_qubits = self.qubits.values().collect::<Vec<_>>();
-
       sorted_qubits.sort_by_key(|val| val.index);
-      f.write_str(
-        &sorted_qubits
+      let mut seen = HashSet::new();
+      for qb in sorted_qubits {
+        f.write_str(&*qb.stringify(1, Some(&seen)).join(""));
+        for cache_key in qb
+          .tangles
           .iter()
-          .map(|val| val.stringify(1).join(""))
-          .collect::<Vec<_>>()
-          .join("")
-      );
+          .map(|val| String::from(format!("{}-{}", val.1.left.index, val.1.right.index)))
+        {
+          seen.insert(cache_key);
+        }
+      }
       f.write_str(")),\n")
     }
   }
@@ -700,13 +1094,13 @@ type GateFragment = MatrixFragment;
 /// Matrix which can be applied to a state fragment.
 #[derive(Clone)]
 pub struct MatrixFragment {
-  matrix: Array2<Complex<f64>>,
+  matrix: Mat<Complex<f64>>,
   affected_qubits: i32
 }
 
 impl MatrixFragment {
-  pub fn new(matrix: Array2<Complex<f64>>) -> MatrixFragment {
-    let affected_qubits = if matrix.len() == 4 { 1 } else { 2 };
+  pub fn new(matrix: Mat<Complex<f64>>) -> MatrixFragment {
+    let affected_qubits = if matrix.ncols() == 2 { 1 } else { 2 };
 
     MatrixFragment {
       matrix,
@@ -714,158 +1108,62 @@ impl MatrixFragment {
     }
   }
 
+  /// Default 0 matrix.
+  #[rustfmt::skip]
+  pub fn default() -> MatrixFragment {
+    MatrixFragment::new(
+      mat![
+        [C!(1.0, 0.), C!(0.0, 0.)],
+        [C!(0.0, 0.), C!(0.0, 0.)]
+      ])
+  }
+
   #[rustfmt::skip]
   pub fn id() -> MatrixFragment {
     MatrixFragment::new(
-      array![
+      mat![
         [C!(1.0, 0.), C!(0.0, 0.)],
         [C!(0.0, 0.), C!(1.0, 0.)]
       ])
   }
 
-  pub fn get(&self, key: (usize, usize)) -> &Complex<f64> { self.matrix.get(key).unwrap() }
+  pub fn get(&self, col: usize, row: usize) -> &Complex<f64> { self.matrix.get(row, col) }
 
-  pub fn tensor(&self, other: &MatrixFragment) -> MatrixFragment {
-    // We don't expand past 2 qubits.
-    if self.affected_qubits == 2 {
-      panic!("Attempted to tensor a 4x4 matrix.")
-    }
-
-    let one = self.get((0, 0));
-    let two = self.get((0, 1));
-    let three = self.get((1, 0));
-    let four = self.get((1, 1));
-
-    let other_one = other.get((0, 0));
-    let other_two = other.get((0, 1));
-    let other_three = other.get((1, 0));
-    let other_four = other.get((1, 1));
-
-    Self::new(array![
-      [
-        one * other_one,
-        one * other_two,
-        two * other_one,
-        two * other_two
-      ],
-      [
-        one * other_three,
-        one * other_four,
-        two * other_three,
-        two * other_four
-      ],
-      [
-        three * other_one,
-        three * other_two,
-        four * other_one,
-        four * other_two
-      ],
-      [
-        three * other_three,
-        three * other_four,
-        four * other_three,
-        four * other_four
-      ],
-    ])
+  pub fn expand(&self, other: &MatrixFragment) -> MatrixFragment {
+    let mut destination = Mat::zeros(
+      self.matrix.nrows() * other.matrix.nrows(),
+      self.matrix.ncols() * other.matrix.ncols()
+    );
+    kron(
+      destination.as_mut(),
+      self.matrix.as_ref(),
+      other.matrix.as_ref()
+    );
+    MatrixFragment::new(destination)
   }
 
   pub fn transpose_conjugate(&self) -> MatrixFragment {
-    // TODO: Cache and re-use familiar transformations.
-    if self.affected_qubits == 1 {
-      Self::new(array![
-        [self.get((0, 0)).conj(), self.get((1, 0)).conj()],
-        [self.get((0, 1)).conj(), self.get((1, 1)).conj()],
-      ])
-    } else if self.affected_qubits == 2 {
-      Self::new(array![
-        [
-          self.get((0, 0)).conj(),
-          self.get((1, 0)).conj(),
-          self.get((2, 0)).conj(),
-          self.get((3, 0)).conj()
-        ],
-        [
-          self.get((0, 1)).conj(),
-          self.get((1, 1)).conj(),
-          self.get((2, 1)).conj(),
-          self.get((3, 1)).conj()
-        ],
-        [
-          self.get((0, 2)).conj(),
-          self.get((1, 2)).conj(),
-          self.get((2, 2)).conj(),
-          self.get((3, 2)).conj()
-        ],
-        [
-          self.get((0, 3)).conj(),
-          self.get((1, 3)).conj(),
-          self.get((2, 3)).conj(),
-          self.get((3, 3)).conj()
-        ],
-      ])
-    } else {
-      panic!(
-        "Can't transpose a matrix covering {} qubits.",
-        self.affected_qubits
-      );
-    }
+    Self::new(self.matrix.transpose().conjugate().to_owned())
   }
 
   /// Flips the matrix reversing the value or which qubit the operation gets applied too.
   /// TODO: Check the latter.
   pub fn invert(&self) -> MatrixFragment {
-    // TODO: Cache and re-use familiar transformations.
-    if self.affected_qubits == 1 {
-      Self::new(array![[*self.get((1, 1)), *self.get((1, 0))], [
-        *self.get((0, 1)),
-        *self.get((0, 0))
-      ],])
-    } else if self.affected_qubits == 2 {
-      Self::new(array![
-        [
-          *self.get((3, 3)),
-          *self.get((2, 3)),
-          *self.get((1, 3)),
-          *self.get((0, 3))
-        ],
-        [
-          *self.get((3, 2)),
-          *self.get((2, 2)),
-          *self.get((1, 2)),
-          *self.get((0, 2))
-        ],
-        [
-          *self.get((3, 1)),
-          *self.get((2, 1)),
-          *self.get((1, 1)),
-          *self.get((0, 1))
-        ],
-        [
-          *self.get((3, 0)),
-          *self.get((2, 0)),
-          *self.get((1, 0)),
-          *self.get((0, 0))
-        ],
-      ])
-    } else {
-      panic!(
-        "Can't transpose a matrix covering {} qubits.",
-        self.affected_qubits
-      );
-    }
+    // TODO: Need to check if this is accurate.
+    Self::new(self.matrix.reverse_rows_and_cols().to_owned())
   }
 
   #[rustfmt::skip]
   pub fn X(radians: &f64) -> MatrixFragment {
     if radians == &PI {
       MatrixFragment::new(
-        array![
+        mat![
           [C!(0.0, 0.), C!(1.0, 0.)],
           [C!(1.0, 0.), C!(0.0, 0.)]
         ])
     } else {
       let radians_halved = radians/2.;
-      MatrixFragment::new(array![
+      MatrixFragment::new(mat![
         [C!(radians_halved.cos(), 0.), C!(0.0, -radians_halved.sin())],
         [C!(0.0, -radians_halved.sin()), C!(radians_halved.cos(), 0.)]
       ])
@@ -875,13 +1173,13 @@ impl MatrixFragment {
   #[rustfmt::skip]
   pub fn Y(radians: &f64) -> MatrixFragment {
     if radians == &PI {
-      MatrixFragment::new(array![
+      MatrixFragment::new(mat![
           [C!(0.0, 0.), C!(-1.0_f64.sqrt(), 0.)],
           [C!(1.0_f64.sqrt(), 0.), C!(0.0, 0.)]
         ])
     } else {
       let radians_halved = radians/2.;
-      MatrixFragment::new(array![
+      MatrixFragment::new(mat![
           [C!(radians_halved.cos(), 0.), C!(-radians_halved.sin(), 0.)],
           [C!(radians_halved.sin(), 0.), C!(radians_halved.cos(), 0.)]
         ])
@@ -891,13 +1189,13 @@ impl MatrixFragment {
   #[rustfmt::skip]
   pub fn Z(radians: &f64) -> MatrixFragment {
     if radians == &PI {
-      MatrixFragment::new(array![
+      MatrixFragment::new(mat![
           [C!(1.0, 0.), C!(0.0, 0.)],
           [C!(0.0, 0.), C!(-1.0, 0.)]
         ])
     } else {
       let radians_halved = radians/2.;
-      MatrixFragment::new(array![
+      MatrixFragment::new(mat![
           [f64::E().powc(C!(0., -radians_halved)), C!(0., 0.)],
           [C!(0., 0.), f64::E().powc(C!(0., radians_halved))]
         ])
@@ -907,7 +1205,7 @@ impl MatrixFragment {
   #[rustfmt::skip]
   pub fn Had() -> MatrixFragment {
     let one_sq2 = C!(1. / 2.0f64.sqrt(), 0.);
-    MatrixFragment::new(array![
+    MatrixFragment::new(mat![
         [one_sq2 * C!(1.0, 0.), one_sq2 * C!(1.0, 0.)],
         [one_sq2 * C!(1.0, 0.), one_sq2 * C!(-1.0, 0.)]
       ])
@@ -917,7 +1215,7 @@ impl MatrixFragment {
 
   #[rustfmt::skip]
   pub fn CX(radians: &f64) -> MatrixFragment {
-    MatrixFragment::new(array![
+    MatrixFragment::new(mat![
         [C!(1.0, 0.), C!(0.0, 0.), C!(0.0, 0.), C!(0.0, 0.)],
         [C!(0.0, 0.), C!(1.0, 0.), C!(0.0, 0.), C!(0.0, 0.)],
         [C!(0.0, 0.), C!(0.0, 0.), C!(0.0, 0.), C!(1., 0.)],
@@ -927,7 +1225,7 @@ impl MatrixFragment {
 
   #[rustfmt::skip]
   pub fn CZ(radians: &f64) -> MatrixFragment {
-    MatrixFragment::new(array![
+    MatrixFragment::new(mat![
         [C!(1.0, 0.), C!(0.0, 0.), C!(0.0, 0.), C!(0.0, 0.)],
         [C!(0.0, 0.), C!(1.0, 0.), C!(0.0, 0.), C!(0.0, 0.)],
         [C!(0.0, 0.), C!(0.0, 0.), C!(1., 0.), C!(0.0, 0.)],
@@ -937,7 +1235,7 @@ impl MatrixFragment {
 
   #[rustfmt::skip]
   pub fn CY(radians: &f64) -> MatrixFragment {
-    MatrixFragment::new(array![
+    MatrixFragment::new(mat![
         [C!(1.0, 0.), C!(0.0, 0.), C!(0.0, 0.), C!(0.0, 0.)],
         [C!(0.0, 0.), C!(1.0, 0.), C!(0.0, 0.), C!(0.0, 0.)],
         [C!(0.0, 0.), C!(0.0, 0.), C!(0.0, 0.), C!(-1., 0.)],
@@ -947,7 +1245,7 @@ impl MatrixFragment {
 
   #[rustfmt::skip]
   pub fn SWAP() -> MatrixFragment {
-    MatrixFragment::new(array![
+    MatrixFragment::new(mat![
         [C!(1.0, 0.), C!(0.0, 0.), C!(0.0, 0.), C!(0.0, 0.)],
         [C!(0.0, 0.), C!(0.0, 0.), C!(1.0, 0.), C!(0.0, 0.)],
         [C!(0.0, 0.), C!(1.0, 0.), C!(0.0, 0.), C!(0.0, 0.)],
@@ -957,142 +1255,48 @@ impl MatrixFragment {
 
   /// Returns this matrix in a nicely-formatted way for human readability and logging.
   fn stringify_matrix(&self) -> Vec<String> {
-    let mut result = Vec::new();
     let matrix = &self.matrix;
-    let dimensions = matrix.dim();
+    let dimensions = matrix.ncols();
 
     fn strip(string: &String) -> String {
       string
         .replace(".00", "")
         .replace("-0+0i", "0")
         .replace("0+0i", "0")
+        .replace("+0i", "")
     }
 
-    // Restrict precision, but trim off any which are fully zero to make the output less verbose.
-    if dimensions == (2, 2) {
-      let mut first_row = vec![
-        strip(&format!("{:.2}", matrix.get((0, 0)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((1, 0)).unwrap())),
-      ];
+    let string_for_dimensions = |dim: usize| {
+      let mut result = Vec::new();
+      let mut rows = Vec::new();
+      let mut max_length = 0;
+      for row in 0..dim {
+        let mut inc_vec = Vec::new();
+        for col in 0..dim {
+          inc_vec.push(strip(&format!("{:.2}", matrix.get(col, row))));
+        }
 
-      let max_length = first_row.iter().map(|val| val.len()).max().unwrap();
-      first_row = first_row
-        .iter()
-        .map(|val| format!("{val: >width$}", width = max_length + 1 - val.len()))
-        .collect::<Vec<_>>();
+        let rows_max = inc_vec.iter().map(|val| val.len()).max().unwrap();
+        if rows_max > max_length {
+          max_length = rows_max;
+        }
 
-      let mut second_row = vec![
-        strip(&format!("{:.2}", matrix.get((0, 1)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((1, 1)).unwrap())),
-      ];
+        rows.push(
+          inc_vec
+            .iter()
+            .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
+            .collect::<Vec<_>>()
+        );
+      }
 
-      let max_length = second_row.iter().map(|val| val.len()).max().unwrap();
-      second_row = second_row
-        .iter()
-        .map(|val| format!("{val: >width$}", width = max_length + 1 - val.len()))
-        .collect::<Vec<_>>();
+      for row in rows {
+        result.push(format!("[{}]", row.join(", ")));
+      }
 
-      result.push(format!(
-        "[{}, {}]",
-        first_row.get(0).unwrap(),
-        second_row.get(0).unwrap()
-      ));
+      result
+    };
 
-      result.push(format!(
-        "[{}, {}]",
-        first_row.get(1).unwrap(),
-        second_row.get(1).unwrap()
-      ));
-    } else if dimensions == (4, 4) {
-      let mut first_row = vec![
-        strip(&format!("{:.2}", matrix.get((0, 0)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((1, 0)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((2, 0)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((3, 0)).unwrap())),
-      ];
-
-      let max_length = first_row.iter().map(|val| val.len()).max().unwrap();
-      first_row = first_row
-        .iter()
-        .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
-        .collect::<Vec<_>>();
-
-      let mut second_row = vec![
-        strip(&format!("{:.2}", matrix.get((0, 1)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((1, 1)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((2, 1)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((3, 1)).unwrap())),
-      ];
-
-      let max_length = second_row.iter().map(|val| val.len()).max().unwrap();
-      second_row = second_row
-        .iter()
-        .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
-        .collect::<Vec<_>>();
-
-      let mut third_row = vec![
-        strip(&format!("{:.2}", matrix.get((0, 2)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((1, 2)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((2, 2)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((3, 2)).unwrap())),
-      ];
-
-      let max_length = third_row.iter().map(|val| val.len()).max().unwrap();
-      third_row = third_row
-        .iter()
-        .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
-        .collect::<Vec<_>>();
-
-      let mut fourth_row = vec![
-        strip(&format!("{:.2}", matrix.get((0, 3)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((1, 3)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((2, 3)).unwrap())),
-        strip(&format!("{:.2}", matrix.get((3, 3)).unwrap())),
-      ];
-
-      let max_length = fourth_row.iter().map(|val| val.len()).max().unwrap();
-      fourth_row = fourth_row
-        .iter()
-        .map(|val| format!("{: >width$}{val}", "", width = max_length - val.len()))
-        .collect::<Vec<_>>();
-
-      result.push(format!(
-        "[{}, {}, {}, {}]",
-        first_row.get(0).unwrap(),
-        second_row.get(0).unwrap(),
-        third_row.get(0).unwrap(),
-        fourth_row.get(0).unwrap()
-      ));
-
-      result.push(format!(
-        "[{}, {}, {}, {}]",
-        first_row.get(1).unwrap(),
-        second_row.get(1).unwrap(),
-        third_row.get(1).unwrap(),
-        fourth_row.get(1).unwrap()
-      ));
-
-      result.push(format!(
-        "[{}, {}, {}, {}]",
-        first_row.get(2).unwrap(),
-        second_row.get(2).unwrap(),
-        third_row.get(2).unwrap(),
-        fourth_row.get(2).unwrap()
-      ));
-
-      result.push(format!(
-        "[{}, {}, {}, {}]",
-        first_row.get(3).unwrap(),
-        second_row.get(3).unwrap(),
-        third_row.get(3).unwrap(),
-        fourth_row.get(3).unwrap()
-      ));
-    } else {
-      panic!("Attempted to print matrix of irregular dimensions.")
-    }
-
-    // Reduce verbosity of the output where we don't need to know about it.
-    result
+    string_for_dimensions(dimensions)
   }
 }
 
@@ -1104,52 +1308,7 @@ impl Display for MatrixFragment {
 
 /// Multiply both matrix fragments together. Dimensions are expected to be equal.
 fn multiply(left: &MatrixFragment, right: &MatrixFragment) -> MatrixFragment {
-  let mult =
-    |left_index, right_index| -> Complex64 { left.get(left_index) * right.get(right_index) };
-
-  // TODO: Find specialized MM library or algorithm, current one not seemingly working correctly.
-  //  This is just a brute-force implementation for testing.
-  if left.affected_qubits == 1 {
-    MatrixFragment::new(array![
-      [
-        mult((0, 0), (0, 0)) + mult((0, 1), (1, 0)),
-        mult((0, 0), (1, 0)) + mult((0, 1), (1, 1))
-      ],
-      [
-        mult((1, 0), (0, 0)) + mult((1, 1), (1, 0)),
-        mult((1, 0), (1, 0)) + mult((1, 1), (1, 1))
-      ]
-    ])
-  } else if left.affected_qubits == 2 {
-    MatrixFragment::new(array![
-      [
-        mult((0, 0), (0, 0)) + mult((0, 1), (1, 0)) + mult((0, 2), (2, 0)) + mult((0, 3), (3, 0)),
-        mult((0, 0), (0, 1)) + mult((0, 1), (1, 1)) + mult((0, 2), (2, 1)) + mult((0, 3), (3, 1)),
-        mult((0, 0), (0, 2)) + mult((0, 1), (1, 2)) + mult((0, 2), (2, 2)) + mult((0, 3), (3, 2)),
-        mult((0, 0), (0, 3)) + mult((0, 1), (1, 3)) + mult((0, 2), (2, 3)) + mult((0, 3), (3, 3))
-      ],
-      [
-        mult((1, 0), (0, 0)) + mult((1, 1), (1, 0)) + mult((1, 2), (2, 0)) + mult((1, 3), (3, 0)),
-        mult((1, 0), (0, 1)) + mult((1, 1), (1, 1)) + mult((1, 2), (2, 1)) + mult((1, 3), (3, 1)),
-        mult((1, 0), (0, 2)) + mult((1, 1), (1, 2)) + mult((1, 2), (2, 2)) + mult((1, 3), (3, 2)),
-        mult((1, 0), (0, 3)) + mult((1, 1), (1, 3)) + mult((1, 2), (2, 3)) + mult((1, 3), (3, 3))
-      ],
-      [
-        mult((2, 0), (0, 0)) + mult((2, 1), (1, 0)) + mult((2, 2), (2, 0)) + mult((2, 3), (3, 0)),
-        mult((2, 0), (0, 1)) + mult((2, 1), (1, 1)) + mult((2, 2), (2, 1)) + mult((2, 3), (3, 1)),
-        mult((2, 0), (0, 2)) + mult((2, 1), (1, 2)) + mult((2, 2), (2, 2)) + mult((2, 3), (3, 2)),
-        mult((2, 0), (0, 3)) + mult((2, 1), (1, 3)) + mult((2, 2), (2, 3)) + mult((2, 3), (3, 3))
-      ],
-      [
-        mult((3, 0), (0, 0)) + mult((3, 1), (1, 0)) + mult((3, 2), (2, 0)) + mult((3, 3), (3, 0)),
-        mult((3, 0), (0, 1)) + mult((3, 1), (1, 1)) + mult((3, 2), (2, 1)) + mult((3, 3), (3, 1)),
-        mult((3, 0), (0, 2)) + mult((3, 1), (1, 2)) + mult((3, 2), (2, 2)) + mult((3, 3), (3, 2)),
-        mult((3, 0), (0, 3)) + mult((3, 1), (1, 3)) + mult((3, 2), (2, 3)) + mult((3, 3), (3, 3))
-      ],
-    ])
-  } else {
-    panic!("Attempted multiplication on irregular size of matrix.")
-  }
+  MatrixFragment::new(&left.matrix * &right.matrix)
 }
 
 impl Mul for MatrixFragment {
@@ -1189,35 +1348,16 @@ impl StateFragment {
   pub fn DefaultQubit() -> QubitFragment {
     StateFragment {
       matrix_fragment:
-        MatrixFragment::new(array![
+        MatrixFragment::new(mat![
           [C!(1.0, 0.0), C!(0.0, 0.0)],
           [C!(0.0, 0.0), C!(0.0, 0.0)]
         ])
     }
   }
 
-  /// Creates a state fragment to represent entanglement between 2 qubits. Needs setup with
-  /// initial qubit values.
-  #[rustfmt::skip]
-  pub fn DefaultEntangled() -> EntangledFragment {
-    StateFragment {
-      matrix_fragment:
-        MatrixFragment::new(array![
-        [C!(1.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
-        [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
-        [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)],
-        [C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0), C!(0.0, 0.0)]
-      ])
-    }
-  }
-
-  pub fn get(&self, key: (usize, usize)) -> &Complex<f64> { self.matrix_fragment.get(key) }
+  pub fn get(&self, col: usize, row: usize) -> &Complex<f64> { self.matrix_fragment.get(col, row) }
 
   pub fn represented_qubits(&self) -> i32 { self.matrix_fragment.affected_qubits }
-
-  pub fn entangle_with(&self, right: &Ptr<QubitFragment>) -> EntangledFragment {
-    EntangledFragment::new(self.matrix_fragment.tensor(&right.matrix_fragment))
-  }
 
   pub fn apply(&mut self, gate: &MatrixFragment) -> Option<String> {
     if self.represented_qubits() != gate.affected_qubits {
@@ -1291,12 +1431,15 @@ impl Display for SolverResult {
 #[derive(Clone)]
 pub struct ResultFragment {
   /// Rolling probability of this whole fragment being applicable. Used for filtering.
+  /// Usually 1-0.
   rolling_probability: f64,
-  fragment: HashMap<i64, i16>,
+  qubit_values: HashMap<i64, i16>,
 
-  /// Max number of qubits that are actually measured. Indexes do not need to be sequential, so
-  /// you can measure qubits 5, 75, 240 and 700 and this will simply be 4. Used to pad out
-  /// unknowable values if a qubit is early in the analysis chain.
+  /// Shared pointer to set of qubits that are actually measured across the entire circuit.
+  /// Indexes do not need to be sequential, so you can measure qubits 5, 75, 240 and 700 and this
+  /// will simply be 4. Used to pad out unknowable values if a qubit is early in the analysis chain.
+  ///
+  /// If you want the qubits actually covered by this fragment ook at the fragment map.
   measureable_qubits: Ptr<HashSet<i64>>
 }
 
@@ -1305,11 +1448,11 @@ impl ResultFragment {
     index: i64, result: i16, probability: f64, measureable_qubits: Ptr<HashSet<i64>>
   ) -> ResultFragment {
     let mut fragment = ResultFragment {
-      fragment: HashMap::default(),
+      qubit_values: HashMap::default(),
       rolling_probability: probability,
       measureable_qubits
     };
-    fragment.fragment.insert(index, result);
+    fragment.qubit_values.insert(index, result);
     fragment
   }
 
@@ -1318,21 +1461,21 @@ impl ResultFragment {
   /// binary calculation.
   pub fn with_flipped(result: &ResultFragment) -> ResultFragment {
     let mut flipped_fragments = HashMap::default();
-    for (key, value) in result.fragment.iter() {
+    for (key, value) in result.qubit_values.iter() {
       let flipped = if *value == 0 { 1 } else { 0 };
       flipped_fragments.insert(*key, flipped);
     }
 
     ResultFragment {
       rolling_probability: 1.0 - result.rolling_probability,
-      fragment: flipped_fragments,
+      qubit_values: flipped_fragments,
       measureable_qubits: result.measureable_qubits.clone()
     }
   }
 
   pub fn add(&mut self, qubit: i64, result: i16, probability: f64) {
     self.rolling_probability = self.rolling_probability * probability;
-    self.fragment.insert(qubit, result);
+    self.qubit_values.insert(qubit, result);
   }
 
   /// If the passed-in fragment can be overlaid this one it then is. Note that this changes the
@@ -1352,8 +1495,8 @@ impl ResultFragment {
 
     // For now, only overlay if there is no collisions.
     let mut insertions = Vec::new();
-    for (key, value) in other.fragment.iter() {
-      if self.fragment.contains_key(key) {
+    for (key, value) in other.qubit_values.iter() {
+      if self.qubit_values.contains_key(key) {
         return;
       } else {
         insertions.push((key, value));
@@ -1361,7 +1504,7 @@ impl ResultFragment {
     }
 
     for (key, value) in insertions {
-      self.fragment.insert(*key, *value);
+      self.qubit_values.insert(*key, *value);
     }
 
     self.rolling_probability = self.rolling_probability * other.rolling_probability
@@ -1370,8 +1513,8 @@ impl ResultFragment {
   /// Fills out all unmeasured qubits in the bitstring with zeros, up to `register_count`.
   pub fn fill_empty(&mut self, register_count: i64) {
     for i in 0..=register_count {
-      if !self.measureable_qubits.contains(&i) {
-        self.fragment.insert(i, 0);
+      if !self.qubit_values.contains_key(&i) {
+        self.qubit_values.insert(i, 0);
       }
     }
   }
@@ -1379,8 +1522,11 @@ impl ResultFragment {
   /// Generates a human-readable bitstring from this fragment. Replaces all unknown bits with X.
   pub fn as_bitstring(&self) -> String {
     let mut result = String::new();
-    for i in self.measureable_qubits.iter() {
-      if let Some(value) = self.fragment.get(&i) {
+
+    let mut sorted_hashset = self.measureable_qubits.iter().collect::<Vec<_>>();
+    sorted_hashset.sort_unstable();
+    for i in sorted_hashset {
+      if let Some(value) = self.qubit_values.get(&i) {
         result.push_str(&value.to_string())
       } else {
         result.push('X')
@@ -1390,7 +1536,7 @@ impl ResultFragment {
   }
 
   /// Is this fragment actually fully resolved with results in every slot?
-  pub fn is_solved(&self) -> bool { self.fragment.len() >= self.measureable_qubits.len() }
+  pub fn is_solved(&self) -> bool { self.qubit_values.len() >= self.measureable_qubits.len() }
 }
 
 impl Display for ResultFragment {
@@ -1403,204 +1549,64 @@ impl Display for ResultFragment {
   }
 }
 
-pub struct ResultsSynthsizer {
-  /// The range a probability must be within the highest to not be dropped from template creation.
-  /// So if our highest probability is 55%, and this value is 20, it will drop any combinations
-  /// whose probability is under %35.
-  probability_range: f64,
-
-  /// In the case where a large amount of entanglements all come out at around the same
-  /// probability the max amount we should add in total. The dropped ones will be the last
-  /// added, which will be the longest result chains.
-  max_entangles_per_add: usize,
-  fragments: Vec<ResultFragment>,
-
-  /// Set of measured qubit indexes so we know which indexes are used, or not, and to default all
-  /// unmeasured to zero after we've synthesized a result.
-  measured_qubits: Ptr<HashSet<i64>>,
-
-  register_size: i64
+struct QubitConstraints {
+  qubit: i64,
+  probability: f64,
+  mirrored: HashMap<i64, (f64, bool)>
 }
 
-impl ResultsSynthsizer {
-  pub fn new(
-    probability_range: f64, max_entangles_per_add: usize, measured_qubits: HashSet<i64>,
-    register_size: i64
-  ) -> ResultsSynthsizer {
-    ResultsSynthsizer {
-      probability_range,
-      max_entangles_per_add,
-      fragments: Vec::default(),
-      measured_qubits: Ptr::from(measured_qubits),
-      register_size
+impl QubitConstraints {
+  pub fn new(qubit: i64, probability: f64) -> QubitConstraints {
+    QubitConstraints {
+      qubit,
+      probability,
+      mirrored: HashMap::new()
     }
   }
 
-  pub fn add(&mut self, measure: &MeasureAnalysis) {
-    // Build starter fragment with just our qubit.
-    let qubit_result = 1;
-    let mut starter = ResultFragment::new(
-      measure.qubit,
-      qubit_result,
-      measure.probability,
-      self.measured_qubits.clone()
-    );
+  pub fn inverted(&mut self, index: i64, prob: f64) { self.mirrored.insert(index, (prob, false)); }
 
-    // Any full entanglement gets appended to the default fragment as there is no chance they
-    // will deviate. This can drastically reduce complexity depending upon how reliant the
-    // algorithm is on fully entangled values for their results.
-    let mut removals = HashSet::new();
-
-    // Sort our entanglements by coupling strength.
-    let mut entanglements = measure.entangled_with.iter().collect::<Vec<_>>();
-    entanglements.sort_by(|a, b| b.ratio.total_cmp(&a.ratio));
-
-    for ent_meta in entanglements.iter() {
-      // Since we're sorted on this, soon as we see a non-one hundred value we know there
-      // will be no others. Ratio is 0.0 to 1.0.
-      if !is_near!(ent_meta.ratio, 1.0) {
-        break;
-      }
-
-      starter.add(ent_meta.qubit, qubit_result, ent_meta.ratio);
-      removals.insert(ent_meta.qubit);
-    }
-
-    let mut results = Vec::new();
-    results.push(ResultFragment::with_flipped(&starter));
-    results.push(starter);
-
-    // Any entangled values will at best be equal, not lower.
-    let highest_probability = results
-      .iter()
-      .map(|val| val.rolling_probability)
-      .reduce(f64::max)
-      .unwrap();
-    let lowest_bound = highest_probability - self.probability_range;
-
-    for ent_meta in entanglements.iter() {
-      if results.len() >= self.max_entangles_per_add {
-        break;
-      }
-
-      // Note: This will scale better than copy / remove with large lists but we need to
-      //  make sure qubits are unique. Otherwise, a composite identifier will be needed.
-      if removals.contains(&ent_meta.qubit) {
-        continue;
-      }
-
-      // Merge all templates starting with the highest probability to happen, breaking out
-      // of the loop when we've breached our constraints.
-      let mut temp = Vec::new();
-      for fragment in results.iter() {
-        if (fragment.rolling_probability * ent_meta.ratio) < lowest_bound {
-          continue;
-        }
-
-        let mut new_fragment = fragment.clone();
-
-        // With entangled values they are all the same, whether 1 or 0, so we just take the first
-        // value and use that as our result.
-        let universal_result = fragment.fragment.values().take(1).last().unwrap();
-        new_fragment.add(
-          ent_meta.qubit,
-          *universal_result,
-          fragment.rolling_probability
-        );
-        temp.push(new_fragment);
-
-        if temp.len() + results.len() >= self.max_entangles_per_add {
-          break;
-        }
-      }
-
-      results.append(&mut temp);
-    }
-
-    self.fragments.append(&mut results);
-  }
-
-  /// Combine all the fragments together into usable bitstrings. Resolves whether we know the
-  /// value at a certain qubit point, or not.
-  pub fn synthesize(&self) -> Vec<SolverResult> {
-    let mut results = Vec::new();
-
-    // Evaluate the lower bound now we have every current potential result.
-    let lower_bound = self
-      .fragments
-      .iter()
-      .map(|val| val.rolling_probability)
-      .reduce(f64::max)
-      .unwrap()
-      - self.probability_range;
-
-    // Filter out duplicated values from results.
-    // TODO: We need a more efficient way to filter out duplicates, preferably finding them earlier.
-    //  But for now this should be OK. Duplicates should only come from 100% entangled qubits and
-    //  aren't affected by boundary filters at the point they are generated.
-    //
-    // TODO: At best we'll just have fully_entangled_qubits * max_entanglement duplicates in a state
-    //  which is fully entangled with each other. While not optimal, size of circuits right now are
-    //  not large enough for it to make a significant difference (probably), and certainly not by
-    //  comparison to other bottlenecks.
-    let mut duplicated = HashSet::new();
-
-    // Filter out the ones which don't breach the boundary.
-    let mut filtered_fragments = self
-      .fragments
-      .iter()
-      .filter(|val| val.rolling_probability >= lower_bound)
-      .collect::<Vec<_>>();
-    for fragment in filtered_fragments.iter() {
-      let mut composite = (*fragment).clone();
-      for overlay_fragment in filtered_fragments.iter() {
-        if std::ptr::eq(fragment, overlay_fragment) {
-          continue;
-        }
-
-        // Break if we get to a point where this fragment will drop out of prediction range.
-        if fragment.rolling_probability * overlay_fragment.rolling_probability < lower_bound {
-          break;
-        }
-
-        composite.overlay(overlay_fragment);
-      }
-
-      let composite_key = composite.to_string();
-      if composite.rolling_probability >= lower_bound && !duplicated.contains(&composite_key) {
-        composite.fill_empty(self.register_size);
-        results.push(SolverResult::from_result_fragment(&composite));
-        duplicated.insert(composite_key);
-      }
-    }
-
-    // Sort by probability since list shouldn't be large at this point, and it's what we'll want.
-    results.sort_by(|left, right| right.probability.total_cmp(&left.probability));
-    results
-  }
+  pub fn same(&mut self, index: i64, prob: f64) { self.mirrored.insert(index, (prob, true)); }
 }
 
-impl Display for ResultsSynthsizer {
+impl Display for QubitConstraints {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    let mut sorted_tangles = self.mirrored.iter().collect::<Vec<_>>();
+    sorted_tangles.sort_by(|left, right| left.0.cmp(&right.0));
+
+    let tangle_string = if sorted_tangles.len() > 0 {
+      format!(
+        "[{}]",
+        sorted_tangles
+          .iter()
+          .map(|(a, (b, c))| format!("{}{} @ {:.2}%", a, if !*c { "^" } else { "" }, b * 100.))
+          .collect::<Vec<_>>()
+          .join(", ")
+      )
+    } else {
+      String::new()
+    };
+
     f.write_str(&format!(
-      "\n{}",
-      &self
-        .fragments
-        .iter()
-        .map(|val| val.to_string())
-        .collect::<Vec<_>>()
-        .join("\n")
+      "Q{} @ {:.2}% {}",
+      self.qubit,
+      self.probability * 100.,
+      tangle_string
     ))
   }
 }
 
 /// Acts as a pseudo-state that allows for partial circuit solving and value introspection.
 pub struct QuantumSolver {
-  qubits: Ptr<HashMap<i64, Ptr<AnalysisQubit>>>,
+  qubits: Ptr<HashMap<i64, Ptr<ReferenceQubit>>>,
   clusters: Ptr<HashMap<i64, Ptr<EntanglementCluster>>>,
   measures: Ptr<HashMap<i64, MeasureAnalysis>>,
   trace_module: Ptr<TracingModule>,
+
+  /// The probability range from the highest we should analyze.
   probability_range: f64,
+
+  /// Max entanglements each section of the solver can associate.
   max_entanglements: usize
 }
 
@@ -1630,15 +1636,19 @@ impl QuantumSolver {
   }
 
   /// Gets a qubit, or adds a default one at this index if it doesn't exist.
-  fn qubit_for(&self, index: &i64) -> &Ptr<AnalysisQubit> {
-    if let Some(qubit) = self.qubits.get(index) {
-      qubit
+  fn qubit_for(&self, index: &i64) -> AnalysisQubit {
+    if let Some(cluster) = self.clusters.get(index) {
+      Entangled(cluster.get(index).unwrap().clone())
     } else {
-      with_mutable_self!(self.qubits.insert(
-        index.clone(),
-        Ptr::from(AnalysisQubit::with_index(*index, self.trace_module.clone()))
-      ));
-      self.qubits.get(&index).unwrap()
+      if let Some(qubit) = self.qubits.get(index) {
+        Reference(qubit.clone())
+      } else {
+        with_mutable_self!(self.qubits.insert(
+          index.clone(),
+          Ptr::from(ReferenceQubit::new(*index, self.trace_module.clone()))
+        ));
+        Reference(self.qubits.get(&index).unwrap().clone())
+      }
     }
   }
 
@@ -1646,7 +1656,7 @@ impl QuantumSolver {
   /// new cluster if required. Don't use this if you only want to fetch a cluster without modifying
   /// it.
   fn cluster_for(&self, index: &i64) -> &Ptr<EntanglementCluster> {
-    let cluster = if let Some(cluster) = with_mutable_self!(self.clusters.get_mut(index)) {
+    if let Some(cluster) = with_mutable_self!(self.clusters.get_mut(index)) {
       cluster
     } else {
       with_mutable_self!(self.clusters.insert(
@@ -1657,33 +1667,32 @@ impl QuantumSolver {
         ))
       ));
       self.clusters.get(&index).unwrap()
-    };
-
-    if !cluster.contains(index) {
-      cluster.add(self.qubit_for(index));
     }
-
-    cluster
   }
 
-  fn merge_clusters(&self, merger: Vec<&i64>, mergee: &i64) -> &Ptr<EntanglementCluster> {
-    let target_cluster = self.cluster_for(&mergee);
-    for index in merger {
-      if let Some(cluster) = self.clusters.get(index) {
-        // If clusters are different, merge, entangle our two qubits, then replace reference.
-        if !cluster.contains(&mergee) {
-          target_cluster.merge(cluster);
-          target_cluster.entangle(index, mergee);
-
-          // Remove the previous cluster, it's no longer needed, replace with new merged one.
-          with_mutable_self!(self.clusters.insert(index.clone(), target_cluster.clone()));
+  /// Merges clusters that cover the same qubits.
+  fn prepare_cluster(
+    &self, merger: &Vec<AnalysisQubit>, mergee: &AnalysisQubit
+  ) -> &Ptr<EntanglementCluster> {
+    let target_cluster = self.cluster_for(&mergee.index());
+    for ref_qubit in merger {
+      // If clusters are different, merge, entangle our two qubits, then replace reference.
+      if let Some(cluster) = self.clusters.get(&ref_qubit.index())
+        && !cluster.contains(&mergee.index())
+      {
+        target_cluster.merge(cluster);
+        for qb in cluster.spans() {
+          with_mutable_self!(self.clusters.insert(*qb, target_cluster.clone()));
         }
-      } else {
-        // If we don't have a cluster, just add our qubit and assign it a cluster.
-        let qubit = self.qubit_for(index);
-        target_cluster.add_then_entangle(qubit, mergee);
-        with_mutable_self!(self.clusters.insert(index.clone(), target_cluster.clone()));
       }
+
+      // Entangle our various qubits.
+      target_cluster.entangle(mergee, ref_qubit);
+
+      // Remove the previous cluster, it's no longer needed, replace with new merged one.
+      with_mutable_self!(self
+        .clusters
+        .insert(*ref_qubit.index(), target_cluster.clone()));
     }
     target_cluster
   }
@@ -1699,8 +1708,9 @@ impl QuantumSolver {
       with_mutable_self!(self.clusters.remove(&qb.index));
     }
 
-    let qubit = self.qubit_for(&qb.index);
-    with_mutable!(qubit.state = Ptr::from(StateFragment::DefaultQubit()));
+    // Remove the current qubit and just reinitialize a singular one.
+    with_mutable_self!(self.qubits.remove(&qb.index));
+    self.qubit_for(&qb.index);
   }
 
   pub fn measure_all(&self, qbs: &Vec<&Qubit>) {
@@ -1712,33 +1722,30 @@ impl QuantumSolver {
   pub fn measure(&self, qb: &Qubit) {
     let mut tracing_message = None;
     if self.is_tracing() {
-      let addendum = if let Some(cluster) = self.clusters.get(&qb.index) {
-        let clustered_with = cluster
+      tracing_message = Some(if let Some(cluster) = self.clusters.get(&qb.index) {
+        let mut clustered_with = cluster
           .spans()
           .filter(|val| *val != &qb.index)
           .map(|val| val.to_string())
-          .collect::<Vec<_>>()
-          .join(",");
-        if !clustered_with.is_empty() {
-          format!(", clustered with [{}]", clustered_with)
-        } else {
-          String::new()
-        }
+          .collect::<Vec<_>>();
+        clustered_with.sort();
+        let clustered_with = clustered_with.join(",");
+
+        format!(
+          "\nMeasuring Q{}<{}>:\n{}",
+          qb.index,
+          clustered_with,
+          cluster.get(&qb.index).unwrap()
+        )
       } else {
-        String::new()
-      };
-      tracing_message = Some(format!(
-        "\nMeasuring Q{}{}:\n{}",
-        qb.index,
-        addendum,
-        self.qubit_for(&qb.index)
-      ));
+        format!("\nMeasuring Q{}:\n{}", qb.index, self.qubit_for(&qb.index))
+      });
     }
 
     let result = if let Some(cluster) = self.clusters.get(&qb.index) {
-      cluster.measure(&qb.index)
+      cluster.analyze_measure(&qb.index)
     } else {
-      self.qubit_for(&qb.index).measure()
+      self.qubit_for(&qb.index).analyze_measure()
     };
 
     if self.is_tracing() {
@@ -1757,15 +1764,10 @@ impl QuantumSolver {
   pub fn X(&self, qb: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&qb.index).measure());
+      pre = Some(self.qubit_for(&qb.index).analyze_measure());
     }
 
-    if let Some(cluster) = self.clusters.get(&qb.index) {
-      cluster.X(&qb.index, radians);
-    } else {
-      self.qubit_for(&qb.index).X(radians)
-    }
-
+    self.qubit_for(&qb.index).X(radians);
     if self.is_tracing() {
       self.trace_gate("X", qb.index.to_string(), &pre.unwrap(), radians)
     }
@@ -1774,15 +1776,10 @@ impl QuantumSolver {
   pub fn Y(&self, qb: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&qb.index).measure());
+      pre = Some(self.qubit_for(&qb.index).analyze_measure());
     }
 
-    if let Some(cluster) = self.clusters.get(&qb.index) {
-      cluster.Y(&qb.index, radians);
-    } else {
-      self.qubit_for(&qb.index).Y(radians)
-    }
-
+    self.qubit_for(&qb.index).Y(radians);
     if self.is_tracing() {
       self.trace_gate("Y", qb.index.to_string(), &pre.unwrap(), radians)
     }
@@ -1791,15 +1788,10 @@ impl QuantumSolver {
   pub fn Z(&self, qb: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&qb.index).measure());
+      pre = Some(self.qubit_for(&qb.index).analyze_measure());
     }
 
-    if let Some(cluster) = self.clusters.get(&qb.index) {
-      cluster.Z(&qb.index, radians);
-    } else {
-      self.qubit_for(&qb.index).Z(radians)
-    }
-
+    self.qubit_for(&qb.index).Z(radians);
     if self.is_tracing() {
       self.trace_gate("Z", qb.index.to_string(), &pre.unwrap(), radians)
     }
@@ -1813,23 +1805,17 @@ impl QuantumSolver {
   pub fn CX(&self, controls: &Vec<Qubit>, target: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&target.index).measure());
+      pre = Some(self.qubit_for(&target.index).analyze_measure());
     }
 
-    let target_cluster = self.merge_clusters(
-      controls.iter().map(|val| &val.index).collect::<Vec<_>>(),
-      &target.index
-    );
+    let qb = self.qubit_for(&target.index);
+    let control_indexes = controls
+      .iter()
+      .map(|val| self.qubit_for(&val.index))
+      .collect::<Vec<_>>();
+    let target_cluster = self.prepare_cluster(&control_indexes, &qb);
 
-    for qb in controls {
-      // If a single iteration drops entanglement we need to re-add the qubit for analysis.
-      // TODO: Rethink.
-      if !target_cluster.contains(&target.index) {
-        target_cluster.add(self.qubit_for(&target.index));
-      }
-
-      target_cluster.CX(&qb.index, &target.index, radians);
-    }
+    target_cluster.CX(&control_indexes, &qb, radians);
 
     if self.is_tracing() {
       self.trace_gate(
@@ -1852,23 +1838,17 @@ impl QuantumSolver {
   pub fn CY(&self, controls: &Vec<Qubit>, target: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&target.index).measure());
+      pre = Some(self.qubit_for(&target.index).analyze_measure());
     }
 
-    let target_cluster = self.merge_clusters(
-      controls.iter().map(|val| &val.index).collect::<Vec<_>>(),
-      &target.index
-    );
+    let qb = self.qubit_for(&target.index);
+    let control_indexes = controls
+      .iter()
+      .map(|val| self.qubit_for(&val.index))
+      .collect::<Vec<_>>();
+    let target_cluster = self.prepare_cluster(&control_indexes, &qb);
 
-    for qb in controls {
-      // If a single iteration drops entanglement we need to re-add the qubit for analysis.
-      // TODO: Rethink.
-      if !target_cluster.contains(&target.index) {
-        target_cluster.add(self.qubit_for(&target.index));
-      }
-
-      target_cluster.CY(&qb.index, &target.index, radians);
-    }
+    target_cluster.CY(&control_indexes, &qb, radians);
 
     if self.is_tracing() {
       self.trace_gate(
@@ -1891,23 +1871,17 @@ impl QuantumSolver {
   pub fn CZ(&self, controls: &Vec<Qubit>, target: &Qubit, radians: &f64) {
     let mut pre = None;
     if self.is_tracing() {
-      pre = Some(self.qubit_for(&target.index).measure());
+      pre = Some(self.qubit_for(&target.index).analyze_measure());
     }
 
-    let target_cluster = self.merge_clusters(
-      controls.iter().map(|val| &val.index).collect::<Vec<_>>(),
-      &target.index
-    );
+    let qb = self.qubit_for(&target.index);
+    let control_indexes = controls
+      .iter()
+      .map(|val| self.qubit_for(&val.index))
+      .collect::<Vec<_>>();
+    let target_cluster = self.prepare_cluster(&control_indexes, &qb);
 
-    for qb in controls {
-      // If a single iteration drops entanglement we need to re-add the qubit for analysis.
-      // TODO: Rethink.
-      if !target_cluster.contains(&target.index) {
-        target_cluster.add(self.qubit_for(&target.index));
-      }
-
-      target_cluster.CZ(&qb.index, &target.index, radians);
-    }
+    target_cluster.CZ(&control_indexes, &qb, radians);
 
     if self.is_tracing() {
       self.trace_gate(
@@ -1924,59 +1898,6 @@ impl QuantumSolver {
         &pre.unwrap(),
         radians
       )
-    }
-  }
-
-  pub fn SWAP(&mut self, left: &i64, right: &i64) {
-    if self.qubits.contains_key(left) && self.qubits.contains_key(right) {
-      if self.is_tracing() {
-        log!(Level::Info, "Swapping {} and {}", left, right);
-      }
-
-      let mut qubit_one = self.qubits.remove(left).unwrap();
-      let mut qubit_two = self.qubits.remove(left).unwrap();
-      let first_index = qubit_one.index;
-      let second_index = qubit_two.index;
-
-      // Just merge indexes so we can deal with the point where entangled qubits reference both
-      // our swapped qubits.
-      let mut entanglements = qubit_one.entangled_with().collect::<HashSet<&i64>>();
-      for index in qubit_two.entangled_with() {
-        entanglements.insert(index);
-      }
-
-      // Go through both qubits entangled threads and swap them around.
-      for index in entanglements {
-        let target_qubit = self
-          .qubits
-          .get(index)
-          .expect("Entangled qubit {index} has to exist in solver.");
-
-        let first_tangle = with_mutable!(target_qubit.tangles.remove(&first_index));
-        let second_tangle = with_mutable!(target_qubit.tangles.remove(&second_index));
-
-        if let Some(tangle) = first_tangle {
-          with_mutable!(target_qubit.tangles.insert(second_index, tangle));
-        }
-
-        if let Some(tangle) = second_tangle {
-          with_mutable!(target_qubit.tangles.insert(first_index, tangle));
-        }
-      }
-
-      // Then just swap the designation around.
-      qubit_one.index = second_index;
-      qubit_two.index = first_index;
-      self.qubits.insert(qubit_one.index, qubit_one);
-      self.qubits.insert(qubit_two.index, qubit_two);
-
-      if let Some(cluster) = self.clusters.get_mut(&first_index) {
-        cluster.SWAP(left, right)
-      }
-
-      if let Some(cluster) = self.clusters.get_mut(&second_index) {
-        cluster.SWAP(left, right)
-      }
     }
   }
 
@@ -1997,27 +1918,26 @@ impl QuantumSolver {
     }
 
     let start = Instant::now();
-    let measurable_indexes = self
-      .measures
-      .keys()
-      .map(|val| val.clone())
-      .collect::<HashSet<i64>>();
-
-    let mut synth = ResultsSynthsizer::new(
-      self.probability_range,
-      self.max_entanglements,
-      measurable_indexes,
-      *self.qubits.keys().max().unwrap()
+    let measurable_indexes = Ptr::from(
+      self
+        .measures
+        .keys()
+        .map(|val| val.clone())
+        .collect::<HashSet<i64>>()
     );
-    for meas in self.measures.values() {
-      synth.add(meas);
+
+    let mut results = self.predict_results(
+      &self.measures.values().collect::<Vec<_>>(),
+      &measurable_indexes
+    );
+
+    // All results are independent of every other, so need to normalize probabilities.
+    let total_probabilities: f64 = results.iter().map(|val| val.probability).sum();
+    for mut result in results.iter_mut() {
+      result.probability = result.probability / total_probabilities;
     }
 
-    if self.is_tracing() {
-      log!(Level::Info, "Unfiltered results: {}\n", synth);
-    }
-
-    let results = synth.synthesize();
+    let took = start.elapsed();
     if self.is_tracing() {
       log!(
         Level::Info,
@@ -2030,8 +1950,289 @@ impl QuantumSolver {
       );
     }
 
-    let took = start.elapsed();
     log!(Level::Info, "Solving took {}ms", took.as_millis());
+    results
+  }
+
+  /// Takes the measurement values in and predicts what the results are going to be across
+  /// each qubit.
+  fn predict_results(
+    &self, measure: &Vec<&MeasureAnalysis>, measurable_indexes: &Ptr<HashSet<i64>>
+  ) -> Vec<SolverResult> {
+    // Transform the constraints into a consolidated form and normalize the matrix positions.
+    let mut indexed_constraints = HashMap::new();
+    for m in measure.iter() {
+      // We need to walk entanglement chains to work out inversion rules, as the link only tells us
+      // the inversion to the previous result not if that result is mirroring, or not, the original
+      // qubit. This helps with that.
+      let mut inversion_chain_results = HashMap::new();
+      let mut tangle_index_map = HashMap::new();
+      for others in &m.entangled_with {
+        tangle_index_map.insert(others.qubit, others);
+        if others.via == m.qubit {
+          inversion_chain_results.insert(others.qubit, others.is_result_inverted());
+        }
+      }
+
+      fn is_inverted(
+        qubit: i64, inversion_chain_results: &mut HashMap<i64, bool>,
+        tangle_index_map: &HashMap<i64, &EntanglingLink>
+      ) -> bool {
+        if let Some(val) = inversion_chain_results.get(&qubit) {
+          *val
+        } else {
+          let tangle = tangle_index_map.get(&qubit).unwrap();
+
+          // When both are true we're not inverted, otherwise we are.
+          let inverted = is_inverted(tangle.via, inversion_chain_results, tangle_index_map)
+            != tangle.is_result_inverted();
+          inversion_chain_results.insert(qubit, inverted);
+          inverted
+        }
+      };
+
+      let mut constraint = Ptr::from(QubitConstraints::new(m.qubit, m.probability));
+      for others in &m.entangled_with {
+        if is_inverted(
+          others.qubit,
+          &mut inversion_chain_results,
+          &tangle_index_map
+        ) {
+          constraint.inverted(others.qubit, others.ratio());
+        } else {
+          constraint.same(others.qubit, others.ratio());
+        }
+      }
+      indexed_constraints.insert(constraint.qubit, constraint);
+    }
+
+    let mut sorted_constraints = indexed_constraints.values().collect::<Vec<_>>();
+    sorted_constraints.sort_by(|a, b| a.qubit.cmp(&b.qubit));
+    if self.is_tracing() {
+      log!(
+        Level::Info,
+        "Starting constraints:\n{}",
+        sorted_constraints
+          .iter()
+          .map(|val| val.to_string())
+          .collect::<Vec<_>>()
+          .join("\n")
+      );
+    }
+
+    let mut guard = HashSet::new();
+    let mut initial_results = Vec::new();
+    for constraint in sorted_constraints.iter() {
+      // Catch and remove duplicates early.
+      let mut guard_key = Vec::new();
+      guard_key.push(constraint.qubit);
+      for qb in constraint.mirrored.keys() {
+        guard_key.push(*qb);
+      }
+      guard_key.sort();
+      let guard_key = guard_key
+        .iter()
+        .map(|val| val.to_string())
+        .collect::<String>();
+      guard.insert(guard_key);
+
+      // Build starter fragment with just our qubit.
+      let qubit_result = 1;
+      let mut starter = ResultFragment::new(
+        constraint.qubit,
+        qubit_result,
+        constraint.probability,
+        measurable_indexes.clone()
+      );
+
+      // Sort our entanglements by coupling strength.
+      // Assuming quicker to just cycle all values quickly rather than sort.
+      // We check if an entanglement is at 100% strength and if so, merge that into
+      // our starting value.
+      let mut value_constraints = constraint.mirrored.iter().collect::<Vec<_>>();
+      value_constraints.sort_by(|(a, (b, c)), (d, (e, g))| b.total_cmp(&e));
+      for (qubit, (probability, mirrored)) in value_constraints.iter() {
+        if is_near!(*probability, 1.0) {
+          starter.add(**qubit, if *mirrored { 1 } else { 0 }, *probability);
+        }
+      }
+
+      // If our starters probability is high enough that the flipped version will be outside of
+      // our probability range or visa versa, only add the valid one.
+      let mut constraint_results = Vec::new();
+      if (1.0 - starter.rolling_probability) - starter.rolling_probability < self.probability_range
+      {
+        constraint_results.push(ResultFragment::with_flipped(&starter));
+        constraint_results.push(starter.clone());
+      } else if starter.rolling_probability > 0.5 {
+        constraint_results.push(starter.clone());
+      } else {
+        constraint_results.push(ResultFragment::with_flipped(&starter));
+      }
+
+      if self.is_tracing() {
+        log!(
+          Level::Info,
+          "Q{} starting fragments: {}",
+          constraint.qubit,
+          constraint_results
+            .iter()
+            .map(|val| val.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+        );
+      }
+
+      // Any further results will have a probability at least the same as the starter.
+      let highest_probability = constraint_results
+        .iter()
+        .map(|val| val.rolling_probability)
+        .reduce(f64::max)
+        .unwrap();
+
+      // Iterate through the constraints taking our starter values and adding the constraints to them,
+      // creating another potential result, then iterate through our newly expanded list. This means
+      // that the highest probability bitstrings are tried first, then combining them.
+      let lowest_bound = highest_probability - self.probability_range;
+      for (qb, (prob, mirrored)) in value_constraints
+        .iter()
+        .filter(|(qubit, _)| !starter.qubit_values.contains_key(qubit))
+      {
+        let mut temp_results = Vec::new();
+        for next_fragment in constraint_results.iter() {
+          // Make sure our fragment matches our constraints.
+          let qubit_value = next_fragment.qubit_values.get(&constraint.qubit).unwrap();
+          let mut new_fragment = if let Some(val) = next_fragment.qubit_values.get(qb) {
+            if (*mirrored && val != qubit_value) || (!mirrored && val == qubit_value) {
+              ResultFragment::with_flipped(next_fragment)
+            } else {
+              next_fragment.clone()
+            }
+          } else {
+            next_fragment.clone()
+          };
+
+          new_fragment.add(**qb, 1, *prob);
+          if new_fragment.rolling_probability < lowest_bound
+            || constraint_results.len() >= self.max_entanglements
+          {
+            break;
+          }
+
+          temp_results.push(new_fragment);
+        }
+
+        constraint_results.extend(temp_results);
+      }
+
+      initial_results.extend(constraint_results);
+    }
+
+    initial_results.sort_by(|a, b| b.rolling_probability.total_cmp(&a.rolling_probability));
+    if self.is_tracing() {
+      log!(
+        Level::Info,
+        "Fragment result count: {}",
+        initial_results.len()
+      );
+    }
+
+    // Drop anything which has no chance of being chosen. Only happens for small entanglement maps.
+    let constraint_results = initial_results
+      .iter()
+      .filter(|val| val.rolling_probability != 0.)
+      .take(self.max_entanglements)
+      .collect::<Vec<_>>();
+    if self.is_tracing() {
+      log!(
+        Level::Info,
+        "Usable fragments:\n{}\n",
+        constraint_results
+          .iter()
+          .map(|val| val.to_string())
+          .collect::<Vec<_>>()
+          .join("\n")
+      );
+    }
+
+    let mut qubit_boundaries = HashMap::new();
+    for constraint in constraint_results.iter() {
+      for qb in constraint.qubit_values.keys() {
+        if !qubit_boundaries.contains_key(qb) {
+          let lower_bound = constraint.rolling_probability - self.probability_range;
+          qubit_boundaries.insert(
+            qb,
+            (
+              constraint.rolling_probability,
+              if lower_bound < 0. { 0. } else { lower_bound }
+            )
+          );
+        }
+      }
+    }
+
+    let register_size = self.qubits.keys().max().unwrap();
+    let mut overlay_results = Vec::new();
+    for fragment in constraint_results.iter() {
+      let mut composite = (*fragment).clone();
+      for overlay_fragment in constraint_results.iter() {
+        if std::ptr::eq(fragment, overlay_fragment) {
+          continue;
+        }
+
+        let composite_lower_bound = composite
+          .qubit_values
+          .keys()
+          .map(|qb| qubit_boundaries.get(&qb).unwrap().1)
+          .reduce(f64::max)
+          .unwrap();
+        let overlay_lower_bound = overlay_fragment
+          .qubit_values
+          .keys()
+          .map(|qb| qubit_boundaries.get(&qb).unwrap().1)
+          .reduce(f64::max)
+          .unwrap();
+        let lower_bound = if composite_lower_bound < overlay_lower_bound {
+          composite_lower_bound
+        } else {
+          overlay_lower_bound
+        };
+
+        // Break if we get to a point where this fragment will drop out of prediction range.
+        if composite.rolling_probability * overlay_fragment.rolling_probability < lower_bound {
+          break;
+        }
+
+        composite.overlay(overlay_fragment);
+      }
+
+      composite.fill_empty(*register_size);
+      overlay_results.push(composite);
+    }
+
+    overlay_results.sort_by(|left, right| {
+      left
+        .rolling_probability
+        .total_cmp(&right.rolling_probability)
+    });
+    let mut results = Vec::new();
+    let mut dup_guard = HashSet::new();
+    for mut res in overlay_results {
+      if results.len() > self.max_entanglements {
+        break;
+      }
+
+      let key = res.to_string();
+      if !dup_guard.contains(&key) {
+        // TODO: Change to usize?
+        res.fill_empty(self.qubits.len() as i64);
+        dup_guard.insert(key);
+        results.push(SolverResult::from_result_fragment(&res));
+      }
+    }
+
+    // Sort by probability since list shouldn't be large at this point, and it's what we'll want.
+    results.sort_by(|left, right| right.probability.total_cmp(&left.probability));
     results
   }
 
@@ -2040,7 +2241,7 @@ impl QuantumSolver {
   fn trace_gate(
     &self, gate: &str, associated_qubits: String, pre: &MeasureAnalysis, radians: &f64
   ) {
-    let mut post = self.qubit_for(&pre.qubit).measure();
+    let mut post = self.qubit_for(&pre.qubit).analyze_measure();
     let mut differences = Vec::new();
     if pre.probability != post.probability {
       differences.push(format!("from {:.2}%", pre.probability * 100.))
@@ -2066,18 +2267,18 @@ impl QuantumSolver {
 
     for (index, ent) in postq.iter() {
       if !preq.contains_key(index) {
-        differences.push(format!("add Q{}~{}", ent.qubit, ent.ratio))
+        differences.push(format!("add Q{}~{:.2}", ent.qubit, ent.ratio()))
       } else {
         let prev = preq.get(index).unwrap();
-        if ent.ratio != prev.ratio {
-          differences.push(format!("Q{}~{}", prev.qubit, prev.ratio))
+        if ent.ratio() != prev.ratio() {
+          differences.push(format!("Q{}~{:.2}", prev.qubit, prev.ratio()))
         }
       }
     }
 
     let mut diff = String::new();
     if !differences.is_empty() {
-      diff = format!(" # {}", differences.join(","));
+      diff = format!(" # {}", differences.join(", "));
     }
 
     log!(
@@ -2124,7 +2325,7 @@ impl Display for QuantumSolver {
     let mut ordered_measures = self.measures.iter().collect::<Vec<_>>();
     ordered_measures.sort_by(|left, right| left.0.cmp(right.0));
     for (index, result) in ordered_measures.iter() {
-      f.write_fmt(format_args!("{} -> {}\n", index, result));
+      f.write_fmt(format_args!("Q{} -> {}\n", index, result));
     }
 
     f.write_str("")
@@ -2141,12 +2342,74 @@ mod tests {
   use std::f64::consts::PI;
   use std::fmt::Display;
 
+  #[ignore]
+  #[test]
+  fn ghz_modified_test() {
+    let solver = QuantumSolver::with_trace(Ptr::from(TracingModule::with(ActiveTracers::all())));
+    let (q0, q1, q2, q3, q4, q5) = (
+      Qubit::new(0),
+      Qubit::new(1),
+      Qubit::new(2),
+      Qubit::new(3),
+      Qubit::new(4),
+      Qubit::new(5)
+    );
+    solver.Had(&q0);
+    solver.CX(&vec![q0.clone()], &q1, &PI);
+    solver.CX(&vec![q1.clone()], &q2, &PI);
+    solver.X(&q1, &PI);
+
+    solver.measure_all(&vec![&q0, &q1, &q2]);
+    let result = solver.solve();
+
+    let results = result
+      .iter()
+      .filter(|val| val.bitstring == "010" || val.bitstring == "101")
+      .collect::<Vec<_>>();
+    assert_eq!(results.len(), 2);
+    assert!(results[0].probability >= 0.49 && results[0].probability <= 0.51);
+    assert!(results[1].probability >= 0.49 && results[1].probability <= 0.51);
+  }
+
+  #[ignore]
+  #[test]
+  fn multistate_test() {
+    let solver = QuantumSolver::with_trace(Ptr::from(TracingModule::with(ActiveTracers::all())));
+    let (q0, q1, q2, q3, q4, q5) = (
+      Qubit::new(0),
+      Qubit::new(1),
+      Qubit::new(2),
+      Qubit::new(3),
+      Qubit::new(4),
+      Qubit::new(5)
+    );
+    solver.Had(&q0);
+    solver.CX(&vec![q0.clone()], &q1, &PI);
+    solver.CX(&vec![q1.clone()], &q2, &PI);
+    solver.CX(&vec![q2.clone()], &q3, &PI);
+    solver.CX(&vec![q3.clone()], &q4, &PI);
+    solver.CX(&vec![q4.clone()], &q5, &PI);
+    solver.CX(&vec![q5.clone()], &q2, &PI);
+    solver.CX(&vec![q2.clone()], &q4, &PI);
+
+    solver.measure_all(&vec![&q0, &q1, &q2, &q3, &q4, &q5]);
+    let result = solver.solve();
+
+    let results = result
+      .iter()
+      .filter(|val| val.bitstring == "11" || val.bitstring == "00")
+      .collect::<Vec<_>>();
+    assert_eq!(results.len(), 2);
+    assert!(results[0].probability >= 0.49 && results[0].probability <= 0.51);
+    assert!(results[1].probability >= 0.49 && results[1].probability <= 0.51);
+  }
+
   #[test]
   fn bell_test() {
-    let solver = QuantumSolver::new();
+    let solver = QuantumSolver::with_trace(Ptr::from(TracingModule::with(ActiveTracers::all())));
     let (q0, q1) = (Qubit::new(0), Qubit::new(1));
     solver.Had(&q0);
-    solver.CX(&vec![q1.clone()], &q0, &PI);
+    solver.CX(&vec![q0.clone()], &q1, &PI);
     solver.measure(&q0);
     solver.measure(&q1);
     let result = solver.solve();
@@ -2166,13 +2429,13 @@ mod tests {
     let result = qubit.apply(&GateFragment::X(&(PI / 2.)));
     assert!(result.is_none());
 
-    let zero = qubit.get((0, 0)).re;
+    let zero = qubit.get(0, 0).re;
     assert!(zero >= 0.48 && zero <= 0.52);
 
-    assert_eq!(qubit.get((0, 1)).re, 0.);
-    assert_eq!(qubit.get((1, 0)).re, 0.);
+    assert_eq!(qubit.get(0, 1).re, 0.);
+    assert_eq!(qubit.get(1, 0).re, 0.);
 
-    let one = qubit.get((1, 1)).re;
+    let one = qubit.get(1, 1).re;
     assert!(one >= 0.48 && one <= 0.52);
   }
 
@@ -2182,10 +2445,10 @@ mod tests {
     let result = qubit.apply(&GateFragment::Z(&(PI / 2.)));
     assert!(result.is_none());
 
-    assert!(qubit.get((0, 0)).re >= 0.99);
-    assert_eq!(qubit.get((0, 1)).re, 0.);
-    assert_eq!(qubit.get((1, 0)).re, 0.);
-    assert_eq!(qubit.get((1, 1)).re, 0.);
+    assert!(qubit.get(0, 0).re >= 0.99);
+    assert_eq!(qubit.get(0, 1).re, 0.);
+    assert_eq!(qubit.get(1, 0).re, 0.);
+    assert_eq!(qubit.get(1, 1).re, 0.);
   }
 
   #[test]
@@ -2194,13 +2457,10 @@ mod tests {
     let result = qubit.apply(&GateFragment::Y(&PI));
     assert!(result.is_none());
 
-    let stuff = qubit.to_string();
-    let stuff = stuff;
-
-    assert_eq!(qubit.get((0, 0)).re, 0.);
-    assert_eq!(qubit.get((0, 1)).re, 0.);
-    assert_eq!(qubit.get((1, 0)).re, 0.);
-    assert!(qubit.get((1, 1)).re <= -0.99);
+    assert_eq!(qubit.get(0, 0).re, 0.);
+    assert_eq!(qubit.get(0, 1).re, 0.);
+    assert_eq!(qubit.get(1, 0).re, 0.);
+    assert!(qubit.get(1, 1).re >= 0.99);
   }
 
   #[test]
@@ -2209,9 +2469,9 @@ mod tests {
     let result = qubit.apply(&GateFragment::Had());
     assert!(result.is_none());
 
-    assert!(qubit.get((0, 0)).re > 0.22);
-    assert!(qubit.get((0, 1)).re > 0.22);
-    assert!(qubit.get((1, 0)).re > 0.22);
-    assert!(qubit.get((1, 1)).re > 0.22);
+    assert!(qubit.get(0, 0).re > 0.22);
+    assert!(qubit.get(0, 1).re > 0.22);
+    assert!(qubit.get(1, 0).re > 0.22);
+    assert!(qubit.get(1, 1).re > 0.22);
   }
 }

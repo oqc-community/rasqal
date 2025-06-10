@@ -32,6 +32,9 @@ dependencies = [
 Repository = "https://github.com/oqc-community/rasqal.git"
 Issues = "https://github.com/oqc-community/rasqal/issues"
 
+[tool.maturin]
+module-name = "rasqal._native"
+
 [build-system]
-requires = ["maturin ~= 0.13.7"]
+requires = ["maturin ~= 1.8.7"]
 build-backend = "maturin"
