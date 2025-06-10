@@ -10,6 +10,7 @@
   unused_variables,
   unused_must_use
 )]
+#![allow(dangerous_implicit_autorefs)] // This is only used for our smart-pointer operations, nowhere else.
 #![allow(clippy::needless_pass_by_value)]
 #![feature(get_mut_unchecked)]
 #![feature(unwrap_infallible)]
